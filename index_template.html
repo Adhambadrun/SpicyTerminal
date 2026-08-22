@@ -26,6 +26,8 @@ button:hover{filter:brightness(1.14)}
 .convert{background:var(--red);color:#fff}
 .ai{background:var(--green2);color:#04240f}
 .attach,.clear,.copy{background:#18222b;color:#9fb4bf;border:1px solid #22313c}
+#thumbs{display:inline-flex;gap:5px;align-items:center;margin-left:6px;min-height:26px}
+#thumbs img{max-height:26px;max-width:56px;border:1px solid #22313c;border-radius:3px;display:block}
 .copy{margin-left:auto;padding:9px 26px}
 .status{display:flex;align-items:baseline;padding:4px 22px 14px;font-size:11px}
 #st{color:var(--green);letter-spacing:.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -73,6 +75,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
   <button class="ai" id="btnAi">AI AUTO</button>
   <button class="attach" id="btnAttach">+ ATTACH</button>
   <button class="clear" id="btnClear">×</button>
+  <span id="thumbs"></span>
   <button class="copy" id="btnCopy">COPY</button>
   <input type="file" id="filePick" accept="image/*" multiple class="hidden">
 </div>

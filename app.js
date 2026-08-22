@@ -85,6 +85,54 @@ function convert(auto) {
 }
 
 /* ================= AI convert (Gemini) ================= */
+/* model auto-discovery: survives Google retiring model names (2.5-flash died Aug 2026).
+   Flow: cached model -> generate; on "not found/no longer available" -> list models on
+   the key, pick newest general flash, retry once, cache the winner. */
+function aiModelSet(m) { window._aiModel = m; try { localStorage.setItem("spicy_gem_model", m); } catch (e) {} }
+function aiModelGet() { try { return localStorage.getItem("spicy_gem_model") || ""; } catch (e) { return ""; } }
+function discoverModel(key) {
+  return fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=" + encodeURIComponent(key))
+    .then(function (r) { return r.json(); }).then(function (j) {
+      if (j.error) throw new Error(String(j.error.message || "model list failed"));
+      var ms = (j.models || []).filter(function (m) {
+        var n = (m.name || "").toLowerCase();
+        return (m.supportedGenerationMethods || []).indexOf("generateContent") >= 0 &&
+          n.indexOf("models/gemini") === 0 &&
+          !/embedding|tts|-image|live|native-audio|aqa|robotics|computer-use|banana/.test(n);
+      }).map(function (m) { return m.name.replace(/^models\//, ""); });
+      function score(n) {
+        var s = 0, v = n.match(/(\d+(?:\.\d+)?)/), ln = n.toLowerCase();
+        if (ln.indexOf("flash") >= 0) s += 1000;
+        if (ln.indexOf("lite") >= 0) s -= 30;
+        if (/latest/.test(ln)) s += 10;
+        if (v) s += parseFloat(v[1]) * 10;
+        return s;
+      }
+      ms.sort(function (a, b) { return score(b) - score(a); });
+      if (!ms.length) throw new Error("no supported Gemini model on this key");
+      aiModelSet(ms[0]);
+      return ms[0];
+    });
+}
+function geminiGenerate(key, body, retried) {
+  var m = aiModelGet();
+  return (m ? Promise.resolve(m) : discoverModel(key)).then(function (model) {
+    window._aiModel = model;
+    return fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(key), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (j.error) {
+        var msg = String(j.error.message || "AI error");
+        if (!retried && /not found|no longer|deprecat|not supported|invalid model|permission/i.test(msg)) {
+          try { localStorage.removeItem("spicy_gem_model"); } catch (e) {}  /* stale/retired -> rediscover once */
+          return geminiGenerate(key, body, true);
+        }
+        throw new Error(msg);
+      }
+      return j;
+    });
+  });
+}
 function convertAi(fromAuto, reason) {
   if (converting) return;
   var key = gemKey();
@@ -105,9 +153,7 @@ function convertAi(fromAuto, reason) {
     contents: [{ role: "user", parts: parts }],
     generationConfig: { temperature: 0.0, maxOutputTokens: 4096 }
   };
-  fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + encodeURIComponent(key), {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
-  }).then(function (r) { return r.json(); }).then(function (j) {
+  geminiGenerate(key, body).then(function (j) {
     converting = false;
     var ps = (((j.candidates || [])[0] || {}).content || {}).parts || [];
     var t = ps.map(function (p) { return p.text || ""; }).join("").trim();
@@ -142,6 +188,14 @@ function addImage(file, thenConvert) {
       cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
       var b64 = cv.toDataURL("image/jpeg", 0.82).split(",")[1];
       images.push({ mime: "image/jpeg", b64: b64 });
+      /* thumbnail beside × so the user sees the paste landed */
+      var th = document.createElement("canvas"), ts = Math.min(26 / cv.height, 56 / cv.width);
+      th.width = Math.max(1, Math.round(cv.width * ts)); th.height = Math.max(1, Math.round(cv.height * ts));
+      th.getContext("2d").drawImage(cv, 0, 0, th.width, th.height);
+      var ti = document.createElement("img");
+      ti.src = th.toDataURL("image/jpeg", 0.72);
+      ti.title = "screenshot " + images.length + " attached";
+      $("thumbs").appendChild(ti);
       setStatus(images.length + " screenshot(s) attached");
       if (thenConvert !== false) convert(true);
     };
@@ -175,7 +229,7 @@ inp.addEventListener("paste", function (e) {
 $("btnConvert").addEventListener("click", function () { convert(false); });
 $("btnAi").addEventListener("click", function () { convertAi(false); });
 $("btnClear").addEventListener("click", function () {
-  inp.value = ""; out.innerHTML = ""; lastOut = ""; images = []; setStatus("READY"); inp.focus();
+  inp.value = ""; out.innerHTML = ""; lastOut = ""; images = []; $("thumbs").innerHTML = ""; setStatus("READY"); inp.focus();
 });
 $("btnCopy").addEventListener("click", function () {
   if (!lastOut) { setStatus("NOTHING TO COPY", true); return; }
@@ -223,7 +277,8 @@ $("report").addEventListener("click", function () {
     : "";
   var body =
     "=== SPICY TERMINAL BUG REPORT ===\n" +
-    "WHEN: " + new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC\n\n" +
+    "WHEN: " + new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC\n" +
+    "AI MODEL: " + (aiModelGet() || "(none used)") + "\n\n" +
     "=== WHAT I PASTED ===\n" + (cap(input, 1300) || "(empty)") + "\n\n" +
     "=== WHAT THE APP PRODUCED ===\n" + (cap(output, 1300) || "(empty)") + "\n\n" +
     "=== WHAT I EXPECTED INSTEAD ===\n\n\n=== ANY OTHER DETAILS ===\n" + learnTxt;
