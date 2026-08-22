@@ -110,27 +110,61 @@ function discoverModel(key) {
       }
       ms.sort(function (a, b) { return score(b) - score(a); });
       if (!ms.length) throw new Error("no supported Gemini model on this key");
+      window._aiModelList = ms;
       aiModelSet(ms[0]);
       return ms[0];
     });
 }
-function geminiGenerate(key, body, retried) {
-  var m = aiModelGet();
-  return (m ? Promise.resolve(m) : discoverModel(key)).then(function (model) {
-    window._aiModel = model;
-    return fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(key), {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
-    }).then(function (r) { return r.json(); }).then(function (j) {
-      if (j.error) {
-        var msg = String(j.error.message || "AI error");
-        if (!retried && /not found|no longer|deprecat|not supported|invalid model|permission/i.test(msg)) {
-          try { localStorage.removeItem("spicy_gem_model"); } catch (e) {}  /* stale/retired -> rediscover once */
-          return geminiGenerate(key, body, true);
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function modelQueue(key) {
+  /* order: remembered favorite (if still listed), then newest->oldest discovered models */
+  function build(list) {
+    var fav = aiModelGet(), q = [];
+    if (fav && list.indexOf(fav) >= 0) q.push(fav);
+    list.forEach(function (m) { if (q.indexOf(m) < 0) q.push(m); });
+    if (!q.length && fav) q.push(fav);
+    return q;
+  }
+  if (window._aiModelList && window._aiModelList.length) return Promise.resolve(build(window._aiModelList));
+  return discoverModel(key).then(function () { return build(window._aiModelList); },
+    function () { var fav = aiModelGet(); return fav ? [fav] : Promise.reject(new Error("could not list models on this key")); });
+}
+function geminiPost(key, model, body) {
+  return fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(key), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+  }).then(function (r) { return r.json(); });
+}
+function geminiGenerate(key, body) {
+  return modelQueue(key).then(function (q) {
+    var i = 0, lastMsg = "";
+    function tryModel(model, tries) {
+      window._aiModel = model;
+      return geminiPost(key, model, body).then(function (j) {
+        if (!j.error) return j;
+        var msg = String(j.error.message || "AI error"), code = j.error.status || j.error.code;
+        lastMsg = msg;
+        if (/api key not valid|key invalid|API_KEY_INVALID/i.test(msg) || code === "PERMISSION_DENIED" || code === 403)
+          throw Object.assign(new Error(msg), { fatal: true });                       /* bad key: stop everything */
+        var transient = code === 503 || code === 429 || code === "UNAVAILABLE" || code === "RESOURCE_EXHAUSTED" ||
+          /high demand|currently experiencing|try again|overload|rate limit|quota/i.test(msg);
+        if (transient && tries < 2)                                                  /* demand spike: wait, retry same model */
+          return sleep(1400 * (tries + 1)).then(function () { return tryModel(model, tries + 1); });
+        if (/not found|no longer available|deprecat|not supported/i.test(msg)) {
+          try { localStorage.removeItem("spicy_gem_model"); } catch (e) {}           /* retired name: forget favorite */
+          delete window._aiModelList;                                                /* force fresh discovery next time */
         }
-        throw new Error(msg);
-      }
-      return j;
-    });
+        throw new Error(msg);                                                        /* -> move down the queue */
+      });
+    }
+    function attempt() {
+      return tryModel(q[i], 0).then(null, function (e) {
+        if (e.fatal) throw e;
+        i++;
+        if (i >= q.length) throw new Error(lastMsg.slice(0, 90) + " — try again shortly");
+        return attempt();
+      });
+    }
+    return attempt();
   });
 }
 function convertAi(fromAuto, reason) {
@@ -278,7 +312,7 @@ $("report").addEventListener("click", function () {
   var body =
     "=== SPICY TERMINAL BUG REPORT ===\n" +
     "WHEN: " + new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC\n" +
-    "AI MODEL: " + (aiModelGet() || "(none used)") + "\n\n" +
+    "AI MODEL: " + (window._aiModel || aiModelGet() || "(none used)") + "\n\n" +
     "=== WHAT I PASTED ===\n" + (cap(input, 1300) || "(empty)") + "\n\n" +
     "=== WHAT THE APP PRODUCED ===\n" + (cap(output, 1300) || "(empty)") + "\n\n" +
     "=== WHAT I EXPECTED INSTEAD ===\n\n\n=== ANY OTHER DETAILS ===\n" + learnTxt;
