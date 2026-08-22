@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpicyTerminal</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,__LOGO_MARK_B64__">
+<style>
+:root{--bg:#05080b;--pane:#0a0f14;--line:#17222b;--dim:#546a77;--green:#53d977;
+--green2:#1f9d55;--red:#e2574b;--out:#51e07c;--mono:ui-monospace,"Cascadia Mono","JetBrains Mono",Consolas,Menlo,monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:#c9d8ce;font-family:var(--mono);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{padding:12px 22px 8px;display:flex;align-items:center;justify-content:space-between}
+header img{height:26px;display:block}
+header .credit{color:#5b6e77;font-size:11px;flex:none}
+main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:4px 22px 10px;min-height:0}
+.pane{border:1px solid var(--line);border-radius:6px;background:var(--pane);display:flex;flex-direction:column;min-height:0}
+.pane h2{font-size:10px;letter-spacing:2px;color:#7f95a0;padding:9px 14px 7px;font-weight:700}
+.pane.out h2{color:var(--green)}
+textarea,pre.out{flex:1;background:transparent;border:0;outline:0;resize:none;font-family:var(--mono);font-size:12.5px;line-height:1.6;padding:4px 14px 12px;white-space:pre-wrap;overflow:auto;color:#dbe7de}
+pre.out{color:var(--out)}
+textarea::placeholder{color:#3d4f57}
+.bar{display:flex;gap:8px;padding:2px 22px 8px;align-items:center}
+button{font-family:var(--mono);cursor:pointer;border:0;border-radius:4px;font-weight:700;font-size:12px;padding:9px 18px;letter-spacing:.5px}
+button:hover{filter:brightness(1.14)}
+.convert{background:var(--red);color:#fff}
+.ai{background:var(--green2);color:#04240f}
+.attach,.clear,.copy{background:#18222b;color:#9fb4bf;border:1px solid #22313c}
+.copy{margin-left:auto;padding:9px 26px}
+.status{display:flex;align-items:baseline;padding:4px 22px 14px;font-size:11px}
+#st{color:var(--green);letter-spacing:.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#st.warn{color:#f0a35c}
+#report:hover,#genKey:hover{color:#8fa6b2}
+.linkbtn{color:#3e4f59;font-size:11px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono);font-weight:400;flex:none;white-space:nowrap}
+#genKey{margin-left:auto;margin-right:16px}
+/* welcome — small card, app visible behind (translucent backdrop) */
+.welcome{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+background:rgba(4,8,12,.35);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+.welcome .card{background:rgba(10,15,20,.82);border:1px solid #1e2b34;border-radius:14px;
+padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba(0,0,0,.55)}
+.welcome img{width:230px;display:block;margin:0 auto 18px}
+.welcome .made{color:#eef4f7;font-size:14px;margin-bottom:9px}
+.welcome .sub{color:#637888;font-size:11px;line-height:1.7;margin-bottom:20px}
+.welcome button{background:#22c55e;color:#05230f;padding:10px 34px;font-size:13px;letter-spacing:1px}
+.modal{position:fixed;inset:0;z-index:51;display:flex;align-items:center;justify-content:center;background:rgba(4,8,12,.55);backdrop-filter:blur(6px)}
+.modal .card{background:#0c1218;border:1px solid #1e2b34;border-radius:10px;padding:20px 22px;width:400px;max-width:92vw}
+.modal h3{font-size:11px;color:var(--green);letter-spacing:1.5px;margin-bottom:8px}
+.modal p{color:var(--dim);font-size:11px;line-height:1.65;margin-bottom:10px}
+.modal input{width:100%;background:#070b0f;border:1px solid #22313c;border-radius:6px;color:#dbe7de;font-family:var(--mono);font-size:12px;padding:8px;margin-bottom:12px;outline:0}
+.modal .row{display:flex;gap:8px;justify-content:flex-end}
+.modal .row button{padding:7px 14px;font-size:11px}
+.save{background:var(--green2);color:#05230f}
+.ghost{background:#18222b;color:#9fb4bf;border:1px solid #22313c}
+.hidden{display:none!important}
+@media (max-width:840px){main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <img src="data:image/png;base64,__LOGO_FULL_B64__" alt="SpicyTerminal">
+  <div class="credit">made by Lamar Garcia</div>
+</header>
+<main>
+  <section class="pane"><h2>INPUT</h2>
+    <textarea id="inp" placeholder="Paste flights, email text or a screenshot (Ctrl+V)"></textarea>
+  </section>
+  <section class="pane out"><h2>OUTPUT</h2>
+    <pre class="out" id="out"></pre>
+  </section>
+</main>
+<div class="bar">
+  <button class="convert" id="btnConvert">CONVERT</button>
+  <button class="ai" id="btnAi">AI AUTO</button>
+  <button class="attach" id="btnAttach">+ ATTACH</button>
+  <button class="clear" id="btnClear">×</button>
+  <button class="copy" id="btnCopy">COPY</button>
+  <input type="file" id="filePick" accept="image/*" multiple class="hidden">
+</div>
+<div class="status">
+  <span id="st">READY</span>
+  <button id="genKey" class="linkbtn">Generate Api</button>
+  <button id="report" class="linkbtn">Report a bug</button>
+</div>
+
+<div class="welcome hidden" id="welcome">
+  <div class="card">
+    <img src="data:image/png;base64,__LOGO_FULL_B64__" alt="SpicyTerminal">
+    <div class="made">Made by Lamar García</div>
+    <div class="sub">Updates and bug fixes are applied automatically.</div>
+    <button id="enterBtn">ENTER</button>
+  </div>
+</div>
+
+<div class="modal hidden" id="setModal">
+  <div class="card">
+    <h3>AI (GEMINI) KEY</h3>
+    <p>Only needed for screenshots / very messy text. Stored in this browser only.
+    No key yet? <a id="genKey2" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:#53d977">Generate Api</a> (free, takes 20 seconds), then paste it here.</p>
+    <input id="gemKey" placeholder="Gemini API key" autocomplete="off">
+    <div class="row">
+      <button class="ghost" id="setClose">CLOSE</button>
+      <button class="save" id="setSave">SAVE</button>
+    </div>
+  </div>
+</div>
+
+<script>__SPICY_DATA__</script>
+<script>__SPICY_ENGINE__</script>
+<script>__APP_JS__</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+[build]
+  publish = "."
+# Single static file: index.html needs no build step.
+# Deploy: drag the web/ folder (or just index.html) onto https://app.netlify.com/drop

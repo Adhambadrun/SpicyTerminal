@@ -1,0 +1,42 @@
+{
+ "crosby_cph": {
+  "text": "ew York (JFK) to Copenhagen (CPH) on Wed, Aug 26 Warning Icon\n\nNew York (JFK) to Lisbon (LIS) on Wed, Aug 26\n10:05 PM to 10:15 AM (7h 10m)\nTap Air Portugal 210\nAirbus A330\nBusiness (J)\nLayover in LIS (1h 55m)\n\nLisbon (LIS) to Copenhagen (CPH) on Thu, Aug 27\n12:10 PM to 4:50 PM (3h 40m)\nTap Air Portugal 754\nAirbus A320neo\nBusiness (J)\nCopenhagen (CPH) to New York (JFK) on Sun, Aug 30 Warning Icon\n\nCopenhagen (CPH) to Lisbon (LIS) on Sun, Aug 30\n12:45 PM to 3:45 PM (4h 0m)\nTap Air Portugal 753\nAirbus A321neo\nBusiness (Z)\nLayover in LIS (1h 20m)\n\nLisbon (LIS) to New York (JFK) on Sun, Aug 30\n5:05 PM to 8:05 PM on Sun, Aug 30 (8h 0m)\nTap Air Portugal 209\nAirbus A330\nBusiness (Z)",
+  "output": "1 TP 210 26AUG JFK LIS 1005P 1015A¥1 J 333 7.10 3358 N\nDEP-JOHN F KENNEDY INTL\nARR-LISBON HUMBERTO DELGADO\nCABIN-BUSINESS\n\n2 TP 754 27AUG LIS CPH 1210P 450P J 32N 3.40 1536 N\nDEP-LISBON HUMBERTO DELGADO\nARR-COPENHAGEN KASTRUP\nCABIN-BUSINESS\n\n3 TP 753 30AUG CPH LIS 1245P 345P Z 32Q 4.00 1536 N\nDEP-COPENHAGEN KASTRUP\nARR-LISBON HUMBERTO DELGADO\nCABIN-BUSINESS\n\n4 TP 209 30AUG LIS JFK 505P 805P Z 333 8.00 3358 N\nDEP-LISBON HUMBERTO DELGADO\nARR-JOHN F KENNEDY INTL\nCABIN-BUSINESS\n\n<--additional-->\n1 TP 210J 26AUG\n2 TP 754J 27AUG\n3 TP 753Z 30AUG\n4 TP 209Z 30AUG",
+  "warnings": []
+ },
+ "office_4y": {
+  "text": "1 4Y  481 13OCT MCO MUC  945P  120P¥1 D    333  9.35  4921  N\n2 LH  109 14OCT MUC FRA  300P  400P   D    320   1.0   186  N\n3 AI 2028 14OCT FRA BOM  820P  840A¥1 D    788  8.50  4086  N",
+  "output": "1 4Y 481 13OCT MCO MUC 945P 120P¥1 D 333 9.35 4921 N\nDEP-ORLANDO INTL\nARR-MUNICH INTL\nCABIN-BUSINESS\n\n2 LH 109 14OCT MUC FRA 300P 400P D 320 1.00 186 N\nDEP-MUNICH INTL\nARR-FRANKFURT INTL\nCABIN-BUSINESS\n\n3 AI 2028 14OCT FRA BOM 820P 840A¥1 D 788 8.50 4086 N\nDEP-FRANKFURT INTL\nARR-CHHATRAPATI SHIVAJI INTL\nCABIN-BUSINESS\n\n<--additional-->\n1 4Y 481D 13OCT\n2 LH 109D 14OCT\n3 AI 2028D 14OCT",
+  "warnings": []
+ },
+ "six_shuffle": {
+  "text": "1 DL 7840 Z 16NOV BOS ICN 1100A 435P1\n2 DL 7821 Z 17NOV ICN SIN 630P 1210A1\n1 EY 499 D 25OCT SIN AUH 725P 1120P\n2 EY 99 D 26OCT AUH LIS 200A 655A\n3 AA 8574 I 30OCT OPO MAD 1225P 245P\n4 AA 8801 I 30OCT MAD BOS 515P 900P",
+  "output": "1 EY 499 25OCT SIN AUH 725P 1120P D 789 7.55 3657 N\nDEP-SINGAPORE CHANGI\nARR-ABU DHABI INTL (ZAYED)\nCABIN-BUSINESS\n\n2 EY 99 26OCT AUH LIS 200A 655A D 789 8.55 3805 N\nDEP-ABU DHABI INTL (ZAYED)\nARR-LISBON HUMBERTO DELGADO\nCABIN-BUSINESS\n\n3 AA 8574 30OCT OPO MAD 1225P 245P I 738 1.20 272 N\nDEP-PORTO FRANCISCO SA CARNEIRO\nARR-MADRID BARAJAS\nCABIN-BUSINESS\n\n4 AA 8801 30OCT MAD BOS 515P 900P I 738 8.45 3401 N\nDEP-MADRID BARAJAS\nARR-BOSTON LOGAN INTL\nCABIN-BUSINESS\n\n5 DL 7840 16NOV BOS ICN 1100A 435P¥1 Z 359 15.35 6813 N\nDEP-BOSTON LOGAN INTL\nARR-INCHEON INTL\nCABIN-BUSINESS\n\n6 DL 7821 17NOV ICN SIN 630P 1210A¥1 Z 738 6.40 2874 N\nDEP-INCHEON INTL\nARR-SINGAPORE CHANGI\nCABIN-BUSINESS\n\n<--additional-->\n1 EY 499D 25OCT\n2 EY 99D 26OCT\n3 AA 8574I 30OCT\n4 AA 8801I 30OCT\n5 DL 7840Z 16NOV\n6 DL 7821Z 17NOV",
+  "warnings": [
+   "S1: aircraft inferred 359 (DL 7840, route estimate)",
+   "S2: aircraft inferred 738 (DL 7821, route estimate)",
+   "S3: aircraft inferred 789 (EY 499, route estimate)",
+   "S4: aircraft inferred 789 (EY 99, route estimate)",
+   "S5: aircraft inferred 738 (AA 8574, route estimate)",
+   "S6: aircraft inferred 738 (AA 8801, route estimate)"
+  ]
+ },
+ "hidden_stop": {
+  "text": "1 EY 499 D 25OCT SIN AUH 725P 1120P\n2 EY 499 D 26OCT AUH LIS 200A 655A",
+  "output": "1 EY 499 25OCT SIN LIS 725P 655A¥1 D 789 16.50 7388 N\nSTOP-AUH\nDEP-SINGAPORE CHANGI\nARR-LISBON HUMBERTO DELGADO\nCABIN-BUSINESS\n\n<--additional-->\n1 EY 499D 25OCT",
+  "warnings": [
+   "S1: aircraft inferred 789 (EY 499, route estimate)",
+   "S1: hidden stop AUH — same flight EY 499 continues; shown as ONE segment (not 2)"
+  ]
+ },
+ "pmo_paste": {
+  "text": "New York (JFK) to Palermo (PMO) on Sun, Sep 20\nWarning IconWarning Icon\n\nNew York (JFK) to London (LHR) on Sun, Sep 20\n6:30 PM to 6:40 AM (7h 10m)\nBritish Airways 112\nBoeing 777\nBusiness (I)\nLayover in LHR (8h 0m)\n\nLondon (LHR) to Palermo (PMO) on Mon, Sep 21\n2:40 PM to 6:40 PM (3h 0m)\nBritish Airways 618\nAirbus A320\nBusiness (J)",
+  "output": "1 BA 112 20SEP JFK LHR 630P 640A¥1 I 77W 7.10 3442 N\nDEP-JOHN F KENNEDY INTL\nARR-LONDON HEATHROW\nCABIN-BUSINESS\n\n2 BA 618 21SEP LHR PMO 240P 640P J 320 3.00 1129 N\nDEP-LONDON HEATHROW\nARR-PALERMO FALCONE BORSELLINO\nCABIN-BUSINESS\n\n<--additional-->\n1 BA 112I 20SEP\n2 BA 618J 21SEP",
+  "warnings": []
+ },
+ "mockup_iah": {
+  "text": "Houston (IAH) to London (LHR) on Tue, Dec 22 Warning Icon\n\nHouston (IAH) to London (LHR) on Tue, Dec 22\n7:00 PM to 10:15 AM (9h 15m)\nBrussels Airlines 9079 (operated by United)\nBoeing 777\nEconomy (L)",
+  "output": "1 SN 9079 22DEC IAH LHR 700P 1015A¥1 L 77W 9.15 4824 N\nDEP-GEORGE BUSH INTL\nARR-LONDON HEATHROW\nCABIN-ECONOMY\n\n<--additional-->\n1 SN 9079L 22DEC",
+  "warnings": []
+ }
+}
