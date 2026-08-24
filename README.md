@@ -33,6 +33,7 @@ The whole app is one static file: `index.html`.
 | `index.html` | the app (everything inlined, build artifact) |
 | `netlify.toml` | publish config |
 | `assets/` | original logo images (favicon tile + wordmark source) |
+| `instructions/` | step-by-step picture guide for the team (how to use + how to add the AI key) — `READ_ME_FIRST.txt` inside |
 | `src/app.js` | UI logic (auto-convert, learn loop, fast image path) |
 | `src/spicy_engine.js` | the conversion engine |
 | `src/spicy_data.js` | airports / airlines / aircraft data (generated) |

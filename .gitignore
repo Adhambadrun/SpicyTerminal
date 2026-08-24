@@ -1,0 +1,10 @@
+# workspace safety archive — never upload this to GitHub
+_BACKUP_DO_NOT_UPLOAD.tar.gz
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# python cache
+__pycache__/
+*.pyc
