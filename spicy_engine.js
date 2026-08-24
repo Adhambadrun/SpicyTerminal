@@ -168,7 +168,11 @@ var ALIAS_NUM_RE = new RegExp(
   "\\b("+_aliasAlt+")\\b\\s*(?:flight|flt)?\\s*(?:no\\.?|number|nbr|#)?\\s*"+
   "(?:\\(?([A-Z][A-Z0-9])\\)?\\s*)?(\\d{1,4})\\b","gi");
 var CODE_NUM_RE = new RegExp("\\b("+"[A-Z][A-Z0-9]|[0-9][A-Z]"+")\\s{0,3}(\\d{1,4})\\b","g");
-var TIME_UNIT_AFTER = /\s*(?:hrs?\b|hours?\b|mins?\b|minutes?\b|m\b|h\b)/i;
+var TIME_UNIT_AFTER = /\s*(?::\d{2}|hrs?\b|hours?\b|mins?\b|minutes?\b|m\b|h\b)/i;
+function _stripFltZeros(n){var v=parseInt(n,10);return v>0?String(v):n;}   // "AF 0003" -> "AF 3"
+/* Google Flights collapsed "next flight" summary card — junk times/dates/ghost flight:
+   AF / Air France / 12:30 PM / Sep 16, 2026 / 6:45 PM / Sep 16, 2026 / 12h 15m / FCO to JFK / CDG */
+var SUMMARY_STRIP_RE = /\n[ \t]*[A-Z0-9]{2}[ \t]*\n[ \t]*[A-Za-z][A-Za-z .&'-]{1,30}[ \t]*\n+[ \t]*\d{1,2}:\d{2}\s*[AP]M[ \t]*\n+[ \t]*[A-Z][a-z]{2} \d{1,2}, \d{4}[ \t]*\n+[ \t]*\d{1,2}:\d{2}\s*[AP]M[ \t]*\n+[ \t]*[A-Z][a-z]{2} \d{1,2}, \d{4}[ \t]*\n+[ \t]*\d{1,2}h(?: \d{1,2}m)?[ \t]*\n+[ \t]*[A-Z]{3} to [A-Z]{3}[ \t]*\n+[ \t]*[A-Z]{3}[ \t]*(?=\n|$)/g;
 var _cityAlts = Object.keys(CITY_ALIASES).sort(function(a,b){return b.length-a.length;})
   .map(function(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}).join("|");
 var CITY_ALT_RE = new RegExp("\\b("+_cityAlts+")\\b","g");
@@ -318,7 +322,7 @@ function findAnchors(text){
     var code_txt=(m[2]||"").toUpperCase();
     if(code_txt && AIRLINES[code_txt]) code=code_txt;
     if(!code) continue;
-    cands.push({start:m.index,end:m.index+m[0].length,code:code,num:m[3]});
+    cands.push({start:m.index,end:m.index+m[0].length,code:code,num:_stripFltZeros(m[3])});
     occupied.push([m.index,m.index+m[0].length]);
   }
   function overlaps(s,e){for(var i=0;i<occupied.length;i++)
@@ -338,7 +342,7 @@ function findAnchors(text){
       var nxt=text.slice(m.index+m[0].length,m.index+m[0].length+30);
       if(!/[A-Z]{3}/.test(nxt)) continue;
     }
-    cands.push({start:m.index,end:m.index+m[0].length,code:code2,num:num});
+    cands.push({start:m.index,end:m.index+m[0].length,code:code2,num:_stripFltZeros(num)});
   }
   cands.sort(function(a,b){return a.start-b.start;});
   return cands;
@@ -419,15 +423,15 @@ function tryGdsLines(text){
     if(toks.length<7) continue;
     var i=0;
     if(i+1<toks.length && /^\d{1,2}$/.test(toks[i]) &&
-       fullRe(AIRLINE_TOK+"\\d{0,4}[A-Z]?", (toks[i+1]||"").toUpperCase())) i++;
+       fullRe(AIRLINE_TOK+"\\d{0,4}[A-Z]?", (toks[i+1]||"").toUpperCase().replace(/\*/g,""))) i++;
     var al=null,flt=null,flt_cls=null,g;
-    g=new RegExp("^("+AIRLINE_TOK+")(\\d{1,4})([A-Z])?$").exec((toks[i]||"").toUpperCase());
-    if(g && AIRLINES[g[1]]){ al=g[1];flt=g[2];flt_cls=g[3]||""; i++; }
+    g=new RegExp("^("+AIRLINE_TOK+")(\\d{1,4})([A-Z])?$").exec((toks[i]||"").toUpperCase().replace(/\*/g,""));
+    if(g && AIRLINES[g[1]]){ al=g[1];flt=_stripFltZeros(g[2]);flt_cls=g[3]||""; i++; }
     else if(i+1<toks.length && fullRe(AIRLINE_TOK,toks[i].toUpperCase())
             && AIRLINES[toks[i].toUpperCase()]){
       var m2=/^(\d{1,4})([A-Z])?$/.exec(toks[i+1].toUpperCase());
       if(!m2) continue;
-      al=toks[i].toUpperCase(); flt=m2[1]; flt_cls=m2[2]||""; i+=2;
+      al=toks[i].toUpperCase(); flt=_stripFltZeros(m2[1]); flt_cls=m2[2]||""; i+=2;
     } else continue;
     if(i<toks.length && /^[A-Z]$/.test(toks[i])){ flt_cls=toks[i].toUpperCase(); i++; }
     var day=null,mon=null,dm;
@@ -439,11 +443,20 @@ function tryGdsLines(text){
       day=parseInt(toks[i],10); mon=MONTH_MAP[toks[i+1].toUpperCase()]; i+=2;
     } else continue;
     if(!(day>=1&&day<=31)) continue;
-    if(i+1>=toks.length || !/^[A-Z]{3}$/.test(toks[i].toUpperCase())
-       || !/^[A-Z]{3}$/.test(toks[i+1].toUpperCase())) continue;
-    var orig=toks[i].toUpperCase(), dest=toks[i+1].toUpperCase();
+    if(i<toks.length && /^[A-Z]$/.test(toks[i].toUpperCase())){   // stray cabin letter between date and airports ("06FEB J JFKLHR")
+      if(!flt_cls) flt_cls=toks[i].toUpperCase(); i++;
+    }
+    if(i+1>=toks.length) continue;
+    var apA=toks[i].toUpperCase(), apB=toks[i+1].toUpperCase();
+    if(!/^[A-Z]{3}$/.test(apA) && /^[A-Z]{6}$/.test(apA) && AIRPORTS[apA.slice(0,3)] && AIRPORTS[apA.slice(3)]){
+      toks.splice(i,1,apA.slice(0,3),apA.slice(3));              // glued pair -> unroll "JFKLHR" into two tokens
+      apA=toks[i].toUpperCase(); apB=toks[i+1].toUpperCase();
+    }
+    if(!/^[A-Z]{3}$/.test(apA) || !/^[A-Z]{3}$/.test(apB)) continue;
+    var orig=apA, dest=apB;
     if(orig===dest) continue;
     i+=2;
+    while(i<toks.length && /^[A-Z]{2}\d{1,2}$/.test(toks[i].toUpperCase())) i++;   // sell-status junk ("SS1","HK1","NN1")
     var dc=(i<toks.length)?_gdsClock(toks[i]):null;
     if(!dc) continue; i++;
     var am=(i<toks.length)?/^(\d{3,4}[APNM])[\¥+]?(\d)?$/.exec(toks[i].toUpperCase()):null;
@@ -454,9 +467,16 @@ function tryGdsLines(text){
     i++;
     if(i<toks.length && /^[\¥+]?([0-3])$/.test(toks[i])){
       shift=parseInt(toks[i].replace(/[\¥+]/g,""),10); i++; }
-    var cls="";
-    if(i<toks.length && /^[A-Z]$/.test(toks[i])){ cls=toks[i].toUpperCase(); i++; }
-    if(!cls && flt_cls) cls=flt_cls;            // class-before-date layout
+    if(i<toks.length){                                        // arrival date -> overnight shift ("945A  07FEB")
+      var ad=/^(\d{1,2})([A-Z]{3})(?:\d{2,4})?$/.exec(toks[i].toUpperCase());
+      if(ad && MONTH_MAP[ad[2]]){
+        var sh=parseInt(ad[1],10)-day; while(sh<0) sh+=31;
+        if(sh>=0&&sh<=3) shift=sh;
+        i++;
+      }
+    }
+    var cls=flt_cls||"";                                      // glued / before-date class wins
+    if(!cls && i<toks.length && /^[A-Z]$/.test(toks[i])){ cls=toks[i].toUpperCase(); i++; }
     var acft="",dur="",dist="";
     while(i<toks.length){
       var t=toks[i], up=t.toUpperCase();
@@ -787,6 +807,7 @@ var LOST_ROW_RE = new RegExp(
   "(?:[A-Z]\\s+)?\\d{1,2}\\s*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\b","i");
 
 function parse(text){
+  text=text.replace(SUMMARY_STRIP_RE,"\n");   // kill Google-Flights summary cards before anything sees them
   var gds=tryGdsLines(text), segs, warns=[];
   if(gds.length){
     gds=mergeHiddenStops(gds);

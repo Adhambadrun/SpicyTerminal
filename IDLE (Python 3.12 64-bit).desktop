@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=IDLE (Python 3.12 64-bit)
+Exec=env WINEPREFIX="/opt/gds-wine/prefix" wine-stable C:\\\\users\\\\user\\\\AppData\\\\Roaming\\\\Microsoft\\\\Windows\\\\Start\\ Menu\\\\Programs\\\\Python\\ 3.12\\\\IDLE\\ \\(Python\\ 3.12\\ 64-bit\\).lnk
+Type=Application
+StartupNotify=true
+Comment=Launches IDLE, the interactive environment for Python 3.12.
+Path=/opt/gds-wine/prefix/dosdevices/c:/users/user/AppData/Local/Programs/Python/Python312/
+Icon=B8B0_idle.0
+StartupWMClass=pythonw.exe
