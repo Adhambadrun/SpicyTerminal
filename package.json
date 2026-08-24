@@ -1,0 +1,24 @@
+{
+  "name": "spicyterminal",
+  "version": "1.0.0",
+  "description": "Paste flights from Google Flights, airline sites, emails or screenshots — get a perfect, copy-paste-ready **GDS Black Window itinerary**.",
+  "main": "app.js",
+  "scripts": {
+    "build": "python3 build_web.py",
+    "test": "node test_engine.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Adhambadrun/SpicyTerminal.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Adhambadrun/SpicyTerminal/issues"
+  },
+  "homepage": "https://github.com/Adhambadrun/SpicyTerminal#readme",
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  }
+}
