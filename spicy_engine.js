@@ -26,7 +26,7 @@ delete MONTH_MAP.MAY_;
 var MONTH_RE = Object.keys(MONTH_MAP).sort(function(a,b){return b.length-a.length;}).join("|");
 
 var CABIN_DEFAULT_CLASS = {FIRST:"F", BUSINESS:"C", "PREMIUM ECONOMY":"W", ECONOMY:"Y"};
-var CLASS_TO_CABIN = {F:"FIRST",A:"FIRST",P:"FIRST",R:"FIRST",J:"BUSINESS",C:"BUSINESS",
+var CLASS_TO_CABIN = {F:"FIRST",A:"FIRST",P:"FIRST",R:"ECONOMY",J:"BUSINESS",C:"BUSINESS",
   D:"BUSINESS",I:"BUSINESS",Z:"BUSINESS",O:"BUSINESS",W:"PREMIUM ECONOMY",S:"PREMIUM ECONOMY"};
 var AMBIGUOUS_CODES = {AM:1,AT:1,TO:1,AS:1,IS:1,ON:1,NO:1,OK:1,GO:1,BY:1,BE:1,IT:1,
   IN:1,OR:1,DO:1,US:1,WE:1,ME:1,MY:1,SO:1,AN:1,IF:1,HE:1,HA:1,ID:1,LA:1,MA:1,MD:1,
@@ -142,7 +142,7 @@ var TIME_RE = new RegExp(
   "|(\\d{1,2})\\s*([AaPp])\\.?\\s*[Mm]\\.?"+
   "|(?<![\\d:A-Za-z])(\\d{1,2})(\\d{2})([AP])(?![a-z])"+
   "|([01]?\\d|2[0-3])[:.](\\d{2}))","g");
-var OVERNIGHT_TAIL_RE = /\s*(?:¥\s?(\d)|\+\s?(\d)(?:\s?days?)?|\(?(next day|following day)\)?)/i;
+var OVERNIGHT_TAIL_RE = /\s*(?:[¥‡]\s?(\d)|\+\s?(\d)(?:\s?days?)?|\(?(next day|following day)\)?)/i;
 var DEP_NEAR_RE = /(dep\w*|leav\w*|from|take\s?off)\b/i;
 var ARR_NEAR_RE = /(arr\w*|arrive\w*|land\w*)\b/i;
 var DURATION_RE = /\b(\d{1,2})\s*(?:hrs?|hours?|h)\s*,?\s*(?:(\d{1,2})\s*(?:mins?|minutes?|m)\b)?|\b(\d{1,3})\s*(?:mins?|minutes?)\b/gi;
@@ -415,7 +415,7 @@ function _cabinNear(lines, li){
 }
 function fullRe(reStr,tok){ return new RegExp("^(?:"+reStr+")$").exec(tok); }
 
-function tryGdsLines(text){
+function tryGdsLines(text, used){
   var lines=text.replace(/\u00a0/g," ").replace(/\u2007/g," ").replace(/\u202f/g," ").split("\n");
   var segs=[];
   for(var li=0;li<lines.length;li++){
@@ -457,16 +457,17 @@ function tryGdsLines(text){
     if(orig===dest) continue;
     i+=2;
     while(i<toks.length && /^[A-Z]{2}\d{1,2}$/.test(toks[i].toUpperCase())) i++;   // sell-status junk ("SS1","HK1","NN1")
-    var dc=(i<toks.length)?_gdsClock(toks[i]):null;
+    var dct=(i<toks.length)?toks[i]:"";                       // raw dep clock token (noon "N" marker)
+    var dc=dct?_gdsClock(dct):null;
     if(!dc) continue; i++;
-    var am=(i<toks.length)?/^(\d{3,4}[APNM])[\¥+]?(\d)?$/.exec(toks[i].toUpperCase()):null;
+    var am=(i<toks.length)?/^(\d{3,4}[APNM])[\¥+‡]?(\d)?$/.exec(toks[i].toUpperCase()):null;
     if(!am) continue;
     var ac=_gdsClock(am[1]);
     if(!ac) continue;
     var shift=am[2]?parseInt(am[2],10):0;
     i++;
-    if(i<toks.length && /^[\¥+]?([0-3])$/.test(toks[i])){
-      shift=parseInt(toks[i].replace(/[\¥+]/g,""),10); i++; }
+    if(i<toks.length && /^[\¥+‡]?([0-3])$/.test(toks[i])){
+      shift=parseInt(toks[i].replace(/[\¥+‡]/g,""),10); i++; }
     if(i<toks.length){                                        // arrival date -> overnight shift ("945A  07FEB")
       var ad=/^(\d{1,2})([A-Z]{3})(?:\d{2,4})?$/.exec(toks[i].toUpperCase());
       if(ad && MONTH_MAP[ad[2]]){
@@ -490,8 +491,8 @@ function tryGdsLines(text){
     seg.airline=al; seg.flight_no=flt;
     seg.date_ddmmm=makeDate(day,mon);
     seg.orig=orig; seg.dest=dest;
-    seg.dep_time=fmtClock(dc[0],dc[1]);
-    seg.arr_time=fmtClock(ac[0],ac[1]);
+    seg.dep_time=/N$/i.test(dct)?"1200N":fmtClock(dc[0],dc[1]);   // noon stays N (1200N, not 1200P)
+    seg.arr_time=/N$/.test(am[1])?"1200N":fmtClock(ac[0],ac[1]);
     seg.arr_day_shift=Math.min(Math.max(shift,0),3);
     seg.booking_class=cls;
     seg.aircraft=acft||"???";
@@ -524,6 +525,7 @@ function tryGdsLines(text){
     }
     seg.distance=dist;
     segs.push(seg);
+    if(used) used.push(li);
   }
   fillAircraft(segs);
   return segs;
@@ -808,11 +810,22 @@ var LOST_ROW_RE = new RegExp(
 
 function parse(text){
   text=text.replace(SUMMARY_STRIP_RE,"\n");   // kill Google-Flights summary cards before anything sees them
-  var gds=tryGdsLines(text), segs, warns=[];
+  var used=[], gds=tryGdsLines(text, used), segs, warns=[];
   if(gds.length){
     gds=mergeHiddenStops(gds);
     gds.forEach(function(s){s.warnings.forEach(function(w){warns.push("S"+s.seg+": "+w);});});
     segs=gds;
+    /* mixed paste (GDS rows + Google-Flights prose): parse the remainder as prose too */
+    var allL=text.split("\n"), rest=[], uu={};
+    used.forEach(function(li){uu[li]=1;});
+    for(var ul=0;ul<allL.length;ul++) if(!uu[ul]) rest.push(allL[ul]);
+    var pr2=parseProse(rest.join("\n"));
+    if(!pr2[1] && pr2[0].length){
+      var psegs=mergeHiddenStops(pr2[0]), seenP={};
+      psegs.forEach(function(s2){s2.warnings.forEach(function(w){
+        if(!seenP[w]){seenP[w]=1;warns.push(w);}});});
+      segs=segs.concat(psegs);
+    }
   } else {
     var pr=parseProse(text);
     if(pr[1]) return [[],["No flight anchors (airline + flight number) found. "
