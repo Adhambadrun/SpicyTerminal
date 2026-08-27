@@ -106,5 +106,10 @@
    "S12: aircraft inferred 738 (AA 2680, route estimate)",
    "S13: aircraft inferred 738 (AA 1033, route estimate)"
   ]
+ },
+ "crosby_lax_lhr": {
+  "text": "Los Angeles (LAX) to London (LHR) on Wed, Sep 16\n\nAA\nLos Angeles (LAX) to London (LHR)\n\nWed, Sep 16\n\nIB 4237 (Operated by American Airlines)\n\n6:05 PM\nto12:45 PM+1\n(10h 40m)\n\nBoeing 777-300ER | Business Class (I)\n\n\nBA\nBritish Airways\n\n10:30 AM\n\nSep 21, 2026\n\n1:50 PM\n\nSep 21, 2026\n\n11h 20m\n\nLHR to LAX\n\nLondon (LHR) to Los Angeles (LAX) on Mon, Sep 21\n\nBA\nLondon (LHR) to Los Angeles (LAX)\n\nMon, Sep 21\n\nAA 6955 (Operated by British Airways)\n\n10:30 AM\nto1:50 PM\n(11h 20m)\n\nBoeing 777-300ER | Business Class (I)",
+  "output": "1 IB 4237 16SEP LAX LHR 605P 1245P¥1 I 77W 10.40 5443 N\nDEP-LOS ANGELES INTL\nARR-LONDON HEATHROW\nCABIN-BUSINESS\n\n2 AA 6955 21SEP LHR LAX 1030A 150P I 77W 11.20 5443 N\nDEP-LONDON HEATHROW\nARR-LOS ANGELES INTL\nCABIN-BUSINESS\n\n<--additional-->\n1 IB 4237I 16SEP\n2 AA 6955I 21SEP",
+  "warnings": []
  }
 }

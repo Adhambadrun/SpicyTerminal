@@ -172,7 +172,7 @@ var TIME_UNIT_AFTER = /\s*(?::\d{2}|hrs?\b|hours?\b|mins?\b|minutes?\b|m\b|h\b)/
 function _stripFltZeros(n){var v=parseInt(n,10);return v>0?String(v):n;}   // "AF 0003" -> "AF 3"
 /* Google Flights collapsed "next flight" summary card — junk times/dates/ghost flight:
    AF / Air France / 12:30 PM / Sep 16, 2026 / 6:45 PM / Sep 16, 2026 / 12h 15m / FCO to JFK / CDG */
-var SUMMARY_STRIP_RE = /\n[ \t]*[A-Z0-9]{2}[ \t]*\n[ \t]*[A-Za-z][A-Za-z .&'-]{1,30}[ \t]*\n+[ \t]*\d{1,2}:\d{2}\s*[AP]M[ \t]*\n+[ \t]*[A-Z][a-z]{2} \d{1,2}, \d{4}[ \t]*\n+[ \t]*\d{1,2}:\d{2}\s*[AP]M[ \t]*\n+[ \t]*[A-Z][a-z]{2} \d{1,2}, \d{4}[ \t]*\n+[ \t]*\d{1,2}h(?: \d{1,2}m)?[ \t]*\n+[ \t]*[A-Z]{3} to [A-Z]{3}[ \t]*\n+[ \t]*[A-Z]{3}[ \t]*(?=\n|$)/g;
+var SUMMARY_STRIP_RE = /\n[ \t]*[A-Z0-9]{2}[ \t]*\n[ \t]*[A-Za-z][A-Za-z .&'-]{1,30}[ \t]*\n+[ \t]*\d{1,2}:\d{2}\s*[AP]M[ \t]*\n+[ \t]*[A-Z][a-z]{2} \d{1,2}, \d{4}[ \t]*\n+[ \t]*\d{1,2}:\d{2}\s*[AP]M[ \t]*\n+[ \t]*[A-Z][a-z]{2} \d{1,2}, \d{4}[ \t]*\n+[ \t]*\d{1,2}h(?: \d{1,2}m)?[ \t]*\n+[ \t]*[A-Z]{3} to [A-Z]{3}[ \t]*(?:\n+[ \t]*[A-Z]{3}[ \t]*)?(?=\n|$)/g;
 var _cityAlts = Object.keys(CITY_ALIASES).sort(function(a,b){return b.length-a.length;})
   .map(function(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}).join("|");
 var CITY_ALT_RE = new RegExp("\\b("+_cityAlts+")\\b","g");
@@ -218,9 +218,12 @@ function findTimes(region, basePos){
     }
     if(h>23||mi>59) continue;
     var before=region.slice(Math.max(0,m.index-24),m.index);
+    // Google-Flights arrival glue: "6:05 PM\nto12:45 PM+1" or "10:30 AM to 1:50 PM" —
+    // a "to" glued directly to the clock (same line, spaces/tabs only) marks the arrival.
+    var toArr=/(?:^|[\s>(\[])[Tt]o[ \t]*$/.test(before);
     out.push({pos:(basePos||0)+m.index,end:(basePos||0)+m.index+m[0].length,
       h:h,m:mi,marker:marker,
-      depkw:DEP_NEAR_RE.test(before),arrkw:ARR_NEAR_RE.test(before)});
+      depkw:DEP_NEAR_RE.test(before),arrkw:ARR_NEAR_RE.test(before)||toArr});
   }
   return out;
 }
