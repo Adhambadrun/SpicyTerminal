@@ -119,7 +119,7 @@ testInputs.forEach(t => {
   }
 });
 
-console.log("\n=== 3. Pure Offline Image OCR from Actual File (<1s) ===");
+console.log("\n=== 3. Direct Image OCR from Actual File (<1s) ===");
 try {
   execSync(`python3 -c "
 from PIL import Image, ImageDraw, ImageFont
@@ -163,7 +163,7 @@ const html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
 assert(html.includes("adhambadraan@gmail.com"), "index.html contains author email adhambadraan@gmail.com");
 assert(html.includes("btnWeeklyReport"), "index.html contains btnWeeklyReport button");
 assert(html.includes("reportModal"), "index.html contains reportModal dialog");
-assert(html.includes("OCRAD"), "index.html has bundled offline OCRAD engine");
+assert(html.includes("OCRAD"), "index.html has bundled OCRAD engine");
 
 console.log(`\n=== SUMMARY: ${PASS} passed, ${FAIL} failed ===`);
 if (FAIL > 0) process.exit(1);

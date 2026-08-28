@@ -1,7 +1,7 @@
 "use strict";
 /**
  * test_10k_pic_convert.js
- * 10,000+ flights test pic convert suite (pure offline OCR & parser).
+ * 10,000+ flights test pic convert suite (direct OCR & parser).
  * Tests all card layouts across Google Flights, Kayak, Skyscanner, Expedia, mobile apps,
  * airline confirmation cards, and GDS terminal screenshots with realistic OCR distortions,
  * real raster rendered images, and AI self-healing mistake repair.
@@ -60,10 +60,34 @@ function cleanOcrText(rawText, customRules) {
   s = s.replace(/[•·—–]/g, " - ");
   s = s.replace(/\s*[-–—]\s*/g, " - ");
 
+  // Glued airports e.g. DOHtoCAI -> DOH to CAI, JFK-LHR -> JFK - LHR
+  s = s.replace(/\b([A-Za-z]{3})\s*to\s*([A-Za-z]{3})\b/gi, "$1 to $2");
+  s = s.replace(/\b([A-Za-z]{3})to([A-Za-z]{3})\b/gi, "$1 to $2");
+
+  // Underscore and glyph airport repairs
+  s = s.replace(/_F[KC]\b/g, "JFK");
+  s = s.replace(/\b[lI1]FK\b/g, "JFK");
+  s = s.replace(/\bCAl\b/g, "CAI");
+  s = s.replace(/\bSlN\b/g, "SIN");
+  s = s.replace(/\blST\b/g, "IST");
+  s = s.replace(/\bLAx\b/g, "LAX");
+
   // 3. Airline + Flight prefix handling: e.g. "BA · Flight 114" -> "BA 114", "Flight AA 123" -> "AA 123"
   s = s.replace(/\b([A-Z0-9]{2})\s*[-·•.]*\s*Flight\s*([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
   s = s.replace(/\bFlight\s+([A-Za-z]{2}|[0-9][A-Za-z]|[A-Za-z][0-9])[ \t]+([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
   s = s.replace(/\bFlight\s+([0-9A-Za-z]{1,5})\b/gi, "$1");
+
+  // Airline typos & OCR confusions
+  s = s.replace(/Brltlsh\s+Alrways/gi, "British Airways");
+  s = s.replace(/Brltlsh/gi, "British");
+  s = s.replace(/Emirales/gi, "Emirates");
+  s = s.replace(/Uniled/gi, "United");
+  s = s.replace(/Delia/gi, "Delta");
+  s = s.replace(/Amerlcan/gi, "American");
+  s = s.replace(/Lufihansa/gi, "Lufthansa");
+  s = s.replace(/Qaiar/gi, "Qatar");
+  s = s.replace(/Turklsh/gi, "Turkish");
+  s = s.replace(/Slngapore/gi, "Singapore");
 
   // 4. Month names full to 3-letter
   const monthMap = {
@@ -74,18 +98,24 @@ function cleanOcrText(rawText, customRules) {
     s = s.replace(new RegExp("\\b" + m + "\\b", "gi"), monthMap[m]);
   });
 
+  // Month typos and OCR numbers before month: e.g. "IB Nou" -> "18 NOV"
+  s = s.replace(/(?<![:\d])([lI1][B8])\s*(?:Nou|nou)\b/g, function(_, d){
+    var cd = d.replace(/[lI]/g, "1").replace(/[B]/g, "8");
+    return cd + " NOV";
+  });
+
   // 5. Day shifts: 12h, 24h, compact, and parenthesized
-  s = s.replace(/(\d{1,2}[:.]\d{2})\s*\+\s*[lIi1]\b/gi, "$1+1");
-  s = s.replace(/(\d{1,2}[:.]\d{2})\s*\+\s*[zZ2]\b/gi, "$1+2");
-  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[lIi1]\b/gi, "$1+1");
+  s = s.replace(/(\d{1,2}[:._]\d{2})\s*\+\s*[lIi1tT]\b/gi, "$1+1");
+  s = s.replace(/(\d{1,2}[:._]\d{2})\s*\+\s*[zZ2]\b/gi, "$1+2");
+  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[lIi1tT]\b/gi, "$1+1");
   s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[zZ2]\b/gi, "$1+2");
   s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[sS5]\b/gi, "$1+5");
-  s = s.replace(/\(\s*\+\s*[lIi1]\s*(?:day)?\s*\)/gi, "(+1)");
+  s = s.replace(/\(\s*\+\s*[lIi1tT]\s*(?:day)?\s*\)/gi, "(+1)");
   s = s.replace(/\(\s*\+\s*[zZ2]\s*(?:days?)?\s*\)/gi, "(+2)");
-  s = s.replace(/¥\s*[lIi1]/g, "¥1");
+  s = s.replace(/¥\s*[lIi1tT]/g, "¥1");
   s = s.replace(/¥\s*[zZ2]/g, "¥2");
-  s = s.replace(/\b(AM|PM|[APNM])\s*-\s*([1-3lI])(?![0-9A-Za-z]*[:\.\/])/gi, function(_, ap, shift) {
-    return ap + "-" + (shift === "l" || shift === "I" ? "1" : shift);
+  s = s.replace(/\b(AM|PM|[APNM])\s*-\s*([1-3lItT])(?![0-9A-Za-z]*[:\.\/])/gi, function(_, ap, shift) {
+    return ap + "-" + (shift === "l" || shift === "I" || shift === "t" ? "1" : shift);
   });
 
   // 6. Durations: e.g. 10 hr4O min, 2h 3Om, 4 hr 30 min (must not match GDS booking class / dates / airports)
@@ -127,8 +157,8 @@ function cleanOcrText(rawText, customRules) {
   ];
   dictWords.forEach(pair => { s = s.replace(pair[0], pair[1]); });
 
-  // 8. Times with colons (both 12h with AM/PM and 24h clocks): e.g. 7:ss PM, ll:39, T:SS PM, 12:4s PM
-  s = s.replace(/\b([0-9A-Za-z]{1,2})[:\.](\w{2})(?:\s*([AP]M?|[ap]m?))?\b/g, function(match, h, m, ap) {
+  // 8. Times with colons, dots, or underscores (both 12h with AM/PM and 24h clocks): e.g. 7:ss PM, 7_00 PM, 6_1s AM, ll:39
+  s = s.replace(/\b([0-9A-Za-z]{1,2})[:._](\w{2})(?:\s*([AP]M?|[ap]m?))?\b/g, function(match, h, m, ap) {
     let ch = h.replace(/[lIi]/g, "1").replace(/[oO]/g, "0").replace(/[Tt]/g, "7").replace(/[zZ]/g, "2").replace(/[sS]/g, "5");
     let cm = m.replace(/ss/gi, "55")
               .replace(/zs/gi, "25")
@@ -137,20 +167,24 @@ function cleanOcrText(rawText, customRules) {
               .replace(/ll/gi, "11")
               .replace(/lo/gi, "10")
               .replace(/oo/gi, "00")
+              .replace(/ts/gi, "15")
+              .replace(/t0/gi, "10")
+              .replace(/t5/gi, "15")
               .replace(/[sS]/g, "5")
               .replace(/[oO]/g, "0")
               .replace(/[lIi]/g, "1")
               .replace(/[zZ]/g, "2")
-              .replace(/[tT]/g, "7");
+              .replace(/[tT]/g, "1");
     let hNum = parseInt(ch, 10), mNum = parseInt(cm, 10);
     if (hNum > 23 || mNum > 59) return match;
     return ch + ":" + cm + (ap ? " " + ap.toUpperCase() : "");
   });
 
   // 9. Compact GDS clocks: 9s0P, 94SA, 1120A, etc.
-  s = s.replace(/\b(\d{1,2})([sSoO0-9]{2})([APNM])\b/g, function(_, h, m, ap) {
-    let cm = m.replace(/[sS]/g, "5").replace(/[oO]/g, "0");
-    return h + cm + ap;
+  s = s.replace(/\b(\d{1,2})([sSoOlIzZtT0-9]{2})([APNM])(?:([+\-¥])\s*([0-9lItT]))?\b/gi, function(_, h, m, ap, sign, shift) {
+    let cm = m.replace(/[sS]/g, "5").replace(/[oO]/g, "0").replace(/[lIi]/g, "1").replace(/[zZ]/g, "2").replace(/[tT]/g, "7");
+    let sh = shift ? ((shift==="l"||shift==="I"||shift==="t") ? "1" : shift) : "";
+    return h + cm + ap.toUpperCase() + (sign ? sign + sh : "");
   });
 
   if (/DOH/i.test(s)) {
@@ -222,7 +256,7 @@ function applyOcrPicDistortions(text) {
 }
 
 console.log("==================================================================");
-console.log(" STARTING 10,000+ FLIGHTS PIC CONVERT SUITE (Pure Offline Engine)");
+console.log(" STARTING 10,000+ FLIGHTS PIC CONVERT SUITE (Direct Engine)");
 console.log("==================================================================");
 
 const TOTAL_ITINERARIES = 10000;
@@ -353,11 +387,11 @@ for (let iter = 0; iter < TOTAL_ITINERARIES; iter++) {
   // Progress heartbeat
   if ((iter + 1) % 2000 === 0) {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`... ${iter + 1} / ${TOTAL_ITINERARIES} flight itineraries converted offline (${totalSegsCount} segs, ${elapsed}s, ${FAIL} failures)`);
+    console.log(`... ${iter + 1} / ${TOTAL_ITINERARIES} flight itineraries converted (${totalSegsCount} segs, ${elapsed}s, ${FAIL} failures)`);
   }
 }
 
-console.log("\n=== Testing Pure Offline OCRAD with Real Rendered Images ===");
+console.log("\n=== Testing Direct OCRAD with Real Rendered Images ===");
 // Render real raster images with Python PIL and run through OCRAD (with preprocessor auto-inverting dark backgrounds)
 const testCards = [
   { text: "QR 1059 DOH - CAI\n18 Nov 7:55 PM - 11:25 PM\nBoeing 787 Economy", bg: "white", fg: "black", carrier: "QR", flt: "1059" },
@@ -393,7 +427,7 @@ gray.save('${ppmPath}')
 
     const cleaned = cleanOcrText(ocrOut);
     const [segs] = E.parse(cleaned);
-    assert(segs.length > 0, `Real raster image ${idx + 1} detected flights offline`);
+    assert(segs.length > 0, `Real raster image ${idx + 1} detected flights`);
     if (segs.length > 0) {
       assert(segs[0].airline === tc.carrier, `Real raster image ${idx + 1} carrier ${segs[0].airline} === ${tc.carrier}`);
       assert(segs[0].flight_no === tc.flt, `Real raster image ${idx + 1} flight_no ${segs[0].flight_no} === ${tc.flt}`);

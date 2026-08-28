@@ -1,9 +1,9 @@
-/* app.js — SpicyTerminal Web UI — v4 PURE OFFLINE IMAGE + AI SELF-LEARNER
+/* app.js — SpicyTerminal Web UI — Instant Conversion & AI Self-Learner
    Features:
-   - 100% Offline screenshots: instant conversion with zero AI needed (<1s, "fast as hell")
+   - Instant screenshots: fast conversion with zero AI needed (<1s)
    - Native TextDetector API + bundled pure JS OCRAD fallback
    - Aviation-aware OCR cleaner (repairs glyph confusions in flight numbers, times, airports, dates)
-   - Fallback to AI ONLY in case offline parsing cannot detect flights
+   - Fallback to AI ONLY in case direct parsing cannot detect flights
    - Continuous AI mistake detection & self-healing engine ("teaches the tool to fix it")
    - Weekly performance & enhancement report generator sent to adhambadraan@gmail.com
    - Text cache (fingerprint -> output) & Image cache (hash -> output) for instant repeat
@@ -42,22 +42,22 @@ function loadStats() {
     var s = JSON.parse(localStorage.getItem(STATS_KEY) || "{}");
     if (!s.startDate) s.startDate = new Date().toISOString().slice(0, 10);
     if (!s.total) s.total = 0;
-    if (!s.textOffline) s.textOffline = 0;
-    if (!s.imgOffline) s.imgOffline = 0;
+    if (!s.textDirect) s.textDirect = s.textOffline || 0;
+    if (!s.imgDirect) s.imgDirect = s.imgOffline || 0;
     if (!s.aiFallback) s.aiFallback = 0;
     if (!s.durations) s.durations = [];
     return s;
   } catch (e) {
-    return { startDate: new Date().toISOString().slice(0, 10), total: 0, textOffline: 0, imgOffline: 0, aiFallback: 0, durations: [] };
+    return { startDate: new Date().toISOString().slice(0, 10), total: 0, textDirect: 0, imgDirect: 0, aiFallback: 0, durations: [] };
   }
 }
 function recordStat(type, durationMs) {
   try {
     var s = loadStats();
     s.total++;
-    if (type === "text_offline") s.textOffline++;
-    if (type === "img_offline") {
-      s.imgOffline++;
+    if (type === "text_direct" || type === "text_offline") s.textDirect++;
+    if (type === "img_direct" || type === "img_offline") {
+      s.imgDirect++;
       if (typeof durationMs === "number" && durationMs > 0) {
         s.durations.push(Math.round(durationMs));
         if (s.durations.length > 50) s.durations.shift();
@@ -98,29 +98,29 @@ function teachRule(rule) {
   } catch (e) {}
 }
 
-/* Analyze discrepancy between offline and AI result to detect mistakes & teach tool */
-function detectMistakesAndLearn(inputText, offlineText, aiText, reason) {
+/* Analyze discrepancy between direct engine and AI result to detect mistakes & teach tool */
+function detectMistakesAndLearn(inputText, directText, aiText, reason) {
   if (!aiText || !aiText.trim()) return;
-  var offLines = (offlineText || "").trim().split("\n").filter(Boolean);
+  var dirLines = (directText || "").trim().split("\n").filter(Boolean);
   var aiLines = (aiText || "").trim().split("\n").filter(Boolean);
 
-  var offFltLines = offLines.filter(function(l){ return /^\d+\s+[A-Z0-9]{2}\s+/i.test(l); });
+  var dirFltLines = dirLines.filter(function(l){ return /^\d+\s+[A-Z0-9]{2}\s+/i.test(l); });
   var aiFltLines = aiLines.filter(function(l){ return /^\d+\s+[A-Z0-9]{2}\s+/i.test(l); });
 
   var diffNotes = [];
 
   // Check count difference
-  if (offFltLines.length !== aiFltLines.length) {
-    diffNotes.push("Segment count discrepancy: offline found " + offFltLines.length + ", AI found " + aiFltLines.length);
+  if (dirFltLines.length !== aiFltLines.length) {
+    diffNotes.push("Segment count discrepancy: direct found " + dirFltLines.length + ", AI found " + aiFltLines.length);
   }
 
   // Compare flight lines
-  for (var i = 0; i < Math.min(offFltLines.length, aiFltLines.length); i++) {
-    var oP = offFltLines[i].split(/\s+/);
+  for (var i = 0; i < Math.min(dirFltLines.length, aiFltLines.length); i++) {
+    var oP = dirFltLines[i].split(/\s+/);
     var aP = aiFltLines[i].split(/\s+/);
     // [seg#, carrier, flt#, date, orig, dest, dep, arr, cls, ac, dur, dist, stat]
     if (oP[1] !== aP[1] || oP[2] !== aP[2]) {
-      diffNotes.push("Flight " + (i+1) + " mismatch: offline has " + oP[1] + " " + oP[2] + " vs AI " + aP[1] + " " + aP[2]);
+      diffNotes.push("Flight " + (i+1) + " mismatch: direct has " + oP[1] + " " + oP[2] + " vs AI " + aP[1] + " " + aP[2]);
       // If carrier matched but flight number had glyph error: teach rule!
       if (oP[1] === aP[1] && oP[2] && aP[2]) {
         teachRule({
@@ -136,14 +136,14 @@ function detectMistakesAndLearn(inputText, offlineText, aiText, reason) {
     if (oP[6] !== aP[6] || oP[7] !== aP[7]) diffNotes.push("Flight " + (i+1) + " times: " + oP[6] + "/" + oP[7] + " vs " + aP[6] + "/" + aP[7]);
   }
 
-  if (diffNotes.length > 0 || !offlineText.trim()) {
+  if (diffNotes.length > 0 || !directText.trim()) {
     var entry = {
       id: "mstk_" + Date.now(),
       when: new Date().toISOString().slice(0, 19).replace("T", " "),
       reason: reason || "AI correction",
-      summary: diffNotes.join("; ") || "Offline parse missed flight data",
+      summary: diffNotes.join("; ") || "Direct parse missed flight data",
       input: (inputText || "").slice(0, 180),
-      offline: (offlineText || "").slice(0, 200),
+      direct: (directText || "").slice(0, 200),
       ai: (aiText || "").slice(0, 200)
     };
     recordMistake(entry);
@@ -219,19 +219,43 @@ function cleanOcrText(rawText) {
   s = s.replace(/[-–—]/g, " - ");
   s = s.replace(/[ \t]{2,}/g, " ");
 
+  // Glued airports e.g. DOHtoCAI -> DOH to CAI, JFK-LHR -> JFK - LHR
+  s = s.replace(/\b([A-Za-z]{3})\s*to\s*([A-Za-z]{3})\b/gi, "$1 to $2");
+  s = s.replace(/\b([A-Za-z]{3})to([A-Za-z]{3})\b/gi, "$1 to $2");
+
+  // Underscore and glyph airport repairs
+  s = s.replace(/_F[KC]\b/g, "JFK");
+  s = s.replace(/\b[lI1]FK\b/g, "JFK");
+  s = s.replace(/\bCAl\b/g, "CAI");
+  s = s.replace(/\bSlN\b/g, "SIN");
+  s = s.replace(/\blST\b/g, "IST");
+  s = s.replace(/\bLAx\b/g, "LAX");
+
   // 3. Day shifts: 12h, 24h, compact, and parenthesized
-  s = s.replace(/(\d{1,2}[:.]\d{2})\s*\+\s*[lIi1]\b/gi, "$1+1");
-  s = s.replace(/(\d{1,2}[:.]\d{2})\s*\+\s*[zZ2]\b/gi, "$1+2");
-  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[lIi1]\b/gi, "$1+1");
+  s = s.replace(/(\d{1,2}[:._]\d{2})\s*\+\s*[lIi1tT]\b/gi, "$1+1");
+  s = s.replace(/(\d{1,2}[:._]\d{2})\s*\+\s*[zZ2]\b/gi, "$1+2");
+  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[lIi1tT]\b/gi, "$1+1");
   s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[zZ2]\b/gi, "$1+2");
   s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[sS5]\b/gi, "$1+5");
-  s = s.replace(/\(\s*\+\s*[lIi1]\s*(?:day)?\s*\)/gi, "(+1)");
+  s = s.replace(/\(\s*\+\s*[lIi1tT]\s*(?:day)?\s*\)/gi, "(+1)");
   s = s.replace(/\(\s*\+\s*[zZ2]\s*(?:days?)?\s*\)/gi, "(+2)");
-  s = s.replace(/¥\s*[lIi1]/g, "¥1");
+  s = s.replace(/¥\s*[lIi1tT]/g, "¥1");
   s = s.replace(/¥\s*[zZ2]/g, "¥2");
-  s = s.replace(/\b(AM|PM|[APNM])\s*-\s*([1-3lI])(?![0-9A-Za-z]*[:\.\/])/gi, function(_, ap, shift) {
-    return ap + "-" + (shift === "l" || shift === "I" ? "1" : shift);
+  s = s.replace(/\b(AM|PM|[APNM])\s*-\s*([1-3lItT])(?![0-9A-Za-z]*[:\.\/])/gi, function(_, ap, shift) {
+    return ap + "-" + (shift === "l" || shift === "I" || shift === "t" ? "1" : shift);
   });
+
+  // Airline typos & OCR confusions
+  s = s.replace(/Brltlsh\s+Alrways/gi, "British Airways");
+  s = s.replace(/Brltlsh/gi, "British");
+  s = s.replace(/Emirales/gi, "Emirates");
+  s = s.replace(/Uniled/gi, "United");
+  s = s.replace(/Delia/gi, "Delta");
+  s = s.replace(/Amerlcan/gi, "American");
+  s = s.replace(/Lufihansa/gi, "Lufthansa");
+  s = s.replace(/Qaiar/gi, "Qatar");
+  s = s.replace(/Turklsh/gi, "Turkish");
+  s = s.replace(/Slngapore/gi, "Singapore");
 
   // Airline + Flight prefix handling: e.g. "BA · Flight 114" -> "BA 114", "Flight AA 123" -> "AA 123"
   s = s.replace(/\b([A-Z0-9]{2})\s*[-·•.]*\s*Flight\s*([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
@@ -356,18 +380,22 @@ function cleanOcrText(rawText) {
   return s;
 }
 
-/* ---------- pure offline image preprocessing (<100ms) ---------- */
-function preprocessCanvasForOcr(srcCanvas, binarizeMode) {
+/* ---------- high-speed image preprocessing (<100ms) ---------- */
+function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
   var w = srcCanvas.width, h = srcCanvas.height;
   var targetW = w, targetH = h;
 
-  // Scale to optimal OCR dimensions:
-  // Best glyph height for OCR is ~20-35px. If canvas is small, upscale. If too big, downscale for <300ms speed.
-  if (w < 800) {
+  // Glyph height needs to be ~25-35px for clean OCRAD recognition.
+  // If height is small (e.g. < 280px for a flight card row), upscale up to 3x!
+  if (h < 260) {
+    var scale = Math.min(3.0, 480 / h);
+    targetW = Math.round(w * scale);
+    targetH = Math.round(h * scale);
+  } else if (w < 800) {
     var factor = Math.min(2.0, 1000 / w);
     targetW = Math.round(w * factor);
     targetH = Math.round(h * factor);
-  } else if (w > 1400) {
+  } else if (w > 1600) {
     var factor = 1400 / w;
     targetW = Math.round(w * factor);
     targetH = Math.round(h * factor);
@@ -385,24 +413,26 @@ function preprocessCanvasForOcr(srcCanvas, binarizeMode) {
   var data = imgData.data;
   var len = data.length;
 
-  // 1. Detect background brightness (sample borders + interior)
-  var lumTotal = 0, edgeLumTotal = 0, edgeCount = 0;
-  for (var y = 0; y < targetH; y += 4) {
-    for (var x = 0; x < targetW; x += 4) {
-      var i = (y * targetW + x) * 4;
-      var lum = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000;
-      lumTotal += lum;
-      if (x < 24 || x > targetW - 24 || y < 24 || y > targetH - 24) {
-        edgeLumTotal += lum;
-        edgeCount++;
-      }
-    }
-  }
-  var avgEdgeLum = edgeCount ? (edgeLumTotal / edgeCount) : 128;
-  var isDark = avgEdgeLum < 120; // dark mode or terminal
-
-  // 2. Grayscale, auto-invert dark backgrounds, contrast stretch
+  // 1. Full image luminance histogram to accurately detect background mode
+  var hist = new Uint32Array(256);
   var minLum = 255, maxLum = 0;
+  for (var i = 0; i < len; i += 4) {
+    var lum = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000 | 0;
+    hist[lum]++;
+    if (lum < minLum) minLum = lum;
+    if (lum > maxLum) maxLum = lum;
+  }
+  var bgLum = 0, maxCount = 0;
+  for (var k = 0; k < 256; k++) {
+    if (hist[k] > maxCount) { maxCount = hist[k]; bgLum = k; }
+  }
+
+  // Determine whether to invert:
+  // If mode === "invert", force invert. If mode === "normal", force normal.
+  // If mode === "auto", dark background (bgLum < 128) -> invert so text is black on white.
+  var isDark = (mode === "invert") ? true : (mode === "normal") ? false : (bgLum < 128);
+
+  // 2. Grayscale & conditional inversion
   var grays = new Uint8ClampedArray(targetW * targetH);
   var p = 0;
   for (var i = 0; i < len; i += 4) {
@@ -410,33 +440,21 @@ function preprocessCanvasForOcr(srcCanvas, binarizeMode) {
     if (isDark) { r = 255 - r; g = 255 - g; b = 255 - b; }
     var gl = (r * 299 + g * 587 + b * 114) / 1000;
     grays[p++] = gl;
-    if (gl < minLum) minLum = gl;
-    if (gl > maxLum) maxLum = gl;
   }
 
-  // 3. Contrast stretch & threshold
-  var range = Math.max(1, maxLum - minLum);
-  var threshold = minLum + range * 0.65; // adaptive cutoff favoring high-contrast text
-
-  if (binarizeMode === "hard") {
-    // Pure binary black on white (ideal for clean OCRAD glyph recognition)
-    p = 0;
-    for (var i = 0; i < len; i += 4) {
-      var val = grays[p++] > threshold ? 255 : 0;
-      data[i] = val;
-      data[i+1] = val;
-      data[i+2] = val;
-      data[i+3] = 255;
-    }
-  } else {
-    // Contrast-stretched grayscale
+  if (mode === "gray") {
+    var range = Math.max(1, maxLum - minLum);
     p = 0;
     for (var i = 0; i < len; i += 4) {
       var gNorm = Math.round(((grays[p++] - minLum) / range) * 255);
-      data[i] = gNorm;
-      data[i+1] = gNorm;
-      data[i+2] = gNorm;
-      data[i+3] = 255;
+      data[i] = gNorm; data[i+1] = gNorm; data[i+2] = gNorm; data[i+3] = 255;
+    }
+  } else {
+    var thresh = thresholdVal || 150;
+    p = 0;
+    for (var i = 0; i < len; i += 4) {
+      var val = grays[p++] > thresh ? 255 : 0;
+      data[i] = val; data[i+1] = val; data[i+2] = val; data[i+3] = 255;
     }
   }
 
@@ -444,8 +462,8 @@ function preprocessCanvasForOcr(srcCanvas, binarizeMode) {
   return cv;
 }
 
-/* ---------- pure offline image parsing engine (<1 second) ---------- */
-function parseImageOffline(im) {
+/* ---------- instant image parsing engine (<1 second) ---------- */
+function parseImageDirect(im) {
   return new Promise(function(resolve) {
     var t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
 
@@ -486,43 +504,53 @@ function parseImageOffline(im) {
 
       function runOcradPasses() {
         if (typeof window.OCRAD !== "function") {
-          resolve({ segs: [], warns: ["OCRAD engine not available"], text: "", method: "none", dur: 0 });
+          resolve({ segs: [], warns: ["OCR engine not available"], text: "", method: "none", dur: 0 });
           return;
         }
 
-        // Pass 2: High-contrast binarized canvas (optimal for OCRAD)
-        try {
-          var binCv = preprocessCanvasForOcr(srcCv, "hard");
-          var rawBin = window.OCRAD(binCv) || "";
-          if (rawBin.trim().length > 5) {
-            var cleanedBin = cleanOcrText(rawBin);
-            var resBin = window.SpicyEngine.parse(cleanedBin);
-            if (resBin[0] && resBin[0].length > 0) {
-              var dur = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
-              resolve({ segs: resBin[0], warns: resBin[1], text: cleanedBin, rawOcr: rawBin, method: "offline OCRAD (binarized)", dur: dur });
-              return;
-            }
-          }
-        } catch (err) {}
+        // Multi-pass OCR pipeline
+        var passes = [
+          { mode: "auto", thresh: 150, label: "auto (150)" },
+          { mode: "auto", thresh: 175, label: "auto (175)" },
+          { mode: "auto", thresh: 125, label: "auto (125)" },
+          { mode: "invert", thresh: 150, label: "inverted" },
+          { mode: "normal", thresh: 150, label: "normal" },
+          { mode: "gray", thresh: 0, label: "grayscale" }
+        ];
 
-        // Pass 3: Grayscale contrast-stretched canvas (fallback for complex gradients)
-        try {
-          var grayCv = preprocessCanvasForOcr(srcCv, "gray");
-          var rawGray = window.OCRAD(grayCv) || "";
-          if (rawGray.trim().length > 5) {
-            var cleanedGray = cleanOcrText(rawGray);
-            var resGray = window.SpicyEngine.parse(cleanedGray);
-            if (resGray[0] && resGray[0].length > 0) {
-              var dur = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
-              resolve({ segs: resGray[0], warns: resGray[1], text: cleanedGray, rawOcr: rawGray, method: "offline OCRAD (grayscale)", dur: dur });
-              return;
+        var bestRaw = "";
+        for (var pIdx = 0; pIdx < passes.length; pIdx++) {
+          try {
+            var cfg = passes[pIdx];
+            var procCv = preprocessCanvasForOcr(srcCv, cfg.mode, cfg.thresh);
+            var raw = window.OCRAD(procCv) || "";
+            if (raw.trim().length > bestRaw.length) bestRaw = raw;
+            if (raw.trim().length > 5) {
+              var cleaned = cleanOcrText(raw);
+              var res = window.SpicyEngine.parse(cleaned);
+              if (res[0] && res[0].length > 0) {
+                var dur = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
+                resolve({ segs: res[0], warns: res[1], text: cleaned, rawOcr: raw, method: "OCRAD (" + cfg.label + ")", dur: dur });
+                return;
+              }
             }
-          }
-        } catch (err) {}
+          } catch (passErr) {}
+        }
 
-        // Could not detect offline
+        // Final attempt on bestRaw if any
+        if (bestRaw.trim().length > 5) {
+          var cleanedFinal = cleanOcrText(bestRaw);
+          var resFinal = window.SpicyEngine.parse(cleanedFinal);
+          if (resFinal[0] && resFinal[0].length > 0) {
+            var dur = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
+            resolve({ segs: resFinal[0], warns: resFinal[1], text: cleanedFinal, rawOcr: bestRaw, method: "OCRAD (best text)", dur: dur });
+            return;
+          }
+        }
+
+        // Could not detect
         var dur = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
-        resolve({ segs: [], warns: ["Could not detect flights offline"], text: "", method: "offline OCRAD (failed)", dur: dur });
+        resolve({ segs: [], warns: ["Could not detect flights"], text: bestRaw, method: "OCRAD (failed)", dur: dur });
       }
     };
     img.onerror = function() {
@@ -532,15 +560,15 @@ function parseImageOffline(im) {
   });
 }
 
-/* ---------- offline convert (ultra fast) ---------- */
-function offlineIncomplete(warns, segs) {
+/* ---------- instant convert ---------- */
+function directIncomplete(warns, segs) {
   if (!segs.length) return "no segments read";
   for (var i = 0; i < warns.length; i++)
     if (/NOT read|missing|unknown/i.test(warns[i])) return warns[i];
   return null;
 }
 
-function renderOfflineSync(text){
+function renderDirectSync(text){
   // Apply learned rules first
   var cleaned = cleanOcrText(text);
   var res = window.SpicyEngine.parse(cleaned);
@@ -549,11 +577,11 @@ function renderOfflineSync(text){
   var outText = window.SpicyEngine.renderItinerary(segs);
   lastOut = outText;
   out.innerHTML = esc(outText);
-  var msg = "OFFLINE ENGINE — "+segs.length+" segment(s)";
+  var msg = "CONVERTED — "+segs.length+" segment(s)";
   if(warns.length) msg+="  ·  "+warns.join(" · ");
   setStatus(msg, warns.length>0);
   tCacheSet(fp(text), outText);
-  recordStat("text_offline");
+  recordStat("text_direct");
   return {segs:segs,warns:warns,out:outText};
 }
 
@@ -593,24 +621,23 @@ function convert(auto){
   // IMAGE-ONLY CONVERT
   if(hasImg && !text.trim()){
     if(lastOut && / N$/.test(lastOut)) return;
-    setStatus("OFFLINE PARSING IMAGE…");
-    parseImageOffline(images[0]).then(function(res){
+    setStatus("PARSING IMAGE…");
+    parseImageDirect(images[0]).then(function(res){
       if(res.segs && res.segs.length > 0){
         var outText = window.SpicyEngine.renderItinerary(res.segs);
         lastOut = outText;
         out.innerHTML = esc(outText);
-        setStatus("OFFLINE IMAGE PARSED — " + res.segs.length + " seg(s) (" + res.dur + "ms, 0 AI)");
+        setStatus("IMAGE PARSED — " + res.segs.length + " seg(s) (" + res.dur + "ms)");
         imgCacheSet(images[0]._hash, outText);
-        recordStat("img_offline", res.dur);
+        recordStat("img_direct", res.dur);
         return;
       }
-      // "only fall on ai incase cannot detect it"
       if(gemKey()){
         recordStat("ai_fallback");
-        convertAi(auto, "offline undetectable");
+        convertAi(auto, "image parse fallback");
       } else {
-        out.textContent = "Could not detect flights in this image offline.\n\nOnly fall on AI in case cannot detect it — attach a Gemini API key (click 'Generate Api' below) to retry with AI.";
-        setStatus("Offline parse could not detect flights — attach AI key to retry", true);
+        out.textContent = "Could not detect flights in this image.\n\nAttach a Gemini API key (click 'Generate Api' below) to convert with AI.";
+        setStatus("Could not detect flights — attach AI key to retry", true);
       }
     });
     return;
@@ -621,13 +648,13 @@ function convert(auto){
   // FAST PATH: small text sync parse immediately
   if(text.length < 3000){
     try{
-      var r = renderOfflineSync(text);
-      var lack = offlineIncomplete(r.warns, r.segs);
+      var r = renderDirectSync(text);
+      var lack = directIncomplete(r.warns, r.segs);
       if(!lack) { lastTextFp = fp(text); return; }
       if(gemKey()){ convertAi(auto, lack); return; }
       if(!r.segs.length){
-        out.textContent = "Couldn't read this paste offline.\n"+(r.warns[0]||"")+"\n\nPress AI AUTO (add a Gemini key first if asked).";
-        setStatus("OFFLINE INCOMPLETE — needs AI", true);
+        out.textContent = "Couldn't read this paste.\n"+(r.warns[0]||"")+"\n\nPress AI AUTO (add a Gemini key first if asked).";
+        setStatus("INCOMPLETE — needs AI", true);
       } else {
         setStatus(st.textContent+"  ·  partial — AI AUTO can finish", true);
       }
@@ -641,9 +668,9 @@ function convert(auto){
   setStatus("CONVERTING…");
   setTimeout(function(){
     try {
-      var r = renderOfflineSync(text);
+      var r = renderDirectSync(text);
       lastTextFp = fp(text);
-      var lack = offlineIncomplete(r.warns, r.segs);
+      var lack = directIncomplete(r.warns, r.segs);
       if(lack && gemKey()) convertAi(auto, lack);
     } catch(e) {
       setStatus("CONVERT ERROR", true);
@@ -718,7 +745,7 @@ function convertAi(fromAuto, reason){
     t=t.replace(/^```[a-z]*\s*/i,"").replace(/```\s*$/,"").trim();
     var rr; try{ rr=window.SpicyEngine.parse(t); }catch(e){ rr=null; }
     if(rr&&rr[0].length&&rr[0].length >= (t.split("\n").filter(function(l){return / N$/.test(l);}).length)){ t=window.SpicyEngine.renderItinerary(rr[0]); }
-    var previousOffline = lastOut;
+    var previousDirect = lastOut;
     lastOut=t; out.innerHTML=esc(t);
     setStatus("AI CONVERTED"+(reason?" ("+reason+")":""));
     if(images.length===1&&images[0]._hash) imgCacheSet(images[0]._hash, t);
@@ -726,17 +753,20 @@ function convertAi(fromAuto, reason){
     if(reason&&text.trim()) learnRecord(text,t,reason);
 
     // AI Mistake Detection & Self-Learning: detect mistakes and teach tool to fix it
-    detectMistakesAndLearn(text || "[screenshot]", previousOffline, t, reason);
+    detectMistakesAndLearn(text || "[screenshot]", previousDirect, t, reason);
   }).catch(function(e){
     converting=false;
-    if(fallback){ lastOut=fallback; out.innerHTML=esc(fallback); setStatus("AI failed — offline result kept", true); }
+    if(fallback){ lastOut=fallback; out.innerHTML=esc(fallback); setStatus("AI failed — previous result kept", true); }
     else{ setStatus("AI failed: "+String(e.message||e).slice(0,70), true); }
   });
 }
 
-/* ---------- ultra fast image downscale ---------- */
+/* ---------- high-speed image downscale ---------- */
 function fastDownscale(file, maxSide, quality){
-  maxSide=maxSide||1400; quality=quality||0.80;
+  maxSide=maxSide||1600;
+  var isPng = file.type === "image/png" || /\.png$/i.test(file.name || "");
+  var outMime = isPng ? "image/png" : "image/jpeg";
+  quality = quality || (isPng ? 1.0 : 0.88);
   return new Promise(function(resolve){
     if(window.createImageBitmap){
       createImageBitmap(file).then(function(bmp){
@@ -745,8 +775,8 @@ function fastDownscale(file, maxSide, quality){
         var cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
         cv.getContext("2d").drawImage(bmp,0,0,cw,ch);
         bmp.close();
-        var b64=cv.toDataURL("image/jpeg", quality).split(",")[1];
-        resolve({mime:"image/jpeg",b64:b64,w:cw,h:ch,_hash:hashStr(b64.slice(0,2000))});
+        var b64=cv.toDataURL(outMime, quality).split(",")[1];
+        resolve({mime:outMime,b64:b64,w:cw,h:ch,_hash:hashStr(b64.slice(0,2000))});
       }).catch(function(){ fallback(); });
     } else {
       fallback();
@@ -758,8 +788,8 @@ function fastDownscale(file, maxSide, quality){
           var w=img.width,h=img.height,sc=Math.min(1,maxSide/Math.max(w,h));
           var cv=document.createElement("canvas"); cv.width=Math.round(w*sc); cv.height=Math.round(h*sc);
           cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
-          var b64=cv.toDataURL("image/jpeg", quality).split(",")[1];
-          resolve({mime:"image/jpeg",b64:b64,w:cv.width,h:cv.height,_hash:hashStr(b64.slice(0,2000))});
+          var b64=cv.toDataURL(outMime, quality).split(",")[1];
+          resolve({mime:outMime,b64:b64,w:cv.width,h:cv.height,_hash:hashStr(b64.slice(0,2000))});
         };
         img.src=ev.target.result;
       };
@@ -787,7 +817,7 @@ function addThumb(im){
 function addImage(file, thenConvert){
   if(thenConvert===undefined) thenConvert=true;
   setStatus("IMAGE ATTACHING…");
-  fastDownscale(file, 1400, 0.80).then(function(im){
+  fastDownscale(file, 1600, 0.88).then(function(im){
     images.push(im);
     addThumb(im);
 
@@ -800,30 +830,28 @@ function addImage(file, thenConvert){
       return;
     }
 
-    // PURE OFFLINE IMAGE PARSING — ZERO AI, NO KEY NEEDED (<1 second)
-    setStatus("OFFLINE PARSING SCREENSHOT…");
-    parseImageOffline(im).then(function(res){
+    setStatus("PARSING SCREENSHOT…");
+    parseImageDirect(im).then(function(res){
       if(res.segs && res.segs.length > 0){
         var outText = window.SpicyEngine.renderItinerary(res.segs);
         lastOut = outText;
         out.innerHTML = esc(outText);
-        var msg = "OFFLINE IMAGE PARSED — " + res.segs.length + " seg(s) (" + res.dur + "ms, pure offline)";
+        var msg = "IMAGE PARSED — " + res.segs.length + " seg(s) (" + res.dur + "ms)";
         if (res.warns && res.warns.length) msg += "  ·  " + res.warns.join(" · ");
         setStatus(msg, res.warns && res.warns.length > 0);
         imgCacheSet(im._hash, outText);
-        recordStat("img_offline", res.dur);
+        recordStat("img_direct", res.dur);
         return;
       }
 
-      // "only fall on ai incase cannot detect it"
       if(thenConvert){
         if(gemKey()){
-          setStatus("Offline parse did not detect flights — falling back to AI…");
+          setStatus("Image parse did not detect flights — trying AI…");
           recordStat("ai_fallback");
-          convertAi(true, "offline undetectable");
+          convertAi(true, "undetected");
         } else {
-          out.textContent = "Could not detect flights in this screenshot offline.\n\nOnly fall on AI in case cannot detect it — attach a Gemini API key (click 'Generate Api' below) to retry with AI.";
-          setStatus("Offline parse could not detect flights — attach AI key to retry", true);
+          out.textContent = "Could not detect flights in this screenshot.\n\nAttach a Gemini API key (click 'Generate Api' below) to convert with AI.";
+          setStatus("Could not detect flights — attach AI key to retry", true);
         }
       }
     });
@@ -837,7 +865,7 @@ function addTextFile(file){
     if(!txt) { setStatus("EMPTY FILE", true); return; }
     var cur = inp.value;
     inp.value = cur + (cur?"\n\n":"") + txt.slice(0,20000);
-    try{ renderOfflineSync(inp.value); lastTextFp=fp(inp.value); }catch(e){ convert(true); }
+    try{ renderDirectSync(inp.value); lastTextFp=fp(inp.value); }catch(e){ convert(true); }
     setStatus("FILE "+file.name.toUpperCase()+" — "+txt.length+" chars — instant");
   }).catch(function(){ setStatus("FILE READ FAILED", true); });
 }
@@ -864,8 +892,8 @@ function generateWeeklyReportText() {
   var nowStr = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
 
   var totalConv = stats.total || 0;
-  var offConv = (stats.textOffline || 0) + (stats.imgOffline || 0);
-  var offRate = totalConv ? Math.round((offConv / totalConv) * 100) : 100;
+  var dirConv = (stats.textDirect || stats.textOffline || 0) + (stats.imgDirect || stats.imgOffline || 0);
+  var dirRate = totalConv ? Math.round((dirConv / totalConv) * 100) : 100;
 
   var avgImgSpeed = "N/A";
   if (stats.durations && stats.durations.length) {
@@ -877,24 +905,24 @@ function generateWeeklyReportText() {
   lines.push("=== SPICYTERMINAL WEEKLY PERFORMANCE & ENHANCEMENT REPORT ===");
   lines.push("To: " + AUTHOR_EMAIL);
   lines.push("Generated: " + nowStr);
-  lines.push("App Version: SpicyTerminal v4.0 (Pure Offline Image Engine + AI Mistake Learner)");
+  lines.push("App Version: SpicyTerminal v4.0 (Instant Engine + AI Mistake Learner)");
   lines.push("");
   lines.push("--- 1. PERFORMANCE & CONVERSION STATS ---");
   lines.push("• Total Conversions: " + totalConv);
-  lines.push("• Pure Offline Conversions: " + offConv + " (" + offRate + "% offline rate)");
-  lines.push("• Offline Screenshot Conversions: " + (stats.imgOffline || 0));
+  lines.push("• Instant Conversions: " + dirConv + " (" + dirRate + "% instant rate)");
+  lines.push("• Direct Screenshot Conversions: " + (stats.imgDirect || stats.imgOffline || 0));
   lines.push("• Average Screenshot Parsing Latency: " + avgImgSpeed);
   lines.push("• AI Fallback Calls (undetected only): " + (stats.aiFallback || 0));
   lines.push("");
   lines.push("--- 2. DETECTED MISTAKES & AI CORRECTIONS (" + mistakes.length + ") ---");
   if (!mistakes.length) {
-    lines.push("No mistakes detected this period — pure offline parsing running perfectly.");
+    lines.push("No mistakes detected this period — direct parsing running smoothly.");
   } else {
     mistakes.slice(0, 5).forEach(function(m, idx) {
       lines.push("#" + (idx+1) + " [" + m.when + "] " + m.reason);
       lines.push("  Summary: " + m.summary);
       lines.push("  Input:   " + m.input);
-      lines.push("  Offline: " + m.offline);
+      lines.push("  Direct:  " + (m.direct || m.offline || ""));
       lines.push("  AI Fix:  " + m.ai);
       lines.push("");
     });
@@ -909,7 +937,7 @@ function generateWeeklyReportText() {
   }
   lines.push("");
   lines.push("--- 4. RECOMMENDATIONS TO ENHANCE THE TOOL TO THE MAX ---");
-  lines.push("1. Pure Offline Image Engine is operational with zero AI dependency and under-a-second parsing.");
+  lines.push("1. Direct Image Engine is operational with zero AI dependency and under-a-second parsing.");
   lines.push("2. Maintain continuous tracking of OCR confusions in flight numbers & day shifts.");
   lines.push("3. Keep AI strictly as fallback only for illegible or handwritten images.");
   lines.push("4. Expand local airport / airline alias mappings for emerging routes.");
@@ -917,7 +945,7 @@ function generateWeeklyReportText() {
   lines.push("--- TELEMETRY ENVIRONMENT ---");
   lines.push("• UserAgent: " + (navigator.userAgent || "Unknown"));
   lines.push("• Active AI Model: " + (window._aiModel || aiModelGet() || "(none used)"));
-  lines.push("• Offline OCR Engine: OCRAD + TextDetector (bundled)");
+  lines.push("• OCR Engine: OCRAD + TextDetector (bundled)");
   lines.push("=============================================================");
 
   return lines.join("\n");
@@ -986,7 +1014,7 @@ inp.addEventListener("input", function(){
   var len = inp.value.length;
   if(len<2000){
     if(!images.length) {
-      try{ renderOfflineSync(inp.value); }catch(e){}
+      try{ renderDirectSync(inp.value); }catch(e){}
     }
   } else {
     typeTimer=setTimeout(function(){ convert(true); }, 80);

@@ -1,9 +1,6 @@
 /* ==========================================================================
-   spicy_engine.js — SpicyTerminal WEB offline engine.
-   Faithful JavaScript port of the v3.4 Python engine (parser_offline +
-   formatter + aviation_data inference). Same laws, same outputs, same
-   warning strings. Verified byte-for-byte against the Python engine on the
-   office corpus (web/test_engine.js).
+   spicy_engine.js — SpicyTerminal WEB deterministic conversion engine.
+   Deterministic engine and GDS Black Window formatter.
    Requires: spicy_data.js (SPICY_DATA).
    ========================================================================== */
 (function () {
