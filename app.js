@@ -224,6 +224,34 @@ function imgCacheSet(hash, outText){
 })();
 
 /* ---------- aviation-specific OCR text cleaner & repair ---------- */
+// These expensive regexes used to be rebuilt on every call (and every
+// keystroke / OCR pass). Build them once at startup.
+var _cleanAirlines = [];
+var _cleanAirLeadRe = null, _cleanCaseAirRe = null, _cleanAirRe = null;
+function _ensureCleanAirRegexes() {
+  if (_cleanAirLeadRe || !_cleanAirlines.length) return;
+  var alt = _cleanAirlines.map(function(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("|");
+  if (!alt) return;
+  _cleanAirLeadRe = new RegExp("\\b(" + alt + ")\\s+[_|Il]([0-9A-Za-z]{2,5})\\b", "gi");
+  _cleanCaseAirRe = new RegExp("\\b(" + alt + ")\\b", "gi");
+  _cleanAirRe = new RegExp("\\b(" + alt + ")[ \\t]+([0-9A-Za-z]{1,5})\\b", "g");
+}
+(function() {
+  try {
+    var d = window.SPICY_DATA || SPICY_DATA;
+    if (d && d.airlines) _cleanAirlines = Object.keys(d.airlines);
+  } catch (e) {}
+  _ensureCleanAirRegexes();
+})();
+var _cleanMonthRes = [];
+(function() {
+  var months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  months.forEach(function(m) {
+    _cleanMonthRes.push([new RegExp("(\\d{1,2})\\s*" + m, "gi"), "$1 " + m]);
+    _cleanMonthRes.push([new RegExp(m + "\\s*(\\d{1,2})", "gi"), m + " $1"]);
+  });
+})();
+
 function cleanOcrText(rawText) {
   if (!rawText) return "";
   var s = String(rawText);
@@ -396,22 +424,27 @@ function cleanOcrText(rawText) {
 
   // 9. Airline code + Flight number:
   // e.g. "IB 4z37", "QR los9", "BA ll4", "LH 4OO", "DL 001"
-  var dAir = (window.SPICY_DATA && window.SPICY_DATA.airlines) ? Object.keys(window.SPICY_DATA.airlines) : [];
-  if (dAir.length) {
+  if (_cleanAirlines.length) {
+    _ensureCleanAirRegexes();
     // OCR often returns a valid carrier in the wrong case (qR) and turns the
     // leading 1 of a flight number into an underscore or vertical bar
     // (qR _os9). Repair only the token immediately after a known carrier.
-    var airLeadRe = new RegExp("\\b(" + dAir.join("|") + ")\\s+[_|Il]([0-9A-Za-z]{2,5})\\b", "gi");
-    s = s.replace(airLeadRe, function(_, code, num) {
-      var repaired = num.replace(/[oO]/g, "0").replace(/[sS]/g, "5")
-        .replace(/[lIi|]/g, "1").replace(/[zZ]/g, "2").replace(/[gq]/g, "9");
-      if (!/^1/.test(repaired)) repaired = "1" + repaired;
-      return code.toUpperCase() + " " + repaired;
-    });
-    var caseAirRe = new RegExp("\\b(" + dAir.join("|") + ")\\b", "gi");
-    s = s.replace(caseAirRe, function(_, code) { return code.toUpperCase(); });
-    var airRe = new RegExp("\\b(" + dAir.join("|") + ")[ \\t]+([0-9A-Za-z]{1,5})\\b", "g");
-    s = s.replace(airRe, function(match, code, num, offset) {
+    if (_cleanAirLeadRe) {
+      _cleanAirLeadRe.lastIndex = 0;
+      s = s.replace(_cleanAirLeadRe, function(_, code, num) {
+        var repaired = num.replace(/[oO]/g, "0").replace(/[sS]/g, "5")
+          .replace(/[lIi|]/g, "1").replace(/[zZ]/g, "2").replace(/[gq]/g, "9");
+        if (!/^1/.test(repaired)) repaired = "1" + repaired;
+        return code.toUpperCase() + " " + repaired;
+      });
+    }
+    if (_cleanCaseAirRe) {
+      _cleanCaseAirRe.lastIndex = 0;
+      s = s.replace(_cleanCaseAirRe, function(_, code) { return code.toUpperCase(); });
+    }
+    if (_cleanAirRe) {
+      _cleanAirRe.lastIndex = 0;
+      s = s.replace(_cleanAirRe, function(match, code, num, offset) {
       if (/^(AM|PM)$/i.test(code)) {
         var before = s.slice(Math.max(0, offset - 8), offset);
         if (/\d\s*$/i.test(before)) return match;
@@ -426,17 +459,16 @@ function cleanOcrText(rawText) {
                     .replace(/[gq]/g, "9")
                     .replace(/[tT]/g, "7");
       return code + " " + cnum;
-    });
+      });
+    }
   }
 
   // 9. Dates: "16 sep", "18nov", etc.
-  var months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-  months.forEach(function(m) {
-    var re1 = new RegExp("(\\d{1,2})\\s*" + m, "gi");
-    s = s.replace(re1, "$1 " + m);
-    var re2 = new RegExp(m + "\\s*(\\d{1,2})", "gi");
-    s = s.replace(re2, m + " $1");
-  });
+  for (var mi = 0; mi < _cleanMonthRes.length; mi++) {
+    var _mr = _cleanMonthRes[mi];
+    _mr[0].lastIndex = 0;
+    s = s.replace(_mr[0], _mr[1]);
+  }
 
   return s;
 }
@@ -445,12 +477,15 @@ function cleanOcrText(rawText) {
 // OCRAD is reliable but can become very expensive on a full-resolution phone
 // screenshot. Keep every pass inside a predictable pixel/time budget and run
 // the heavy recognizer off the UI thread whenever the browser supports it.
-var OCR_MAX_PIXELS = 1050000;
-var OCR_MAX_SIDE = 1920;
-var OCR_MAX_TOTAL_MS = 6500;
-var OCR_NATIVE_TIMEOUT_MS = 900;
-var OCR_WORKER_BOOT_MS = 2500;
-var OCR_WORKER_PASS_MS = 6000;
+// Screenshot handling is tuned for speed first: reduce the amount of pixels
+// OCRAD has to chew on, keep the native/text-detector pause tiny, and prewarm
+// the worker on page idle so a real drop does not start with a 2-second boot.
+var OCR_MAX_PIXELS = 850000;
+var OCR_MAX_SIDE = 1680;
+var OCR_MAX_TOTAL_MS = 2200;
+var OCR_NATIVE_TIMEOUT_MS = 250;
+var OCR_WORKER_BOOT_MS = 1200;
+var OCR_WORKER_PASS_MS = 2200;
 var ocrWorkerState = null;
 var ocrWorkerDisabled = false;
 
@@ -602,9 +637,13 @@ function stopOcrWorker(code, message, disable) {
   rejectOcrWorkerJobs(state, err);
 }
 function cancelOcrWork() {
-  // A new attachment set or a removed screenshot makes queued OCR obsolete.
-  // Terminating the worker gives the remove/clear button an immediate effect.
-  if (ocrWorkerState) stopOcrWorker("cancelled", "OCR cancelled because attachments changed", false);
+  // A new attachment set or a removed screenshot makes *active/queued* OCR
+  // obsolete, so terminate only then. Keep a prewarmed idle worker alive
+  // between attachments; destroying it on a new drop re-introduced the 1-2s
+  // worker boot delay that prewarming was meant to eliminate.
+  var state = ocrWorkerState;
+  if (!state || (!state.active && !state.queue.length)) return;
+  stopOcrWorker("cancelled", "OCR cancelled because attachments changed", false);
 }
 function pumpOcrWorker() {
   var state = ocrWorkerState;
@@ -707,6 +746,15 @@ function recognizeOcrCanvas(canvas) {
     if (err && err.code === "unavailable") return runOcradOnMain(canvas);
     throw err;
   });
+}
+function prewarmOcrWorker(ms) {
+  // Spawn the OCR worker during page idle instead of waiting until the first
+  // screenshot. The worker compiles the bundled OCRAD engine off-thread, so
+  // assembling it now removes the biggest single delay from a real drop.
+  if (ocrWorkerState || ocrWorkerDisabled) return;
+  setTimeout(function() {
+    try { makeOcrWorker(); } catch (e) {}
+  }, ms || 400);
 }
 
 /* ---------- instant image parsing engine ---------- */
@@ -880,8 +928,41 @@ function imageById(id) {
   }
   return null;
 }
+function hashCanvasSample(cv) {
+  if (!cv || !cv.width || !cv.height) return "";
+  try {
+    // A cheap, content-derived fingerprint for the image cache. Reading a few
+    // sampled pixels is far faster than base64-encoding the entire downscaled
+    // photo, which is what made attachment drops feel slow on mobile.
+    var ctx = cv.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return "";
+    var data = ctx.getImageData(0, 0, cv.width, cv.height).data;
+    var step = Math.max(16, (data.length / 20000) | 0);
+    if (step % 4) step = (step + 3) & ~3;
+    var h = 5381;
+    for (var i = 0; i < data.length; i += step) {
+      h = ((h << 5) + h + data[i] + data[i + 1] * 3 + data[i + 2] * 7 + data[i + 3] * 11) >>> 0;
+    }
+    return h.toString(36) + "-" + cv.width + "x" + cv.height;
+  } catch (e) { return ""; }
+}
+function ensureImageDataUrl(im) {
+  if (!im) return "";
+  if (typeof im.b64 === "string" && im.b64) return im.b64;
+  if (im.canvas && im.canvas.getContext && im.canvas.toDataURL) {
+    try {
+      var mime = (im.mime === "image/png") ? "image/png" : "image/jpeg";
+      var url = im.canvas.toDataURL(mime, mime === "image/png" ? 1 : 0.88);
+      var comma = url.indexOf(",");
+      im.b64 = comma >= 0 ? url.slice(comma + 1) : url;
+    } catch (e) { im.b64 = ""; }
+  }
+  return im.b64 || "";
+}
 function imageDataUrl(im) {
-  return im ? "data:" + im.mime + ";base64," + im.b64 : "";
+  if (im && typeof im.b64 === "string" && im.b64) return "data:" + im.mime + ";base64," + im.b64;
+  var b64 = ensureImageDataUrl(im);
+  return b64 ? "data:" + im.mime + ";base64," + b64 : "";
 }
 function revokeImagePreview(im) {
   if (!im || !im._reviewUrl || !im._reviewUrlIsObjectUrl) return;
@@ -992,9 +1073,11 @@ function fastDownscale(file, maxSide, quality) {
     function canvasResult(cv) {
       if (!cv || !cv.width || !cv.height) { fail("image has no pixels"); return; }
       try {
-        var b64 = cv.toDataURL(outMime, outMime === "image/png" ? 1 : quality).split(",")[1];
-        ok({ mime: outMime, b64: b64, w: cv.width, h: cv.height, canvas: cv,
-          _hash: hashStr(outMime + "|" + cv.width + "x" + cv.height + "|" + b64.slice(0, 2000)) });
+        // Keep base64 lazily generated. Offline OCR only needs the canvas (and
+        // a cheap pixel hash); doing a full synchronised toDataURL on every
+        // attachment was the largest single stall in the drop/paste path.
+        ok({ mime: outMime, b64: "", w: cv.width, h: cv.height, canvas: cv,
+          _hash: hashStr(outMime + "|" + cv.width + "x" + cv.height + "|" + hashCanvasSample(cv)) });
       } catch (e) { fail(e); }
     }
     function drawBitmap(bmp) {
@@ -1200,7 +1283,7 @@ function removeImage(id) {
   imageParsePromise = null;
   cancelOcrWork();
   invalidateAiForAttachmentChange();
-  out.innerHTML = "";
+  out.textContent = "";
   lastOut = "";
   var remaining = readyImages();
   var label = fileName(removed);
@@ -1350,7 +1433,7 @@ function renderAttachmentResults(results, token, batch, started) {
   if (allSegs.length) {
     var outText = window.SpicyEngine.renderItinerary(allSegs);
     lastOut = outText;
-    out.innerHTML = esc(outText);
+    out.textContent = outText;
     var ms = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - started);
     // An attached PDF cannot be read offline; say so instead of letting the
     // user assume it was part of this result.
@@ -1388,7 +1471,7 @@ function convertImageAttachments(batch) {
     var cached = imgCacheGet(list[0]._hash);
     if (cached && cached.out) {
       lastOut = cached.out;
-      out.innerHTML = esc(cached.out);
+      out.textContent = cached.out;
       setStatus("CACHED IMAGE — instant");
       imageParsePromise = null;
       return;
@@ -1484,7 +1567,7 @@ function handleFiles(fileList) {
   invalidateAiForAttachmentChange();
   // A new attachment is a new conversion request; never leave the previous
   // itinerary copyable while the replacement is being decoded.
-  out.innerHTML = "";
+  out.textContent = "";
   lastOut = "";
   setStatus("CHECKING ATTACHMENTS…");
   Promise.all(arr.map(classifyFile)).then(function(kinds) {
@@ -1505,10 +1588,10 @@ function renderDirectSync(text){
   var cleaned = cleanOcrText(text);
   var res = window.SpicyEngine.parse(cleaned);
   var segs = res[0], warns = res[1];
-  if(!segs.length) { lastOut=""; out.innerHTML=""; return {segs:segs,warns:warns,out:""}; }
+  if(!segs.length) { lastOut=""; out.textContent=""; return {segs:segs,warns:warns,out:""}; }
   var outText = window.SpicyEngine.renderItinerary(segs);
   lastOut = outText;
-  out.innerHTML = esc(outText);
+  out.textContent = outText;
   var msg = "CONVERTED — "+segs.length+" segment(s)";
   if(warns.length) msg+="  ·  "+warns.join(" · ");
   setStatus(msg, warns.length>0);
@@ -1526,7 +1609,7 @@ function convert(auto) {
   var hasImg = imgs.length > 0;
   var hasAnyAttachment = hasAttachments();
   if (!text.trim() && !hasAnyAttachment) {
-    out.innerHTML = "";
+    out.textContent = "";
     lastOut = "";
     setStatus("READY");
     return;
@@ -1547,7 +1630,7 @@ function convert(auto) {
     var tc = tCacheGet(h);
     if (tc && tc.out) {
       lastOut = tc.out;
-      out.innerHTML = esc(tc.out);
+      out.textContent = tc.out;
       lastTextFp = h;
       setStatus("CACHED TEXT — instant — " + (tc.out.split("\n").filter(function(l) { return / N$/.test(l); }).length) + " segs");
       return;
@@ -1703,7 +1786,7 @@ function convertAi(fromAuto, reason){
   var task=text.trim() ? "Convert the following flight data into GDS Black Window format. If anything is missing or ambiguous, fill it from aviation knowledge — never leave fields blank or ???."+AI_SEGMENT_RULES+"\n\n"+text
     : "Convert the attached image(s) and document(s) into GDS Black Window format. Convert ALL options shown. Fill any missing field from aviation knowledge — never blank, never ???."+AI_SEGMENT_RULES;
   var parts=[{text: task}];
-  aiImages.forEach(function(im){ parts.push({inline_data:{mime_type:im.mime,data:im.b64}}); });
+  aiImages.forEach(function(im){ parts.push({inline_data:{mime_type:im.mime,data:ensureImageDataUrl(im)}}); });
   aiDocuments.forEach(function(doc){ parts.push({inline_data:{mime_type:doc.mime,data:doc.b64}}); });
   var body={ system_instruction:{parts:[{text: window.SpicyEngine.MASTER_PROMPT}]}, contents:[{role:"user",parts:parts}], generationConfig:{temperature:0.0,maxOutputTokens:4096} };
   geminiGenerate(key, body).then(function(j){
@@ -1722,7 +1805,7 @@ function convertAi(fromAuto, reason){
     var rr; try{ rr=window.SpicyEngine.parse(t); }catch(e){ rr=null; }
     if(rr&&rr[0].length&&rr[0].length >= (t.split("\n").filter(function(l){return / N$/.test(l);}).length)){ t=window.SpicyEngine.renderItinerary(rr[0]); }
     var previousDirect = lastOut;
-    lastOut=t; out.innerHTML=esc(t);
+    lastOut=t; out.textContent=t;
     setStatus("AI CONVERTED"+(reason?" ("+reason+")":""));
     if(aiImages.length===1&&aiDocuments.length===0&&aiImages[0]._hash) imgCacheSet(aiImages[0]._hash, t);
     if(text.trim()){ tCacheSet(fp(text), t); lastTextFp=fp(text); }
@@ -1733,7 +1816,7 @@ function convertAi(fromAuto, reason){
   }).catch(function(e){
     if(requestId!==aiRequestId || requestAttachmentVersion!==attachmentVersion || requestAttachmentBatch!==latestAttachmentBatch) return;
     converting=false; window._aiStartedAt=0;
-    if(fallback){ lastOut=fallback; out.innerHTML=esc(fallback); setStatus("AI failed — previous result kept", true); }
+    if(fallback){ lastOut=fallback; out.textContent=fallback; setStatus("AI failed — previous result kept", true); }
     else{ setStatus("AI failed: "+String(e.message||e).slice(0,70), true); }
   });
 }
@@ -1894,16 +1977,18 @@ inp.addEventListener("paste", function(e) {
 
 // Typing: direct text stays instant. An attachment is parsed by its own
 // pipeline, so it must not be overwritten by an input event.
+// Rendering is debounced instead of re-parsing/re-rendering on every keystroke;
+// that cost (engine parse + DOM write + localStorage cache writes) was what
+// made typing feel slow, not the converter itself.
 var typeTimer = null;
 inp.addEventListener("input", function() {
   if (typeTimer) clearTimeout(typeTimer);
   var len = inp.value.length;
-  if (len < 2000) {
-    if (!hasAttachments()) {
+  if (!hasAttachments()) {
+    typeTimer = setTimeout(function() {
+      typeTimer = null;
       try { renderDirectSync(inp.value); } catch (e) {}
-    }
-  } else {
-    typeTimer = setTimeout(function() { convert(true); }, 80);
+    }, len < 2000 ? 55 : 80);
   }
 });
 
@@ -1923,7 +2008,7 @@ $("btnClear").addEventListener("click", function() {
   imageParseVersion = -1;
   imageParsePromise = null;
   inp.value = "";
-  out.innerHTML = "";
+  out.textContent = "";
   lastOut = "";
   images = [];
   documents = [];
@@ -1998,5 +2083,23 @@ $("report").addEventListener("click", function(){
   var body="=== SPICY TERMINAL BUG REPORT ===\nTO: "+AUTHOR_EMAIL+"\nWHEN: "+new Date().toISOString().replace("T"," ").slice(0,19)+" UTC\nAI MODEL: "+(window._aiModel||aiModelGet()||"(none used)")+"\n\n=== WHAT I PASTED ===\n"+(cap(input,1300)||"(empty)")+"\n\n=== WHAT THE APP PRODUCED ===\n"+(cap(output,1300)||"(empty)")+"\n\n=== WHAT I EXPECTED INSTEAD ===\n\n\n=== ANY OTHER DETAILS ===\n"+learnTxt+mistakeTxt;
   window.open("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(AUTHOR_EMAIL)+"&su="+encodeURIComponent("SpicyTerminal bug report")+"&body="+encodeURIComponent(body), "_blank");
 });
+
+// Boot the OCR worker during page idle (not on the first screenshot) so the
+// first drop/paste converts much faster.
+try {
+  if (window.addEventListener) {
+    window.addEventListener("load", function() { prewarmOcrWorker(250); }, { once: true });
+  }
+  // Safety net in case the script is injected after `load` already fired.
+  setTimeout(function() { prewarmOcrWorker(0); }, 900);
+} catch (e) {}
+// Share the single inlined wordmark with the welcome card instead of embedding
+// the same ~300KB base64 twice in the static page.
+try {
+  var _wmH = $("wordmarkHeader"), _wmW = $("wordmarkWelcome");
+  if (_wmH && _wmW && !_wmW.getAttribute("src")) {
+    _wmW.setAttribute("src", _wmH.getAttribute("src") || _wmH.src);
+  }
+} catch (e) {}
 
 })();

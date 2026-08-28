@@ -368,7 +368,7 @@ const pasteImage = file => el("inp").fire("paste", {
 });
 const clearAll = () => el("btnClear").fire("click");
 const status = () => el("st")._text;
-const outText = () => el("out")._html;
+const outText = () => el("out").innerHTML;
 const thumbs = () => el("thumbs")._kids.length;
 const settled = () => !/ATTACHING|CHECKING|PARSING|LOADING/.test(status());
 
@@ -436,7 +436,7 @@ async function settle(label) {
   await waitUntil(() => /IMAGE PARSED|FAILED|ATTACHMENT NOT READ/.test(status()), 5000);
   const nativeElapsed = Date.now() - timeoutStarted;
   assert(/IMAGE PARSED/.test(status()) && /1059/.test(outText()), `hung TextDetector falls back to OCRAD (status: "${status()}")`);
-  assert(nativeElapsed >= 750 && nativeElapsed < 5000, `native OCR deadline bounds the wait (${nativeElapsed}ms)`);
+  assert(nativeElapsed >= 150 && nativeElapsed < 3000, `native OCR deadline bounds the wait (${nativeElapsed}ms)`);
   sandbox.TextDetector = undefined;
 
   console.log("\n=== Attachment pipeline: two images in one drop keep order ===");
