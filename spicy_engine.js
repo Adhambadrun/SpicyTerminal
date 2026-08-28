@@ -20,6 +20,34 @@ var MONTH_MAP = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NO
   JANUARY:1,FEBRUARY:2,MARCH:3,APRIL:4,JUNE:6,JULY:7,AUGUST:8,SEPTEMBER:9,
   OCTOBER:10,NOVEMBER:11,DECEMBER:12,MAY_:0};
 delete MONTH_MAP.MAY_;
+// Months as OCR mangles them in terminal screenshots (GDS "31AUG" rows are
+// among the most common failure inputs: AUG->AUC, OCT->0C7, NOV->N0V, ...).
+var MONTH_OCR = {AUC:"AUG",AUQ:"AUG",AU6:"AUG","4UG":"AUG","4UC":"AUG",
+  J4N:"JAN",J0N:"JAN",J1N:"JAN",
+  F0B:"FEB",F3B:"FEB",F08:"FEB",F38:"FEB",
+  M4R:"MAR",M48:"MAR",
+  "4PR":"APR","4P8":"APR",
+  M4Y:"MAY",
+  J6N:"JUN",
+  J0L:"JUL",J4L:"JUL",J01:"JUL",
+  SE0:"SEP",SE6:"SEP",S3P:"SEP",SEB:"SEP",
+  "0C7":"OCT","0CT":"OCT",
+  N0V:"NOV",N08:"NOV",NQV:"NOV",
+  D0C:"DEC",D06:"DEC",D3C:"DEC",D00:"DEC"};
+function repairMonth(t){
+  var u=String(t||"").toUpperCase();
+  if(MONTH_MAP[u]) return u;
+  if(MONTH_OCR[u] && MONTH_MAP[MONTH_OCR[u]]) return MONTH_OCR[u];
+  return u;
+}
+// Decode OCR-glyph digits: "OI"->"01", "S5"->"55", "3Z"->"32". Null when the
+// token has no plausible digit reading (it was a real word, not a number).
+function ocrDigits(t){
+  var s=String(t||"").toUpperCase()
+    .replace(/[OQ]/g,"0").replace(/[IL]/g,"1").replace(/S/g,"5")
+    .replace(/Z/g,"2").replace(/B/g,"8").replace(/G/g,"9").replace(/T/g,"7");
+  return /^\d{1,2}$/.test(s)?s:null;
+}
 var MONTH_RE = Object.keys(MONTH_MAP).sort(function(a,b){return b.length-a.length;}).join("|");
 
 var CABIN_DEFAULT_CLASS = {FIRST:"F", BUSINESS:"C", "PREMIUM ECONOMY":"W", ECONOMY:"Y"};
@@ -99,6 +127,11 @@ function scanAircraft(regionUpper){
   var sq=squashAircraft(regionUpper);
   var hit=_scanAllAircraft(sq);
   if(hit) return hit;
+  // OCR often reads IATA digits as glyphs (E75->E7S, 32N->3ZN): retry the
+  // scan on a digit-repaired copy before falling through to inference.
+  var sq2=sq.replace(/[OQ]/g,"0").replace(/[IL]/g,"1").replace(/S/g,"5")
+    .replace(/Z/g,"2").replace(/B/g,"8").replace(/G/g,"9").replace(/T/g,"7");
+  if(sq2!==sq){ hit=_scanAllAircraft(sq2); if(hit) return hit; }
   var m=/EMBRAER\s+E?(\d{3})\s*-?\s*(E2)?/.exec(regionUpper);
   if(m){var fam="E"+m[1]+(m[2]?"-E2":""); if(AIRCRAFT[fam]) return AIRCRAFT[fam];}
   return null;
@@ -498,7 +531,8 @@ function _gdsClock(tok){
     var marker="", body=t;
     if(/[APNM]$/.test(t)){ marker=t.charAt(t.length-1); body=t.slice(0,-1); }
     if(body.length>=3 && body.length<=4){
-      var hhS=body.slice(0,body.length-2).replace(/[OQ]/g,"0").replace(/[IL]/g,"1");
+      var hhS=body.slice(0,body.length-2).replace(/[OQ]/g,"0").replace(/[IL]/g,"1")
+        .replace(/S/g,"5").replace(/Z/g,"2").replace(/B/g,"8").replace(/G/g,"9").replace(/T/g,"7");
       var mmS=body.slice(body.length-2)
         .replace(/[OQ]/g,"0").replace(/[S]/g,"5").replace(/[IZL]/g,"1")
         .replace(/[B]/g,"8").replace(/[G]/g,"9").replace(/[T]/g,"7");
@@ -538,7 +572,10 @@ function tryGdsLines(text, used){
     var toks=lines[li].split(/\s+/).filter(function(t){return t.length;});
     if(toks.length<7) continue;
     var i=0;
-    if(i+1<toks.length && /^\d{1,3}$/.test(toks[i]) &&
+    // Leading segment number: a clean digit, or a single glyph OCR turned
+    // into a letter ("1 UA" read as "l UA"). Only skip it when the next
+    // token is really a carrier (or a glued carrier+flight).
+    if(i+1<toks.length && (/^\d{1,3}$/.test(toks[i]) || /^[A-Za-z_|]$/.test(toks[i])) &&
        fullRe(AIRLINE_TOK+"\\d{0,4}[A-Z]?", (toks[i+1]||"").toUpperCase().replace(/\*/g,""))) i++;
     var al=null,flt=null,flt_cls=null,g;
     g=new RegExp("^("+AIRLINE_TOK+")(\\d{1,4})([A-Z])?$").exec((toks[i]||"").toUpperCase().replace(/\*/g,""));
@@ -549,17 +586,21 @@ function tryGdsLines(text, used){
       if(!m2) continue;
       al=toks[i].toUpperCase(); flt=_stripFltZeros(m2[1]); flt_cls=m2[2]||""; i+=2;
     } else continue;
-    if(i<toks.length && /^[A-Z]$/.test(toks[i])){ flt_cls=toks[i].toUpperCase(); i++; }
-    var day=null,mon=null,dm;
+    if(i<toks.length && /^[A-Za-z]$/.test(toks[i])){ flt_cls=toks[i].toUpperCase(); i++; }
+    var day=null,mon=null,dm,tm,mr,df,mrf;
     dm=(i<toks.length)?/^(\d{1,2})([A-Z]{3})$/.exec(toks[i].toUpperCase()):null;
-    if(dm && MONTH_MAP[dm[2]] && dm[2].length===3){
-      day=parseInt(dm[1],10); mon=MONTH_MAP[dm[2]]; i++;
-    } else if(i+1<toks.length && /^\d{1,2}$/.test(toks[i])
-              && MONTH_MAP[toks[i+1].toUpperCase()]){
-      day=parseInt(toks[i],10); mon=MONTH_MAP[toks[i+1].toUpperCase()]; i+=2;
-    } else continue;
+    if(dm){ mr=repairMonth(dm[2]);
+      if(MONTH_MAP[mr] && dm[2].length===3){ day=parseInt(dm[1],10); mon=MONTH_MAP[mr]; i++; } }
+    if(!day){   // glued date whose day digits OCR mangled: "OISEP" = 01 SEP
+      tm=(i<toks.length)?/^([A-Z0-9]{1,2})([A-Z]{3})$/.exec(toks[i].toUpperCase()):null;
+      if(tm){ df=ocrDigits(tm[1]); mrf=repairMonth(tm[2]);
+        if(df && MONTH_MAP[mrf]){ day=parseInt(df,10); mon=MONTH_MAP[mrf]; i++; } } }
+    if(!day && i+1<toks.length && /^\d{1,2}$/.test(toks[i])){
+      mr=repairMonth(toks[i+1]);
+      if(MONTH_MAP[mr]){ day=parseInt(toks[i],10); mon=MONTH_MAP[mr]; i+=2; } }
+    if(!day) continue;
     if(!(day>=1&&day<=31)) continue;
-    if(i<toks.length && /^[A-Z]$/.test(toks[i].toUpperCase())){   // stray cabin letter between date and airports ("06FEB J JFKLHR")
+    if(i<toks.length && /^[A-Za-z]$/.test(toks[i])){   // stray cabin letter between date and airports ("06FEB J JFKLHR")
       if(!flt_cls) flt_cls=toks[i].toUpperCase(); i++;
     }
     if(i+1>=toks.length) continue;
@@ -578,11 +619,17 @@ function tryGdsLines(text, used){
     var dct=(i<toks.length)?toks[i]:"";                       // raw dep clock token (noon "N" marker)
     var dc=dct?_gdsClock(dct):null;
     if(!dc) continue; i++;
-    var am=(i<toks.length)?/^(\d{3,4}[APNM])[\¥+‡]?(-?\d)?$/.exec(toks[i].toUpperCase()):null;
+    var am=(i<toks.length)?/^(\d{3,4}[APNM])(?:[\¥+‡](-?\d|[-\d_ |lIi1tTzZ2sS5])?|(-?\d)?)?$/.exec(toks[i].toUpperCase()):null;
     if(!am) continue;
     var ac=_gdsClock(am[1]);
     if(!ac) continue;
-    var shift=am[2]?parseInt(am[2],10):0;
+    var shift=0;
+    if(am[2]!==undefined && am[2]!==""){
+      var _sh=am[2].replace(/[OQ]/g,"0").replace(/[IL_ |]/g,"1").replace(/Z/g,"2").replace(/S/g,"5").replace(/T/g,"7");
+      shift=(/^-/.test(_sh))?-1:(parseInt(_sh,10)||0);
+    } else if(am[3]!==undefined && am[3]!==""){
+      shift=parseInt(am[3],10);   // plain "-1" / "1".."3" glued to the clock
+    }
     // OCR sometimes drops the departure meridian (e.g. "135A" -> "135").  Inherit
     // it from the arrival clock of the same row; if both are markerless and the
     // flight clearly crosses midnight, treat an early departure as PM.
@@ -598,8 +645,10 @@ function tryGdsLines(text, used){
     }
     // "-1" = lands the previous day (eastbound across the date line)
     i++;
-    if(i<toks.length && /^[\¥+‡]?(-1|[0-3])$/.test(toks[i])){
-      shift=parseInt(toks[i].replace(/[\¥+‡]/g,""),10); i++; }
+    if(i<toks.length && (/^[\¥+‡]([-]?[0-3_ |lIi1tTzZ2sS5])$/.test(toks[i]) || /^-?[0-3]$/.test(toks[i]))){
+      var _st=toks[i].replace(/[\¥+‡]/g,"");
+      var _stf=_st.replace(/[OQ]/g,"0").replace(/[IL_ |]/g,"1").replace(/Z/g,"2").replace(/S/g,"5").replace(/T/g,"7");
+      shift=(/^-/.test(_stf))?-1:(parseInt(_stf,10)||0); i++; }
     if(i<toks.length){                                        // arrival date -> overnight shift ("945A  07FEB")
       var ad=/^(\d{1,2})([A-Z]{3})(?:\d{2,4})?$/.exec(toks[i].toUpperCase());
       if(ad && MONTH_MAP[ad[2]]){
@@ -609,12 +658,23 @@ function tryGdsLines(text, used){
       }
     }
     var cls=flt_cls||"";                                      // glued / before-date class wins
-    if(!cls && i<toks.length && /^[A-Z]$/.test(toks[i])){ cls=toks[i].toUpperCase(); i++; }
+    if(!cls && i<toks.length && /^[A-Za-z]$/.test(toks[i])){ cls=toks[i].toUpperCase(); i++; }
     var acft="",dur="",dist="";
     while(i<toks.length){
       var t=toks[i], up=t.toUpperCase();
       if(!acft && IATA_ACFT_CODES[up] && /\d/.test(up)) acft=up;
+      else if(!acft && up.length>=3 && up.length<=4){
+        // OCR glyph repair for IATA aircraft codes (E7S->E75, 3ZN->32N)
+        var up2=up.replace(/[OQ]/g,"0").replace(/[IL]/g,"1").replace(/S/g,"5")
+          .replace(/Z/g,"2").replace(/B/g,"8").replace(/G/g,"9").replace(/T/g,"7");
+        if(up2!==up && IATA_ACFT_CODES[up2] && /\d/.test(up2)) acft=up2;
+      }
       else if(!dur && /^\d{1,2}\.\d{2}$/.test(t)) dur=t;
+      else if(!dur && /^[0-9zZ][.][0-9oOsS]{1,2}$/.test(t)){
+        var _dt=up.replace(/Z/g,"2").replace(/O/g,"0").replace(/S/g,"5");
+        if(_dt.length<4) _dt=_dt+"0";    // "z.o" = 2.00
+        dur=_dt;
+      }
       else if(!dist && /^\d{3,5}$/.test(t)) dist=t;
       i++;
     }
