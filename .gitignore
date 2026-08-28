@@ -1,5 +1,7 @@
 # workspace safety archive — never upload this to GitHub
 _BACKUP_DO_NOT_UPLOAD.tar.gz
+*.zip
+*.tar.gz
 
 # dependencies
 node_modules/
@@ -7,10 +9,42 @@ node_modules/
 # OS junk
 .DS_Store
 Thumbs.db
+.sudo_as_admin_successful
+.wget-hsts
+CACHEDIR.TAG
+*.cache-*
+*.desktop
+*.menu
+*.directory
 
 # python cache
 __pycache__/
 *.pyc
 
+# fonts and icons that are not needed for build
+*.otf
+*.ttf
+
 # deploy output (root index.html stays committed for tests & offline use)
 public/
+
+# generated logs and test artifacts
+failures_10k.log
+/tmp/
+
+# documentation screenshots and extra images (only logo.png and wordmark_alpha.png are needed for build)
+ALL_STEPS.png
+CleanShot*.png
+step*.png
+image.png
+logo_wordmark_new_original.png
+778E_*.png
+7F51_*.png
+85E3_*.png
+9747_*.png
+B8B0_*.png
+D783_*.png
+
+# helper scripts not needed in production
+_make_pics.py
+READ_ME_FIRST.txt

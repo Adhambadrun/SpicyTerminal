@@ -1,7 +1,0 @@
-[Desktop Entry]
-Name=Inno Setup Example Scripts
-Exec=env WINEPREFIX="/opt/gds-wine/prefix" wine-stable C:\\\\ProgramData\\\\Microsoft\\\\Windows\\\\Start\\ Menu\\\\Programs\\\\Inno\\ Setup\\ 6\\\\Inno\\ Setup\\ Example\\ Scripts.lnk
-Type=Application
-StartupNotify=true
-Path=/opt/gds-wine/prefix/dosdevices/c:/Program Files (x86)/Inno Setup 6/Examples
-StartupWMClass=examples\

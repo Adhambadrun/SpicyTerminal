@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=Python 3.12 Module Docs (64-bit)
-Exec=env WINEPREFIX="/opt/gds-wine/prefix" wine-stable C:\\\\users\\\\user\\\\AppData\\\\Roaming\\\\Microsoft\\\\Windows\\\\Start\\ Menu\\\\Programs\\\\Python\\ 3.12\\\\Python\\ 3.12\\ Module\\ Docs\\ \\(64-bit\\).lnk
-Type=Application
-StartupNotify=true
-Comment=Start the Python 3.12 documentation server.
-Path=/opt/gds-wine/prefix/dosdevices/c:/users/user/AppData/Local/Programs/Python/Python312/
-Icon=B8B0_idle.0
-StartupWMClass=python.exe

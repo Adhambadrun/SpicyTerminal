@@ -1,7 +1,0 @@
-# HSTS 1.0 Known Hosts database for GNU Wget.
-# Edit at your own risk.
-# <hostname>	<port>	<incl. subdomains>	<created>	<max-age>
-www.nuget.org	0	1	1785890664	31536000
-www.python.org	0	1	1787435602	63072000
-github.com	0	1	1787435743	31536000
-globalcdn.nuget.org	0	1	1785890665	31536000

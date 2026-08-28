@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=SpicyTerminal
-Exec=env WINEPREFIX="/opt/gds-wine/prefix" wine-stable C:\\\\users\\\\user\\\\AppData\\\\Roaming\\\\Microsoft\\\\Windows\\\\Start\\ Menu\\\\Programs\\\\SpicyTerminal.lnk
-Type=Application
-StartupNotify=true
-Path=/opt/gds-wine/prefix/dosdevices/c:/users/user/AppData/Local/SpicyTerminal
-Icon=7F51_SpicyTerminal_Portable.0
-StartupWMClass=spicyterminal_portable.exe

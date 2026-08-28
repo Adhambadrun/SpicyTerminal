@@ -236,13 +236,16 @@ function cleanOcrText(rawText) {
   s = s.replace(/\b([A-Za-z]{3})\s*to\s*([A-Za-z]{3})\b/gi, "$1 to $2");
   s = s.replace(/\b([A-Za-z]{3})to([A-Za-z]{3})\b/gi, "$1 to $2");
 
-  // Underscore and glyph airport repairs
+  // Underscore and glyph airport repairs – expanded from weekly report failure (ET ORD-ADD-CAI)
   s = s.replace(/_F[KC]\b/g, "JFK");
   s = s.replace(/\b[lI1]FK\b/g, "JFK");
   s = s.replace(/\bCAl\b/g, "CAI");
+  s = s.replace(/\bCA1\b/g, "CAI");
   s = s.replace(/\bLNR\b/g, "LHR");
   s = s.replace(/\bIHR\b/g, "LHR");
   s = s.replace(/\b0RD\b/g, "ORD");
+  s = s.replace(/\bA0D\b/g, "ADD");
+  s = s.replace(/\bAD0\b/g, "ADD");
   s = s.replace(/\bSlN\b/g, "SIN");
   s = s.replace(/\blST\b/g, "IST");
   s = s.replace(/\bLAx\b/g, "LAX");
@@ -286,6 +289,19 @@ function cleanOcrText(rawText) {
   Object.keys(monthMap).forEach(function(m) {
     s = s.replace(new RegExp("\\b" + m + "\\b", "gi"), monthMap[m]);
   });
+
+  // Day number OCR repairs before/after month (e.g. l Sep -> 1 Sep, ls Sep -> 15 Sep, lo -> 10)
+  // ET image test showed OCRAD reading 1 as l, 15 as ls, 10 as lo, 31 as 3l etc
+  s = s.replace(/\b[lI]\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "1 $1");
+  s = s.replace(/\b[lI]s\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "15 $1");
+  s = s.replace(/\b[lI][oO]\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "10 $1");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+[lI]\b/gi, "$1 1");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+[lI]s\b/gi, "$1 15");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+[lI][oO]\b/gi, "$1 10");
+  // 31 often read as 3l
+  s = s.replace(/\b3[lI]\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "31 $1");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+3[lI]\b/gi, "$1 31");
+
 
   // 4. Durations: e.g. 10 hr4O min, 2h 3Om, 4 hr 30 min (must not match GDS booking class / dates / airports)
   s = s.replace(/\b([0-9]{1,2})\s*h(?:r|ours?)?[ \t]*([0-9oOsSlIzZ]{1,2})\s*(?:m|min|minutes?)\b/gi, function(_, h, m) {
@@ -352,9 +368,14 @@ function cleanOcrText(rawText) {
     return h + cm + ap;
   });
 
-  // Route-specific airline OCR confusion (e.g. QR read as OR when DOH is present)
+  // Route-specific airline OCR confusion (e.g. QR read as OR when DOH is present, ET read as E7 etc)
   if (/DOH/i.test(s)) {
     s = s.replace(/\bOR\s+/gi, "QR ");
+  }
+  // Ethiopian ET – OCR often reads ET as E7 or E7, and ADD as A0D
+  if (/ADD/i.test(s) || /BOLE/i.test(s)) {
+    s = s.replace(/\bE7\s+/gi, "ET ");
+    s = s.replace(/\bE\s*7\s+/gi, "ET ");
   }
 
   // 8. Glued flight numbers + airport: e.g. 114lFK -> 114 JFK, ZO4lFK -> 204 JFK
