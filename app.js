@@ -14,10 +14,23 @@
 var $ = function (id) { return document.getElementById(id); };
 var inp = $("inp"), out = $("out"), st = $("st");
 var images = [];
+var documents = [];
 var lastOut = "";
 var converting = false;
 var engineWorker = null;
 var lastTextFp = "";
+
+// Attachment state is deliberately separate from the input text.  A file
+// picker can return an empty/incorrect MIME type and several files can finish
+// decoding in a different order, so relying on File.type or Promise timing
+// makes the converter appear to randomly do nothing.
+var attachmentVersion = 0; // clear-generation; old callbacks cannot repaint after clear
+var latestAttachmentBatch = 0;
+var pendingImageJobs = 0;
+
+var pendingDocumentJobs = 0;
+var imageParseVersion = -1;
+var imageParsePromise = null;
 var AUTHOR_EMAIL = "adhambadraan@gmail.com";
 
 /* ---------- utils ---------- */
@@ -349,6 +362,18 @@ function cleanOcrText(rawText) {
   // e.g. "IB 4z37", "QR los9", "BA ll4", "LH 4OO", "DL 001"
   var dAir = (window.SPICY_DATA && window.SPICY_DATA.airlines) ? Object.keys(window.SPICY_DATA.airlines) : [];
   if (dAir.length) {
+    // OCR often returns a valid carrier in the wrong case (qR) and turns the
+    // leading 1 of a flight number into an underscore or vertical bar
+    // (qR _os9). Repair only the token immediately after a known carrier.
+    var airLeadRe = new RegExp("\\b(" + dAir.join("|") + ")\\s+[_|Il]([0-9A-Za-z]{2,5})\\b", "gi");
+    s = s.replace(airLeadRe, function(_, code, num) {
+      var repaired = num.replace(/[oO]/g, "0").replace(/[sS]/g, "5")
+        .replace(/[lIi|]/g, "1").replace(/[zZ]/g, "2").replace(/[gq]/g, "9");
+      if (!/^1/.test(repaired)) repaired = "1" + repaired;
+      return code.toUpperCase() + " " + repaired;
+    });
+    var caseAirRe = new RegExp("\\b(" + dAir.join("|") + ")\\b", "gi");
+    s = s.replace(caseAirRe, function(_, code) { return code.toUpperCase(); });
     var airRe = new RegExp("\\b(" + dAir.join("|") + ")[ \\t]+([0-9A-Za-z]{1,5})\\b", "g");
     s = s.replace(airRe, function(match, code, num, offset) {
       if (/^(AM|PM)$/i.test(code)) {
@@ -466,49 +491,60 @@ function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
 function parseImageDirect(im) {
   return new Promise(function(resolve) {
     var t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    var settled = false;
 
-    var img = new Image();
-    img.onload = function() {
-      var srcCv = document.createElement("canvas");
-      srcCv.width = img.naturalWidth || img.width;
-      srcCv.height = img.naturalHeight || img.height;
-      var srcCtx = srcCv.getContext("2d");
-      srcCtx.drawImage(img, 0, 0);
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    }
 
-      // Pass 1: Try browser native TextDetector API if available (hardware accelerated ~30ms)
+    function begin(srcCv) {
+      if (!srcCv || !srcCv.width || !srcCv.height) {
+        finish({ segs: [], warns: ["Image has no readable pixels"], text: "", method: "none", dur: 0 });
+        return;
+      }
+
+      // Pass 1: native TextDetector where available (usually hardware
+      // accelerated).  It is optional and never allowed to block OCRAD.
       if (window.TextDetector) {
         try {
           var td = new window.TextDetector();
-          td.detect(srcCv).then(function(detected) {
+          Promise.resolve(td.detect(srcCv)).then(function(detected) {
             if (detected && detected.length) {
               detected.sort(function(a, b) {
-                var dy = a.boundingBox.top - b.boundingBox.top;
-                return Math.abs(dy) > 16 ? dy : (a.boundingBox.left - b.boundingBox.left);
+                var ab = a.boundingBox || {}, bb = b.boundingBox || {};
+                var dy = (ab.top || 0) - (bb.top || 0);
+                return Math.abs(dy) > 16 ? dy : ((ab.left || 0) - (bb.left || 0));
               });
               var nativeRaw = detected.map(function(d) { return d.rawValue || ""; }).join("\n");
               var cleaned = cleanOcrText(nativeRaw);
               var res = window.SpicyEngine.parse(cleaned);
               if (res[0] && res[0].length > 0) {
-                var dur = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
-                resolve({ segs: res[0], warns: res[1], text: cleaned, method: "native TextDetector", dur: dur });
+                finish({ segs: res[0], warns: res[1], text: cleaned,
+                  rawOcr: nativeRaw, method: "native TextDetector", dur: elapsed() });
                 return;
               }
             }
             runOcradPasses();
-          }).catch(function(){ runOcradPasses(); });
+          }, function() { runOcradPasses(); });
           return;
         } catch (e) { /* fall through to OCRAD */ }
       }
-
       runOcradPasses();
 
+      function elapsed() {
+        return Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
+      }
       function runOcradPasses() {
         if (typeof window.OCRAD !== "function") {
-          resolve({ segs: [], warns: ["OCR engine not available"], text: "", method: "none", dur: 0 });
+          finish({ segs: [], warns: ["OCR engine not available"], text: "", method: "none", dur: elapsed() });
           return;
         }
 
-        // Multi-pass OCR pipeline
+        // The first pass handles normal screenshots.  More expensive passes
+        // only run when the fast path cannot produce a flight, keeping the
+        // common case very quick without sacrificing difficult screenshots.
         var passes = [
           { mode: "auto", thresh: 150, label: "auto (150)" },
           { mode: "auto", thresh: 175, label: "auto (175)" },
@@ -517,47 +553,430 @@ function parseImageDirect(im) {
           { mode: "normal", thresh: 150, label: "normal" },
           { mode: "gray", thresh: 0, label: "grayscale" }
         ];
-
         var bestRaw = "";
         for (var pIdx = 0; pIdx < passes.length; pIdx++) {
           try {
             var cfg = passes[pIdx];
             var procCv = preprocessCanvasForOcr(srcCv, cfg.mode, cfg.thresh);
             var raw = window.OCRAD(procCv) || "";
-            if (raw.trim().length > bestRaw.length) bestRaw = raw;
+            if (raw.trim().length > bestRaw.trim().length) bestRaw = raw;
             if (raw.trim().length > 5) {
               var cleaned = cleanOcrText(raw);
               var res = window.SpicyEngine.parse(cleaned);
               if (res[0] && res[0].length > 0) {
-                var dur = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
-                resolve({ segs: res[0], warns: res[1], text: cleaned, rawOcr: raw, method: "OCRAD (" + cfg.label + ")", dur: dur });
+                finish({ segs: res[0], warns: res[1], text: cleaned, rawOcr: raw,
+                  method: "OCRAD (" + cfg.label + ")", dur: elapsed() });
                 return;
               }
             }
-          } catch (passErr) {}
+          } catch (passErr) { /* try the next preprocessing mode */ }
         }
 
-        // Final attempt on bestRaw if any
         if (bestRaw.trim().length > 5) {
           var cleanedFinal = cleanOcrText(bestRaw);
           var resFinal = window.SpicyEngine.parse(cleanedFinal);
           if (resFinal[0] && resFinal[0].length > 0) {
-            var dur = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
-            resolve({ segs: resFinal[0], warns: resFinal[1], text: cleanedFinal, rawOcr: bestRaw, method: "OCRAD (best text)", dur: dur });
+            finish({ segs: resFinal[0], warns: resFinal[1], text: cleanedFinal,
+              rawOcr: bestRaw, method: "OCRAD (best text)", dur: elapsed() });
             return;
           }
         }
-
-        // Could not detect
-        var dur = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
-        resolve({ segs: [], warns: ["Could not detect flights"], text: bestRaw, method: "OCRAD (failed)", dur: dur });
+        finish({ segs: [], warns: ["Could not detect flights"], text: bestRaw,
+          method: "OCRAD (failed)", dur: elapsed() });
       }
+    }
+
+    // fastDownscale retains the canvas, avoiding a second base64 decode in
+    // the normal path.  The data URL fallback keeps this function reusable.
+    if (im.canvas) {
+      begin(im.canvas);
+      return;
+    }
+    var img = new Image();
+    img.onload = function() {
+      var srcCv = document.createElement("canvas");
+      srcCv.width = img.naturalWidth || img.width;
+      srcCv.height = img.naturalHeight || img.height;
+      var ctx = srcCv.getContext("2d");
+      if (!ctx) { finish({ segs: [], warns: ["Canvas is not available"], text: "", method: "none", dur: 0 }); return; }
+      ctx.drawImage(img, 0, 0);
+      begin(srcCv);
     };
-    img.onerror = function() {
-      resolve({ segs: [], warns: ["Image load failed"], text: "", method: "none", dur: 0 });
-    };
+    img.onerror = function() { finish({ segs: [], warns: ["Image load failed"], text: "", method: "none", dur: 0 }); };
     img.src = "data:" + im.mime + ";base64," + im.b64;
   });
+}
+
+/* ---------- attachment helpers ---------- */
+function readyImages() { return images.filter(function(im) { return !!im; }); }
+function readyDocuments() { return documents.filter(function(doc) { return !!doc; }); }
+function hasAttachments() { return readyImages().length > 0 || readyDocuments().length > 0 || pendingImageJobs > 0 || pendingDocumentJobs > 0; }
+function fileName(file) { return String((file && file.name) || "attachment"); }
+function fileExtension(file) {
+  var name = fileName(file).toLowerCase();
+  var dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot) : "";
+}
+function isImageFile(file) {
+  var type = String((file && file.type) || "").toLowerCase();
+  return type.indexOf("image/") === 0 || /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i.test(fileName(file));
+}
+function isPdfFile(file) {
+  return String((file && file.type) || "").toLowerCase() === "application/pdf" || fileExtension(file) === ".pdf";
+}
+function isTextFile(file) {
+  var type = String((file && file.type) || "").toLowerCase();
+  return type.indexOf("text/") === 0 || /\.(csv|eml|htm|html|ics|json|log|md|text|tsv|txt|xml)$/i.test(fileName(file));
+}
+function readTextFile(file, maxBytes) {
+  maxBytes = maxBytes || 1000000;
+  var part = file && file.slice ? file.slice(0, maxBytes) : file;
+  if (part && typeof part.text === "function") {
+    return part.text().then(function(text) { return String(text || ""); });
+  }
+  return new Promise(function(resolve, reject) {
+    var rd = new FileReader();
+    rd.onload = function(e) { resolve(String(e.target.result || "")); };
+    rd.onerror = reject;
+    rd.readAsText(part);
+  });
+}
+function readFilePrefix(file, maxBytes) {
+  var part = file && file.slice ? file.slice(0, maxBytes || 32) : file;
+  if (!part || typeof part.arrayBuffer !== "function") return Promise.resolve(null);
+  return part.arrayBuffer().then(function(buf) { return new Uint8Array(buf); }, function() { return null; });
+}
+function signatureKind(bytes) {
+  if (!bytes || !bytes.length) return "";
+  function ascii(offset, value) {
+    if (bytes.length < offset + value.length) return false;
+    for (var i = 0; i < value.length; i++) if (bytes[offset + i] !== value.charCodeAt(i)) return false;
+    return true;
+  }
+  if ((bytes[0] === 0x89 && ascii(1, "PNG")) || ascii(0, "JFIF") || ascii(0, "Exif") ||
+      (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) ||
+      ascii(0, "GIF8") || ascii(0, "BM") || (ascii(0, "RIFF") && ascii(8, "WEBP"))) return "image";
+  if (ascii(0, "%PDF")) return "pdf";
+  return "";
+}
+function classifyFile(file) {
+  if (isImageFile(file)) return Promise.resolve("image");
+  if (isPdfFile(file)) return Promise.resolve("pdf");
+  if (isTextFile(file)) return Promise.resolve("text");
+
+  // Some browsers and downloaded files expose an empty MIME type and no
+  // extension. Check magic bytes before probing text so a nameless PNG/JPEG
+  // is still an image, while binary files never enter the text parser.
+  if (!file || typeof file.size !== "number" || file.size > 1000000) return Promise.resolve("unsupported");
+  return readFilePrefix(file, 32).then(function(bytes) {
+    var signature = signatureKind(bytes);
+    if (signature) return signature;
+    return readTextFile(file, 4096).then(function(sample) {
+      if (!sample || sample.indexOf("\u0000") >= 0) return "unsupported";
+      var bad = 0;
+      for (var i = 0; i < sample.length; i++) {
+        var c = sample.charCodeAt(i);
+        if (c < 9 || (c > 13 && c < 32)) bad++;
+      }
+      return bad / Math.max(1, sample.length) < 0.02 ? "text" : "unsupported";
+    }, function() { return "unsupported"; });
+  });
+}
+/* ---------- high-speed image downscale ---------- */
+function fastDownscale(file, maxSide, quality) {
+  maxSide = maxSide || 1600;
+  quality = typeof quality === "number" ? quality : 0.88;
+  var ext = fileExtension(file);
+  var sourceType = String((file && file.type) || "").toLowerCase();
+  // Keep the encoded MIME aligned with the bytes returned by canvas. Several
+  // browsers silently fall back to PNG for AVIF/SVG/TIFF/WebP output; telling
+  // Gemini that those bytes are still AVIF makes AI attachment conversion fail.
+  var outMime = (sourceType === "image/png" || ext === ".png") ? "image/png" : "image/jpeg";
+  // Browsers cannot draw HEIC/HEIF without a decoder.  Rejecting it cleanly
+  // is much better than leaving the user on a permanent "attaching" state.
+  if (outMime === "image/heic" || outMime === "image/heif" || ext === ".heic" || ext === ".heif") {
+    return Promise.reject(new Error("HEIC/HEIF is not supported by this browser"));
+  }
+
+  return new Promise(function(resolve, reject) {
+    var settled = false;
+    function ok(value) { if (!settled) { settled = true; resolve(value); } }
+    function fail(err) { if (!settled) { settled = true; reject(err instanceof Error ? err : new Error(String(err || "image decode failed"))); } }
+    function canvasResult(cv) {
+      if (!cv || !cv.width || !cv.height) { fail("image has no pixels"); return; }
+      try {
+        var b64 = cv.toDataURL(outMime, outMime === "image/png" ? 1 : quality).split(",")[1];
+        ok({ mime: outMime, b64: b64, w: cv.width, h: cv.height, canvas: cv,
+          _hash: hashStr(outMime + "|" + cv.width + "x" + cv.height + "|" + b64.slice(0, 2000)) });
+      } catch (e) { fail(e); }
+    }
+    function drawBitmap(bmp) {
+      try {
+        var w = bmp.width, h = bmp.height;
+        if (!w || !h) { fail("image has no dimensions"); return; }
+        var sc = Math.min(1, maxSide / Math.max(w, h));
+        var cv = document.createElement("canvas");
+        cv.width = Math.max(1, Math.round(w * sc));
+        cv.height = Math.max(1, Math.round(h * sc));
+        var ctx = cv.getContext("2d");
+        if (!ctx) { fail("Canvas is not available"); return; }
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        // Transparent screenshots are common when copied from a browser;
+        // flatten them on white so OCR does not mistake alpha for black text.
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+        if (bmp.close) bmp.close();
+        canvasResult(cv);
+      } catch (e) { fail(e); }
+    }
+    function fallback() {
+      var rd = new FileReader(), img = new Image();
+      rd.onload = function(ev) {
+        img.onload = function() {
+          try {
+            var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+            var sc = Math.min(1, maxSide / Math.max(w, h));
+            var cv = document.createElement("canvas");
+            cv.width = Math.max(1, Math.round(w * sc));
+            cv.height = Math.max(1, Math.round(h * sc));
+            var ctx = cv.getContext("2d");
+            if (!ctx) { fail("Canvas is not available"); return; }
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, cv.width, cv.height);
+            ctx.drawImage(img, 0, 0, cv.width, cv.height);
+            canvasResult(cv);
+          } catch (e) { fail(e); }
+        };
+        img.onerror = function() { fail("image could not be decoded"); };
+        img.src = ev.target.result;
+      };
+      rd.onerror = function() { fail("image could not be read"); };
+      rd.readAsDataURL(file);
+    }
+    if (window.createImageBitmap) {
+      var bitmapPromise;
+      try { bitmapPromise = window.createImageBitmap(file, { imageOrientation: "from-image" }); }
+      catch (e) { bitmapPromise = window.createImageBitmap(file); }
+      Promise.resolve(bitmapPromise).then(drawBitmap, fallback);
+    } else fallback();
+  });
+}
+
+function addThumb(im, slot) {
+  var img = new Image();
+  img.onload = function() {
+    var ts = Math.min(26 / img.height, 56 / img.width);
+    var th = document.createElement("canvas");
+    th.width = Math.max(1, Math.round(img.width * ts));
+    th.height = Math.max(1, Math.round(img.height * ts));
+    var ctx = th.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(img, 0, 0, th.width, th.height);
+    var ti = document.createElement("img");
+    ti.src = th.toDataURL("image/jpeg", 0.5);
+    ti.alt = fileName(im);
+    ti.title = fileName(im) + " attached";
+    $("thumbs").appendChild(ti);
+  };
+  img.src = "data:" + im.mime + ";base64," + im.b64;
+}
+function addFileBadge(file, kind) {
+  var badge = document.createElement("span");
+  badge.className = "attachment-badge";
+  badge.textContent = (kind === "pdf" ? "PDF" : "FILE") + " · " + fileName(file);
+  badge.title = fileName(file);
+  $("thumbs").appendChild(badge);
+}
+function addImage(file, token) {
+  var slot = images.length;
+  images.push(null); // reserves picker order while decoding happens asynchronously
+  pendingImageJobs++;
+  setStatus("IMAGE ATTACHING…");
+  return fastDownscale(file, 1600, 0.88).then(function(im) {
+    if (token !== attachmentVersion) return null;
+    im.name = fileName(file);
+    images[slot] = im;
+    addThumb(im, slot);
+    return im;
+  }, function(err) {
+    if (token === attachmentVersion) setStatus("IMAGE FAILED — " + fileName(file) + " — " + String(err.message || err).slice(0, 70), true);
+    return null;
+  }).then(function(im) {
+    if (token === attachmentVersion) pendingImageJobs = Math.max(0, pendingImageJobs - 1);
+    return im;
+  });
+}
+function addPdf(file, token) {
+  var slot = documents.length;
+  documents.push(null);
+  pendingDocumentJobs++;
+  addFileBadge(file, "pdf");
+  return readFileAsBase64(file).then(function(data) {
+    if (token !== attachmentVersion) return null;
+    documents[slot] = { mime: "application/pdf", b64: data, name: fileName(file) };
+    return documents[slot];
+  }, function(err) {
+    if (token === attachmentVersion) {
+      documents[slot] = null;
+      setStatus("PDF FAILED — " + fileName(file), true);
+    }
+    return null;
+  }).then(function(doc) {
+    if (token === attachmentVersion) pendingDocumentJobs = Math.max(0, pendingDocumentJobs - 1);
+    return doc;
+  });
+}
+function readFileAsBase64(file) {
+  return new Promise(function(resolve, reject) {
+    var rd = new FileReader();
+    rd.onload = function(e) {
+      var value = String(e.target.result || ""), comma = value.indexOf(",");
+      resolve(comma >= 0 ? value.slice(comma + 1) : value);
+    };
+    rd.onerror = reject;
+    rd.readAsDataURL(file);
+  });
+}
+function renderAttachmentResults(results, token, batch, started) {
+  if (token !== attachmentVersion || batch !== latestAttachmentBatch) return;
+  var allSegs = [], warns = [];
+  results.forEach(function(res) {
+    if (!res) return;
+    if (res.segs && res.segs.length) allSegs = allSegs.concat(res.segs);
+    if (res.warns) res.warns.forEach(function(w) { if (warns.indexOf(w) < 0) warns.push(w); });
+  });
+
+  // If the user attached a text file as well as a screenshot, include the
+  // text in the same deterministic output instead of silently choosing one.
+  var typed = (inp.value || "").replace(/\[screenshot attached[^\n]*\]\n?/g, "").trim();
+  if (typed) {
+    try {
+      var typedResult = window.SpicyEngine.parse(typed);
+      if (typedResult[0] && typedResult[0].length) allSegs = allSegs.concat(typedResult[0]);
+      typedResult[1].forEach(function(w) { if (warns.indexOf(w) < 0) warns.push(w); });
+    } catch (e) {}
+  }
+  allSegs.forEach(function(seg, i) { seg.seg = i + 1; });
+
+  if (allSegs.length) {
+    var outText = window.SpicyEngine.renderItinerary(allSegs);
+    lastOut = outText;
+    out.innerHTML = esc(outText);
+    var ms = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - started);
+    setStatus("IMAGE PARSED — " + allSegs.length + " seg(s) (" + ms + "ms)" + (warns.length ? "  ·  " + warns.join(" · ") : ""), warns.length > 0);
+    var imgs = readyImages();
+    if (imgs.length === 1 && imgs[0]._hash) imgCacheSet(imgs[0]._hash, outText);
+    recordStat("img_direct", ms);
+    return;
+  }
+
+  if (gemKey()) {
+    recordStat("ai_fallback");
+    setStatus("Image parse did not detect flights — trying AI…");
+    convertAi(true, "undetected attachment");
+  } else {
+    out.textContent = "Could not detect flights in the attachment.\n\nSupported images are converted offline. For a difficult image or PDF, save a Gemini key and press AI AUTO.";
+    setStatus("ATTACHMENT NOT READ — AI AUTO can retry", true);
+  }
+}
+function convertImageAttachments(batch) {
+  if (batch !== latestAttachmentBatch) return;
+  var token = attachmentVersion;
+  var list = readyImages();
+  if (!list.length) return;
+  if (imageParseVersion === batch && imageParsePromise) return;
+  imageParseVersion = batch;
+  var started = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+  setStatus("PARSING " + list.length + " IMAGE" + (list.length === 1 ? "" : "S") + "…");
+
+  // A repeated single attachment is served directly from the local cache.
+  // Do not use it when another source is attached: the combined request must
+  // still include the typed itinerary or PDF.
+  if (list.length === 1 && list[0]._hash && !(inp.value || "").trim() && !readyDocuments().length) {
+    var cached = imgCacheGet(list[0]._hash);
+    if (cached && cached.out) {
+      lastOut = cached.out;
+      out.innerHTML = esc(cached.out);
+      setStatus("CACHED IMAGE — instant");
+      imageParsePromise = null;
+      return;
+    }
+  }
+  imageParsePromise = Promise.all(list.map(parseImageDirect)).then(function(results) {
+    renderAttachmentResults(results, token, batch, started);
+  }, function() {
+    if (token === attachmentVersion && batch === latestAttachmentBatch) {
+      setStatus("ATTACHMENT PARSE FAILED — AI AUTO can retry", true);
+      if (gemKey()) convertAi(true, "attachment parse error");
+    }
+  }).then(function() {
+    // An older batch may still finish after a newer one starts. Only that
+    // batch may release the shared promise reference.
+    if (imageParseVersion === batch) imageParsePromise = null;
+  });
+}
+function appendTextFiles(files, token) {
+  return Promise.all(files.map(function(file) {
+    return readTextFile(file, 1000000).then(function(txt) { return { file: file, text: txt }; });
+  })).then(function(items) {
+    if (token !== attachmentVersion) return;
+    var added = 0;
+    items.forEach(function(item) {
+      if (!item.text) return;
+      inp.value += (inp.value ? "\n\n" : "") + item.text.slice(0, 20000);
+      added += item.text.length;
+    });
+    if (!added) { setStatus("EMPTY TEXT ATTACHMENT", true); return; }
+    setStatus("TEXT ATTACHED — " + added + " chars — converting…");
+    convert(false);
+  }, function() {
+    if (token === attachmentVersion) setStatus("TEXT FILE READ FAILED", true);
+  });
+}
+function processAttachments(arr, kinds, token, batch) {
+  if (token !== attachmentVersion) return;
+  var imageJobs = [], textFiles = [], pdfJobs = [];
+  arr.forEach(function(file, i) {
+    if (kinds[i] === "image") imageJobs.push(addImage(file, token));
+    else if (kinds[i] === "text") textFiles.push(file);
+    else if (kinds[i] === "pdf") pdfJobs.push(addPdf(file, token));
+  });
+  var tasks = [];
+  if (textFiles.length) tasks.push(appendTextFiles(textFiles, token));
+  if (pdfJobs.length) tasks.push(Promise.all(pdfJobs).then(function() {
+    if (token !== attachmentVersion || pendingDocumentJobs > 0) return;
+    if (readyImages().length) {
+      if (pendingImageJobs === 0) convertImageAttachments(latestAttachmentBatch);
+    } else if (gemKey()) {
+      convertAi(true, "PDF attachment");
+    } else {
+      setStatus("PDF ATTACHED — AI AUTO needs a Gemini key", true);
+    }
+  }));
+  if (imageJobs.length) tasks.push(Promise.all(imageJobs).then(function() {
+    if (token === attachmentVersion && pendingImageJobs === 0) convertImageAttachments(latestAttachmentBatch);
+  }));
+  var unsupported = arr.filter(function(_, i) { return kinds[i] === "unsupported"; });
+  if (unsupported.length) setStatus("UNSUPPORTED ATTACHMENT — " + fileName(unsupported[0]), true);
+  if (!tasks.length && !unsupported.length) setStatus("NO READABLE ATTACHMENTS", true);
+}
+function handleFiles(fileList) {
+  var arr = Array.prototype.slice.call(fileList || []);
+  if (!arr.length) return;
+  var token = attachmentVersion;
+  var batch = ++latestAttachmentBatch;
+  // A new attachment is a new conversion request; never leave the previous
+  // itinerary copyable while the replacement is being decoded.
+  out.innerHTML = "";
+  lastOut = "";
+  setStatus("CHECKING ATTACHMENTS…");
+  Promise.all(arr.map(classifyFile)).then(function(kinds) {
+    processAttachments(arr, kinds, token, batch);
+  }, function() { if (token === attachmentVersion && batch === latestAttachmentBatch) setStatus("ATTACHMENT CHECK FAILED", true); });
 }
 
 /* ---------- instant convert ---------- */
@@ -585,97 +1004,90 @@ function renderDirectSync(text){
   return {segs:segs,warns:warns,out:outText};
 }
 
-function convert(auto){
-  if(converting) return;
+function convert(auto) {
+  if (converting) return;
   var raw = inp.value || "";
   var text = raw.replace(/\[screenshot attached[^\n]*\]\n?/g, "");
-  var hasImg = images.length > 0;
-  if(!text.trim() && !hasImg){ out.innerHTML=""; lastOut=""; setStatus("READY"); return; }
+  var imgs = readyImages();
+  var docs = readyDocuments();
+  var hasImg = imgs.length > 0;
+  var hasAnyAttachment = hasAttachments();
+  if (!text.trim() && !hasAnyAttachment) {
+    out.innerHTML = "";
+    lastOut = "";
+    setStatus("READY");
+    return;
+  }
 
-  // TEXT CACHE: instant repeat (0ms)
-  if(text.trim()){
+  // A file may still be decoding.  Wait for the single attachment pipeline
+  // rather than trying to parse an empty slot and reporting a false failure.
+  if (pendingImageJobs > 0 || pendingDocumentJobs > 0) {
+    setStatus("ATTACHMENT STILL LOADING…");
+    return;
+  }
+
+  // TEXT CACHE: instant repeat (0ms). Do not use it when an image/PDF is also
+  // attached, otherwise the attachment would be silently ignored.
+  if (text.trim() && !hasImg && !docs.length) {
     var h = fp(text);
-    if(h===lastTextFp && lastOut){ setStatus("CACHED — instant"); return; }
+    if (h === lastTextFp && lastOut) { setStatus("CACHED — instant"); return; }
     var tc = tCacheGet(h);
-    if(tc && tc.out){
+    if (tc && tc.out) {
       lastOut = tc.out;
       out.innerHTML = esc(tc.out);
       lastTextFp = h;
-      setStatus("CACHED TEXT — instant — "+(tc.out.split("\n").filter(function(l){return / N$/.test(l);}).length)+" segs");
+      setStatus("CACHED TEXT — instant — " + (tc.out.split("\n").filter(function(l) { return / N$/.test(l); }).length) + " segs");
       return;
     }
   }
 
-  // IMAGE CACHE: instant repeat
-  if(hasImg && !text.trim() && images.length === 1){
-    var ih = images[0]._hash;
-    var ic = ih && imgCacheGet(ih);
-    if(ic && ic.out){
-      lastOut = ic.out;
-      out.innerHTML = esc(ic.out);
-      setStatus("CACHED IMAGE — instant — "+(ic.out.split("\n").filter(function(l){return / N$/.test(l);}).length)+" segs");
-      return;
-    }
-  }
-
-  // IMAGE-ONLY CONVERT
-  if(hasImg && !text.trim()){
-    if(lastOut && / N$/.test(lastOut)) return;
-    setStatus("PARSING IMAGE…");
-    parseImageDirect(images[0]).then(function(res){
-      if(res.segs && res.segs.length > 0){
-        var outText = window.SpicyEngine.renderItinerary(res.segs);
-        lastOut = outText;
-        out.innerHTML = esc(outText);
-        setStatus("IMAGE PARSED — " + res.segs.length + " seg(s) (" + res.dur + "ms)");
-        imgCacheSet(images[0]._hash, outText);
-        recordStat("img_direct", res.dur);
-        return;
-      }
-      if(gemKey()){
-        recordStat("ai_fallback");
-        convertAi(auto, "image parse fallback");
-      } else {
-        out.textContent = "Could not detect flights in this image.\n\nAttach a Gemini API key (click 'Generate Api' below) to convert with AI.";
-        setStatus("Could not detect flights — attach AI key to retry", true);
-      }
-    });
+  // Images are parsed together, in attachment order. This fixes the old
+  // first-image-only behavior and prevents concurrent OCR callbacks from
+  // overwriting each other.
+  if (hasImg) {
+    convertImageAttachments(latestAttachmentBatch);
     return;
   }
 
-  if(text.trim() && gemKey() && learnKnows(text)){ convertAi(auto, "learned pattern"); return; }
+  // PDFs can be sent to AI as a document, but there is no PDF decoder in this
+  // static offline bundle. Never silently ignore one just because the user
+  // also pasted readable text.
+  if (docs.length) {
+    if (gemKey()) convertAi(auto, "PDF attachment");
+    else setStatus("PDF ATTACHED — AI AUTO needs a Gemini key", true);
+    return;
+  }
 
-  // FAST PATH: small text sync parse immediately
-  if(text.length < 3000){
-    try{
+  if (text.trim() && gemKey() && learnKnows(text)) { convertAi(auto, "learned pattern"); return; }
+
+  // FAST PATH: small text sync parse immediately.
+  if (text.length < 3000) {
+    try {
       var r = renderDirectSync(text);
       var lack = directIncomplete(r.warns, r.segs);
-      if(!lack) { lastTextFp = fp(text); return; }
-      if(gemKey()){ convertAi(auto, lack); return; }
-      if(!r.segs.length){
-        out.textContent = "Couldn't read this paste.\n"+(r.warns[0]||"")+"\n\nPress AI AUTO (add a Gemini key first if asked).";
+      if (!lack) { lastTextFp = fp(text); return; }
+      if (gemKey()) { convertAi(auto, lack); return; }
+      if (!r.segs.length) {
+        out.textContent = "Couldn't read this paste.\n" + (r.warns[0] || "") + "\n\nPress AI AUTO (add a Gemini key first if asked).";
         setStatus("INCOMPLETE — needs AI", true);
       } else {
-        setStatus(st.textContent+"  ·  partial — AI AUTO can finish", true);
+        setStatus(st.textContent + "  ·  partial — AI AUTO can finish", true);
       }
-    }catch(e){
-      setStatus("CONVERT ERROR", true);
-    }
+    } catch (e) { setStatus("CONVERT ERROR", true); }
     return;
   }
 
-  // LARGE TEXT: async convert
+  // LARGE TEXT: yield once so the browser can paint before parsing a large
+  // email/export. The deterministic parser remains synchronous and local.
   setStatus("CONVERTING…");
-  setTimeout(function(){
+  setTimeout(function() {
     try {
       var r = renderDirectSync(text);
       lastTextFp = fp(text);
       var lack = directIncomplete(r.warns, r.segs);
-      if(lack && gemKey()) convertAi(auto, lack);
-    } catch(e) {
-      setStatus("CONVERT ERROR", true);
-    }
-  }, 10);
+      if (lack && gemKey()) convertAi(auto, lack);
+    } catch (e) { setStatus("CONVERT ERROR", true); }
+  }, 0);
 }
 
 /* ---------- AI ---------- */
@@ -726,19 +1138,28 @@ function geminiGenerate(key, body){
 }
 function convertAi(fromAuto, reason){
   if(converting) return;
+  if(pendingImageJobs > 0 || pendingDocumentJobs > 0){
+    setStatus("ATTACHMENT STILL LOADING…");
+    return;
+  }
   var key=gemKey();
   if(!key){ $("setModal").classList.remove("hidden"); setStatus("AI needs a Gemini key", true); return; }
   var text=(inp.value||"").replace(/\[screenshot attached[^\n]*\]\n?/g,"");
   var fallback=lastOut;
+  var requestAttachmentVersion=attachmentVersion;
+  var requestAttachmentBatch=latestAttachmentBatch;
+  var aiImages=readyImages(), aiDocuments=readyDocuments();
   converting=true;
-  setStatus(images.length?"AI CONVERTING (image)…":"AI CONVERTING…");
+  setStatus((aiImages.length||aiDocuments.length)?"AI CONVERTING (attachment)…":"AI CONVERTING…");
   var task=text.trim() ? "Convert the following flight data into GDS Black Window format. If anything is missing or ambiguous, fill it from aviation knowledge — never leave fields blank or ???.\n\n"+text
-    : "Convert the flight data in the attached image(s) into GDS Black Window format. Convert ALL options shown. Fill any missing field from aviation knowledge — never blank, never ???.";
+    : "Convert the attached image(s) and document(s) into GDS Black Window format. Convert ALL options shown. Fill any missing field from aviation knowledge — never blank, never ???.";
   var parts=[{text: task}];
-  images.forEach(function(im){ parts.push({inline_data:{mime_type:im.mime,data:im.b64}}); });
+  aiImages.forEach(function(im){ parts.push({inline_data:{mime_type:im.mime,data:im.b64}}); });
+  aiDocuments.forEach(function(doc){ parts.push({inline_data:{mime_type:doc.mime,data:doc.b64}}); });
   var body={ system_instruction:{parts:[{text: window.SpicyEngine.MASTER_PROMPT}]}, contents:[{role:"user",parts:parts}], generationConfig:{temperature:0.0,maxOutputTokens:4096} };
   geminiGenerate(key, body).then(function(j){
     converting=false;
+    if(requestAttachmentVersion!==attachmentVersion || requestAttachmentBatch!==latestAttachmentBatch) return;
     var ps=(((j.candidates||[])[0]||{}).content||{}).parts||[];
     var t=ps.map(function(p){return p.text||"";}).join("").trim();
     if(!t) throw new Error((j.error&&j.error.message)||"empty AI reply");
@@ -748,7 +1169,7 @@ function convertAi(fromAuto, reason){
     var previousDirect = lastOut;
     lastOut=t; out.innerHTML=esc(t);
     setStatus("AI CONVERTED"+(reason?" ("+reason+")":""));
-    if(images.length===1&&images[0]._hash) imgCacheSet(images[0]._hash, t);
+    if(aiImages.length===1&&aiDocuments.length===0&&aiImages[0]._hash) imgCacheSet(aiImages[0]._hash, t);
     if(text.trim()){ tCacheSet(fp(text), t); lastTextFp=fp(text); }
     if(reason&&text.trim()) learnRecord(text,t,reason);
 
@@ -758,129 +1179,6 @@ function convertAi(fromAuto, reason){
     converting=false;
     if(fallback){ lastOut=fallback; out.innerHTML=esc(fallback); setStatus("AI failed — previous result kept", true); }
     else{ setStatus("AI failed: "+String(e.message||e).slice(0,70), true); }
-  });
-}
-
-/* ---------- high-speed image downscale ---------- */
-function fastDownscale(file, maxSide, quality){
-  maxSide=maxSide||1600;
-  var isPng = file.type === "image/png" || /\.png$/i.test(file.name || "");
-  var outMime = isPng ? "image/png" : "image/jpeg";
-  quality = quality || (isPng ? 1.0 : 0.88);
-  return new Promise(function(resolve){
-    if(window.createImageBitmap){
-      createImageBitmap(file).then(function(bmp){
-        var w=bmp.width,h=bmp.height,sc=Math.min(1,maxSide/Math.max(w,h));
-        var cw=Math.round(w*sc),ch=Math.round(h*sc);
-        var cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
-        cv.getContext("2d").drawImage(bmp,0,0,cw,ch);
-        bmp.close();
-        var b64=cv.toDataURL(outMime, quality).split(",")[1];
-        resolve({mime:outMime,b64:b64,w:cw,h:ch,_hash:hashStr(b64.slice(0,2000))});
-      }).catch(function(){ fallback(); });
-    } else {
-      fallback();
-    }
-    function fallback(){
-      var img=new Image(), rd=new FileReader();
-      rd.onload=function(ev){
-        img.onload=function(){
-          var w=img.width,h=img.height,sc=Math.min(1,maxSide/Math.max(w,h));
-          var cv=document.createElement("canvas"); cv.width=Math.round(w*sc); cv.height=Math.round(h*sc);
-          cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
-          var b64=cv.toDataURL(outMime, quality).split(",")[1];
-          resolve({mime:outMime,b64:b64,w:cv.width,h:cv.height,_hash:hashStr(b64.slice(0,2000))});
-        };
-        img.src=ev.target.result;
-      };
-      rd.readAsDataURL(file);
-    }
-  });
-}
-
-function addThumb(im){
-  var img=new Image();
-  img.onload=function(){
-    var ts=Math.min(26/img.height,56/img.width);
-    var th=document.createElement("canvas");
-    th.width=Math.max(1,Math.round(img.width*ts));
-    th.height=Math.max(1,Math.round(img.height*ts));
-    th.getContext("2d").drawImage(img,0,0,th.width,th.height);
-    var ti=document.createElement("img");
-    ti.src=th.toDataURL("image/jpeg",0.5);
-    ti.title="screenshot "+images.length+" attached";
-    $("thumbs").appendChild(ti);
-  };
-  img.src="data:"+im.mime+";base64,"+im.b64;
-}
-
-function addImage(file, thenConvert){
-  if(thenConvert===undefined) thenConvert=true;
-  setStatus("IMAGE ATTACHING…");
-  fastDownscale(file, 1600, 0.88).then(function(im){
-    images.push(im);
-    addThumb(im);
-
-    // Check image cache for instant repeat (0ms)
-    var cached = im._hash && imgCacheGet(im._hash);
-    if(cached && cached.out){
-      lastOut = cached.out;
-      out.innerHTML = esc(cached.out);
-      setStatus("CACHED IMAGE — instant — "+(cached.out.split("\n").filter(function(l){return / N$/.test(l);}).length)+" segs");
-      return;
-    }
-
-    setStatus("PARSING SCREENSHOT…");
-    parseImageDirect(im).then(function(res){
-      if(res.segs && res.segs.length > 0){
-        var outText = window.SpicyEngine.renderItinerary(res.segs);
-        lastOut = outText;
-        out.innerHTML = esc(outText);
-        var msg = "IMAGE PARSED — " + res.segs.length + " seg(s) (" + res.dur + "ms)";
-        if (res.warns && res.warns.length) msg += "  ·  " + res.warns.join(" · ");
-        setStatus(msg, res.warns && res.warns.length > 0);
-        imgCacheSet(im._hash, outText);
-        recordStat("img_direct", res.dur);
-        return;
-      }
-
-      if(thenConvert){
-        if(gemKey()){
-          setStatus("Image parse did not detect flights — trying AI…");
-          recordStat("ai_fallback");
-          convertAi(true, "undetected");
-        } else {
-          out.textContent = "Could not detect flights in this screenshot.\n\nAttach a Gemini API key (click 'Generate Api' below) to convert with AI.";
-          setStatus("Could not detect flights — attach AI key to retry", true);
-        }
-      }
-    });
-  });
-}
-
-/* ---------- text file attachments (instant) ---------- */
-function addTextFile(file){
-  setStatus("READING "+file.name.toUpperCase()+"…");
-  file.text().then(function(txt){
-    if(!txt) { setStatus("EMPTY FILE", true); return; }
-    var cur = inp.value;
-    inp.value = cur + (cur?"\n\n":"") + txt.slice(0,20000);
-    try{ renderDirectSync(inp.value); lastTextFp=fp(inp.value); }catch(e){ convert(true); }
-    setStatus("FILE "+file.name.toUpperCase()+" — "+txt.length+" chars — instant");
-  }).catch(function(){ setStatus("FILE READ FAILED", true); });
-}
-
-function handleFiles(fileList){
-  var arr = Array.prototype.slice.call(fileList||[]);
-  if(!arr.length) return;
-  arr.forEach(function(f){
-    if(f.type.indexOf("image/")===0){
-      addImage(f, true);
-    } else if(f.type.indexOf("text/")===0 || /\.(txt|eml|msg|csv|json|pdf)$/i.test(f.name) || f.size<200000){
-      addTextFile(f);
-    } else {
-      addImage(f, true);
-    }
   });
 }
 
@@ -964,112 +1262,155 @@ function openWeeklyReport() {
 }
 
 /* ---------- UI events ---------- */
-$("btnAttach").addEventListener("click", function(){ $("filePick").click(); });
-$("filePick").addEventListener("change", function(){
-  var fs=this.files; this.value=""; handleFiles(fs);
+$("btnAttach").addEventListener("click", function() { $("filePick").click(); });
+$("filePick").addEventListener("change", function() {
+  // Copy the FileList before resetting the input.  Resetting first is what
+  // allows selecting the same attachment twice in a row in every browser.
+  var fs = Array.prototype.slice.call(this.files || []);
+  this.value = "";
+  handleFiles(fs);
 });
 
-// Drag & drop anywhere
-["dragenter","dragover"].forEach(function(ev){
-  document.addEventListener(ev, function(e){ e.preventDefault(); e.dataTransfer.dropEffect="copy"; }, false);
+// Drag & drop anywhere.  Guard dataTransfer because synthetic drag events
+// and some mobile browsers omit it.
+["dragenter", "dragover"].forEach(function(ev) {
+  document.addEventListener(ev, function(e) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  }, false);
 });
-document.addEventListener("drop", function(e){
+document.addEventListener("drop", function(e) {
   e.preventDefault();
-  var dt=e.dataTransfer;
-  if(dt.files && dt.files.length) handleFiles(dt.files);
-  else {
-    var txt = dt.getData("text/plain");
-    if(txt){ inp.value += (inp.value?"\n\n":"")+txt; convert(false); }
+  var dt = e.dataTransfer;
+  if (!dt) return;
+  if (dt.files && dt.files.length) {
+    handleFiles(Array.prototype.slice.call(dt.files));
+    return;
+  }
+  var txt = dt.getData("text/plain");
+  if (txt) {
+    inp.value += (inp.value ? "\n\n" : "") + txt;
+    convert(false);
   }
 }, false);
 
-// Paste: screenshot or text
-inp.addEventListener("paste", function(e){
-  var items=(e.clipboardData||{}).items||[];
-  var files=[];
-  var textPlain=""; try{ textPlain=e.clipboardData.getData("text/plain")||""; }catch(err){}
-  for(var i=0;i<items.length;i++) if(items[i].type.indexOf("image/")===0){ var f=items[i].getAsFile(); if(f) files.push(f); }
-  if(files.length){
-    if(textPlain && textPlain.trim().length>15){
-      setTimeout(function(){ convert(true); }, 0);
-      files.forEach(function(f){ addImage(f,false); });
-      return;
-    } else {
-      e.preventDefault();
-      files.forEach(function(f){ addImage(f,true); });
-      return;
+// Paste: screenshots are real clipboard files, not text. Always prevent the
+// textarea's default image insertion and send the files through the same
+// reliable attachment pipeline as the picker and drop zone.
+inp.addEventListener("paste", function(e) {
+  var clip = e.clipboardData || {};
+  var items = clip.items || [];
+  var files = [];
+  var textPlain = "";
+  try { textPlain = clip.getData("text/plain") || ""; } catch (err) {}
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type && items[i].type.indexOf("image/") === 0) {
+      var f = items[i].getAsFile && items[i].getAsFile();
+      if (f) files.push(f);
     }
   }
-  if(textPlain.length<3000){
-    queueMicrotask(function(){ convert(false); });
-  } else {
-    setTimeout(function(){ convert(true); }, 0);
+  if (files.length) {
+    e.preventDefault();
+    // A few clipboard providers include both OCR text and the screenshot.
+    // Keep meaningful text, then parse both sources together.
+    if (textPlain && textPlain.trim().length > 15) {
+      inp.value += (inp.value ? "\n\n" : "") + textPlain;
+    }
+    handleFiles(files);
+    return;
   }
+  setTimeout(function() { convert(textPlain.length >= 3000); }, 0);
 });
 
-// Typing: instant
-var typeTimer=null;
-inp.addEventListener("input", function(){
-  if(typeTimer) clearTimeout(typeTimer);
+// Typing: direct text stays instant. An attachment is parsed by its own
+// pipeline, so it must not be overwritten by an input event.
+var typeTimer = null;
+inp.addEventListener("input", function() {
+  if (typeTimer) clearTimeout(typeTimer);
   var len = inp.value.length;
-  if(len<2000){
-    if(!images.length) {
-      try{ renderDirectSync(inp.value); }catch(e){}
+  if (len < 2000) {
+    if (!hasAttachments()) {
+      try { renderDirectSync(inp.value); } catch (e) {}
     }
   } else {
-    typeTimer=setTimeout(function(){ convert(true); }, 80);
+    typeTimer = setTimeout(function() { convert(true); }, 80);
   }
 });
 
-$("btnConvert").addEventListener("click", function(){ convert(false); });
-$("btnAi").addEventListener("click", function(){ convertAi(false); });
-$("btnClear").addEventListener("click", function(){
-  inp.value=""; out.innerHTML=""; lastOut=""; images=[]; $("thumbs").innerHTML=""; lastTextFp=""; setStatus("READY"); inp.focus();
+$("btnConvert").addEventListener("click", function() { convert(false); });
+$("btnAi").addEventListener("click", function() { convertAi(false); });
+$("btnClear").addEventListener("click", function() {
+  // Invalidate all in-flight image/OCR/AI callbacks before releasing their
+  // canvases. They may finish later, but can no longer repaint the cleared UI.
+  attachmentVersion++;
+  latestAttachmentBatch++;
+  pendingImageJobs = 0;
+  pendingDocumentJobs = 0;
+  imageParseVersion = -1;
+  imageParsePromise = null;
+  inp.value = "";
+  out.innerHTML = "";
+  lastOut = "";
+  images = [];
+  documents = [];
+  $("thumbs").innerHTML = "";
+  lastTextFp = "";
+  setStatus("READY");
+  inp.focus();
 });
-$("btnCopy").addEventListener("click", function(){
-  if(!lastOut){ setStatus("NOTHING TO COPY", true); return; }
-  navigator.clipboard.writeText(lastOut).then(function(){ setStatus("COPIED ✓"); }, function(){
-    var ta=document.createElement("textarea"); ta.value=lastOut;
-    document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
-    setStatus("COPIED ✓");
-  });
+$("btnCopy").addEventListener("click", function() {
+  if (!lastOut) { setStatus("NOTHING TO COPY", true); return; }
+  var done = function() { setStatus("COPIED ✓"); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(lastOut).then(done, function() {
+      var ta = document.createElement("textarea");
+      ta.value = lastOut;
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      ta.remove(); done();
+    });
+  } else {
+    var fallback = document.createElement("textarea");
+    fallback.value = lastOut; document.body.appendChild(fallback); fallback.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    fallback.remove(); done();
+  }
 });
 
 if(!localStorage.getItem("spicy_seen")) $("welcome").classList.remove("hidden");
 $("enterBtn").addEventListener("click", function(){
   $("welcome").classList.add("hidden");
-  try{ localStorage.setItem("spicy_seen","1"); }catch(e){}
+  try { localStorage.setItem("spicy_seen", "1"); } catch (e) {}
 });
 $("setClose").addEventListener("click", function(){ $("setModal").classList.add("hidden"); });
 $("setSave").addEventListener("click", function(){
-  localStorage.setItem("spicy_gem_key", $("gemKey").value.trim());
-  $("setModal").classList.add("hidden"); setStatus("KEY SAVED");
+  try { localStorage.setItem("spicy_gem_key", $("gemKey").value.trim()); } catch (e) {}
+  $("setModal").classList.add("hidden");
+  setStatus("KEY SAVED");
 });
-function openGenKey(){ window.open("https://aistudio.google.com/apikey","_blank"); $("gemKey").value=gemKey(); $("setModal").classList.remove("hidden"); }
+function openGenKey(){
+  window.open("https://aistudio.google.com/apikey", "_blank");
+  $("gemKey").value = gemKey();
+  $("setModal").classList.remove("hidden");
+}
 $("genKey").addEventListener("click", openGenKey);
 
 // Weekly Report Modal & Buttons
-if ($("btnWeeklyReport")) {
-  $("btnWeeklyReport").addEventListener("click", openWeeklyReport);
-}
-if ($("reportClose")) {
-  $("reportClose").addEventListener("click", function(){ $("reportModal").classList.add("hidden"); });
-}
-if ($("reportCopy")) {
-  $("reportCopy").addEventListener("click", function(){
-    var txt = $("reportContent").value;
+if ($("btnWeeklyReport")) $("btnWeeklyReport").addEventListener("click", openWeeklyReport);
+if ($("reportClose")) $("reportClose").addEventListener("click", function(){ $("reportModal").classList.add("hidden"); });
+if ($("reportCopy")) $("reportCopy").addEventListener("click", function(){
+  var txt = $("reportContent").value;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(txt).then(function(){ setStatus("WEEKLY REPORT COPIED ✓"); });
-  });
-}
-if ($("reportSend")) {
-  $("reportSend").addEventListener("click", function(){
-    var txt = $("reportContent").value;
-    var mailUrl = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(AUTHOR_EMAIL) +
-                  "&su=" + encodeURIComponent("SpicyTerminal Weekly Report — Performance & AI Mistake Learning") +
-                  "&body=" + encodeURIComponent(txt);
-    window.open(mailUrl, "_blank");
-  });
-}
+  }
+});
+if ($("reportSend")) $("reportSend").addEventListener("click", function(){
+  var txt = $("reportContent").value;
+  var mailUrl = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(AUTHOR_EMAIL) +
+                "&su=" + encodeURIComponent("SpicyTerminal Weekly Report — Performance & AI Mistake Learning") +
+                "&body=" + encodeURIComponent(txt);
+  window.open(mailUrl, "_blank");
+});
 
 // Bug Report: Send to adhambadraan@gmail.com
 $("report").addEventListener("click", function(){

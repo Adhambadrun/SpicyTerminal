@@ -4,7 +4,7 @@ const path = require("path");
 const OCRAD = require("./ocrad.js");
 const E = require("./spicy_engine.js");
 const D = require("./spicy_data.js");
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 
 let PASS = 0, FAIL = 0;
 function assert(cond, msg) {
@@ -73,6 +73,9 @@ function cleanOcrText(rawText, rules) {
   }
 
   const airlines = Object.keys(D.airlines);
+  // Native OCR may preserve the carrier with mixed case (for example qR).
+  const caseAirRe = new RegExp("\\b(" + airlines.join("|") + ")\\b", "gi");
+  s = s.replace(caseAirRe, (_, code) => code.toUpperCase());
   const airRe = new RegExp("\\b(" + airlines.join("|") + ")\\s+([0-9A-Za-z]{1,5})\\b", "g");
   s = s.replace(airRe, (_, code, num) => {
     let cnum = num.replace(/[oO]/g, "0").replace(/[lIi]/g, "1").replace(/[zZ]/g, "2")
@@ -121,7 +124,9 @@ testInputs.forEach(t => {
 
 console.log("\n=== 3. Direct Image OCR from Actual File (<1s) ===");
 try {
-  execSync(`python3 -c "
+  // Pillow is optional; use ImageMagick on clean developer/CI images.
+  try {
+    execSync(`python3 -c "
 from PIL import Image, ImageDraw, ImageFont
 im = Image.new('RGB', (800, 200), 'white')
 d = ImageDraw.Draw(im)
@@ -130,7 +135,16 @@ d.text((25, 25), 'QR 1059 DOH - CAI', font=f, fill='black')
 d.text((25, 75), '18 Nov 7:55 PM - 11:25 PM', font=f, fill='black')
 d.text((25, 125), 'Boeing 787 Economy', font=f, fill='black')
 im.save('/tmp/test_ticket_offline.ppm')
-"`);
+"`, { stdio: "ignore" });
+  } catch (pillowError) {
+    execFileSync("convert", ["-size", "800x200", "xc:white", "-font", "DejaVu-Sans-Bold",
+      "-pointsize", "26", "-fill", "black",
+      "-draw", 'text 25,60 "QR 1059 DOH - CAI"',
+      "-draw", 'text 25,125 "18 Nov 7:55 PM - 11:25 PM"',
+      "-draw", 'text 25,190 "Boeing 787 Economy"',
+      "-depth", "8", "/tmp/test_ticket_offline.ppm"]);
+  }
+  if (!fs.existsSync("/tmp/test_ticket_offline.ppm")) throw new Error("test image was not created");
 
   const t0 = Date.now();
   const ppmBuf = fs.readFileSync("/tmp/test_ticket_offline.ppm");
