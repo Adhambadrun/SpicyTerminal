@@ -21,7 +21,11 @@
     10. HEIC screenshot          -> explicit failure, no permanent "attaching"
     11. second drop while images from the first are attached -> merged batch
     12. convert pressed mid-decode -> "still loading", then converts
-    13. clear -> full reset, later attachments still work (generation token)
+    13. thumbnail click -> review modal; modal remove -> attachment disappears
+    14. thumbnail red × -> direct remove; stale output is cleared
+    15. pending screenshot × -> cancels before decode is done
+    16. hanging native TextDetector -> bounded fallback OCR, never a permanent spinner
+    17. clear -> full reset, later attachments still work (generation token)
 */
 const fs = require("fs");
 const path = require("path");
@@ -223,12 +227,26 @@ function makeEl(id) {
   };
   el.addEventListener = (t, fn) => { (el._listeners[t] = el._listeners[t] || []).push(fn); };
   el.fire = (t, ev) => { (el._listeners[t] || []).slice().forEach(fn => fn.call(el, ev || {})); };
-  el.appendChild = c => { el._kids.push(c); return c; };
-  el.focus = () => {}; el.select = () => {}; el.remove = () => {}; el.click = () => {};
+  el.appendChild = c => {
+    if (c && c.parentNode && c.parentNode.removeChild) c.parentNode.removeChild(c);
+    if (c) c.parentNode = el;
+    el._kids.push(c);
+    return c;
+  };
+  el.removeChild = c => {
+    const i = el._kids.indexOf(c);
+    if (i >= 0) el._kids.splice(i, 1);
+    if (c) c.parentNode = null;
+    return c;
+  };
+  el.focus = () => {}; el.select = () => {}; el.remove = () => { if (el.parentNode && el.parentNode.removeChild) el.parentNode.removeChild(el); }; el.click = () => {};
   Object.defineProperty(el, "innerHTML", {
     // DOM semantics: after setting textContent, innerHTML returns that text
     get: () => (el._html !== "" ? el._html : el._text),
-    set: v => { el._html = String(v); if (el._html === "") el._kids.length = 0; },
+    set: v => {
+      el._html = String(v);
+      if (el._html === "") { el._kids.forEach(c => { if (c) c.parentNode = null; }); el._kids.length = 0; }
+    },
   });
   Object.defineProperty(el, "textContent", { get: () => el._text, set: v => { el._text = String(v); } });
   return el;
@@ -376,6 +394,50 @@ async function settle(label) {
   assert(/IMAGE PARSED/.test(status()), `drop: offline OCR parsed (status: "${status()}")`);
   assert(/QR/.test(outText()) && /1059/.test(outText()), "drop: output contains QR 1059");
   assert(thumbs() === 1, `drop: one thumbnail rendered (${thumbs()})`);
+
+  console.log("\n=== Screenshot thumbnail review and modal remove ===");
+  const firstThumb = el("thumbs")._kids[0];
+  const firstOpen = firstThumb && firstThumb._kids[0];
+  assert(!!firstOpen && firstThumb._kids.length === 2, "reviewable thumbnail has separate open and red remove controls");
+  firstOpen.fire("click");
+  assert(!el("attachmentReviewModal").classList.contains("hidden"), "thumbnail click opens the screenshot review modal");
+  assert(/qatar\.png/.test(el("attachmentReviewMeta")._text), "review modal identifies the selected screenshot");
+  assert(!!el("attachmentReviewImage").src, "review modal receives an image source");
+  el("attachmentReviewRemove").fire("click");
+  assert(el("attachmentReviewModal").classList.contains("hidden"), "modal remove closes the larger review");
+  assert(thumbs() === 0 && outText() === "", "modal remove deletes only that screenshot and clears its result");
+  assert(/SCREENSHOT REMOVED/.test(status()), `modal remove reports completion (status: "${status()}")`);
+
+  console.log("\n=== Screenshot thumbnail red × direct remove ===");
+  drop([fakeFile({ name: "direct_remove.png", type: "image/png", pixels: qrPixels })]);
+  await waitUntil(() => /IMAGE PARSED|CACHED IMAGE|FAILED/.test(status()));
+  const directThumb = el("thumbs")._kids[0];
+  const directRemove = directThumb && directThumb._kids[1];
+  directRemove.fire("click", { preventDefault() {}, stopPropagation() {} });
+  assert(thumbs() === 0 && outText() === "", "small thumbnail × removes the screenshot without opening review");
+  assert(el("attachmentReviewModal").classList.contains("hidden"), "thumbnail × does not leave a review modal open");
+
+  console.log("\n=== Pending screenshot red × cancellation ===");
+  drop([fakeFile({ name: "cancel_before_decode.png", type: "image/png", pixels: qrPixels, decodeDelayMs: 250 })]);
+  await new Promise(r => setTimeout(r, 25));
+  const pendingThumb = el("thumbs")._kids[0];
+  assert(!!pendingThumb, "loading screenshot exposes its remove control immediately");
+  pendingThumb._kids[1].fire("click", { preventDefault() {}, stopPropagation() {} });
+  assert(thumbs() === 0, "pending screenshot disappears immediately after its red × click");
+  await waitUntil(() => /SCREENSHOT REMOVED/.test(status()) && !/UPDATING/i.test(status()), 1000);
+  assert(/SCREENSHOT REMOVED/.test(status()) && outText() === "", `pending screenshot never repaints after removal (status: "${status()}")`);
+
+  console.log("\n=== Hanging native TextDetector falls back without a permanent spinner ===");
+  const timeoutPixels = { w: qrPixels.w, h: qrPixels.h, rgba: new Uint8ClampedArray(qrPixels.rgba) };
+  timeoutPixels.rgba[0] = 254; // avoids the local image cache while preserving the ticket text
+  sandbox.TextDetector = class { detect() { return new Promise(() => {}); } };
+  const timeoutStarted = Date.now();
+  drop([fakeFile({ name: "native_timeout.png", type: "image/png", pixels: timeoutPixels })]);
+  await waitUntil(() => /IMAGE PARSED|FAILED|ATTACHMENT NOT READ/.test(status()), 5000);
+  const nativeElapsed = Date.now() - timeoutStarted;
+  assert(/IMAGE PARSED/.test(status()) && /1059/.test(outText()), `hung TextDetector falls back to OCRAD (status: "${status()}")`);
+  assert(nativeElapsed >= 750 && nativeElapsed < 5000, `native OCR deadline bounds the wait (${nativeElapsed}ms)`);
+  sandbox.TextDetector = undefined;
 
   console.log("\n=== Attachment pipeline: two images in one drop keep order ===");
   clearAll();
