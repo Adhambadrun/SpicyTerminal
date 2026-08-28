@@ -422,14 +422,39 @@ function cabinInRegion(region){
 
 /* ---------------- GDS row scanner (port of _try_gds_lines) ---------------- */
 function _gdsClock(tok){
-  var m=/^(\d{3,4})([APNM])$/.exec(tok.toUpperCase());
-  if(!m) return null;
-  var num=m[1], hh=parseInt(num.slice(0,num.length-2),10), mm=parseInt(num.slice(-2),10);
-  if(hh<1||hh>12||mm>=60) return null;
-  var ap=m[2];
-  if(ap==="N") return (hh===12&&mm===0)?[12,0]:null;
-  if(ap==="M") return (hh===12&&mm===0)?[0,0]:null;
-  return [hh%12+(ap==="P"?12:0), mm];
+  if(!tok) return null;
+  var t=tok.toUpperCase().replace(/[.\u00a0]/g,"").replace(/[^0-9A-Z]/g,"");
+  // Exact GDS clock: 3-4 digits + meridian marker (HMM[AP] / HHMM[AP] / noon / midnight)
+  var m=/^(\d{3,4})([APNM])$/.exec(t);
+  if(m){
+    var num=m[1], hh=parseInt(num.slice(0,num.length-2),10), mm=parseInt(num.slice(-2),10);
+    if(hh<1||hh>12||mm>=60) return null;
+    var ap=m[2];
+    if(ap==="N") return (hh===12&&mm===0)?{h:12,m:0,marker:"N"}:null;
+    if(ap==="M") return (hh===12&&mm===0)?{h:0,m:0,marker:"M"}:null;
+    return {h:hh%12+(ap==="P"?12:0), m:mm, marker:ap};
+  }
+  // Repair pass: tolerate OCR corruption in the minute block and a missing marker.
+  // GDS clock layout is hh(1-2) + mm(2) [+ optional meridian].  Common OCR slips:
+  //   5 -> S  ("135A" read as "13SA"), a stray dot ("1.35A"), or a dropped marker ("135").
+  if(t.length>=3 && t.length<=5){
+    var marker="", body=t;
+    if(/[APNM]$/.test(t)){ marker=t.charAt(t.length-1); body=t.slice(0,-1); }
+    if(body.length>=3 && body.length<=4){
+      var hhS=body.slice(0,body.length-2).replace(/[OQ]/g,"0").replace(/[IL]/g,"1");
+      var mmS=body.slice(body.length-2)
+        .replace(/[OQ]/g,"0").replace(/[S]/g,"5").replace(/[IZL]/g,"1")
+        .replace(/[B]/g,"8").replace(/[G]/g,"9").replace(/[T]/g,"7");
+      var hh=parseInt(hhS,10), mm=parseInt(mmS,10);
+      if(!isNaN(hh)&&!isNaN(mm)&&hh>=0&&hh<=23&&mm>=0&&mm<60){
+        if(marker==="N") return {h:12,m:mm,marker:"N"};
+        if(marker==="M") return {h:0,m:mm,marker:"M"};
+        if(marker==="A"||marker==="P") return {h:hh%12+(marker==="P"?12:0),m:mm,marker:marker};
+        return {h:hh%12,m:mm,marker:null}; // markerless -> resolved by caller from arrival
+      }
+    }
+  }
+  return null;
 }
 function _cabinNear(lines, li){
   var offs=[0,1,2,-1,3], j, m;
@@ -498,7 +523,21 @@ function tryGdsLines(text, used){
     if(!am) continue;
     var ac=_gdsClock(am[1]);
     if(!ac) continue;
-    var shift=am[2]?parseInt(am[2],10):0;          // "-1" = lands the previous day (eastbound across the date line)
+    var shift=am[2]?parseInt(am[2],10):0;
+    // OCR sometimes drops the departure meridian (e.g. "135A" -> "135").  Inherit
+    // it from the arrival clock of the same row; if both are markerless and the
+    // flight clearly crosses midnight, treat an early departure as PM.
+    if(dc.marker===null){
+      var _m = (ac.marker==="A"||ac.marker==="P") ? ac.marker
+              : (ac.marker==="N") ? "N" : (ac.marker==="M") ? "M" : "A";
+      dc.marker = _m;
+      if(_m==="P") dc.h=(dc.h%12)+12;          // recompute 24h after inheriting meridian
+      else if(_m==="A") dc.h=dc.h%12;
+      else if(_m==="N"){ dc.h=12; dc.m=0; }
+      else if(_m==="M"){ dc.h=0; dc.m=0; }
+      if(dc.marker==="A" && shift>=1 && dc.h<12){ dc.marker="P"; dc.h=(dc.h%12)+12; }
+    }
+    // "-1" = lands the previous day (eastbound across the date line)
     i++;
     if(i<toks.length && /^[\¥+‡]?(-1|[0-3])$/.test(toks[i])){
       shift=parseInt(toks[i].replace(/[\¥+‡]/g,""),10); i++; }
@@ -525,8 +564,8 @@ function tryGdsLines(text, used){
     seg.airline=al; seg.flight_no=flt;
     seg.date_ddmmm=makeDate(day,mon);
     seg.orig=orig; seg.dest=dest;
-    seg.dep_time=/N$/i.test(dct)?"1200N":fmtClock(dc[0],dc[1]);   // noon stays N (1200N, not 1200P)
-    seg.arr_time=/N$/.test(am[1])?"1200N":fmtClock(ac[0],ac[1]);
+    seg.dep_time=(dc.marker==="N")?"1200N":fmtClock(dc.h,dc.m);   // noon stays N (1200N, not 1200P)
+    seg.arr_time=(ac.marker==="N")?"1200N":fmtClock(ac.h,ac.m);
     seg.arr_day_shift=Math.min(Math.max(shift,-1),3);
     seg.booking_class=cls;
     seg.aircraft=acft||"???";
@@ -540,7 +579,7 @@ function tryGdsLines(text, used){
       var offO=utcOffset(orig,fdate), offD=utcOffset(dest,fdate), duration;
       if(offO===null||offD===null){ duration=0; }
       else{
-        var rawMin=(ac[0]*60+ac[1]-offD*60)-(dc[0]*60+dc[1]-offO*60);
+        var rawMin=(ac.h*60+ac.m-offD*60)-(dc.h*60+dc.m-offO*60);
         duration=rawMin+1440*seg.arr_day_shift;
         if(duration<=0) duration=rawMin+1440;
       }
