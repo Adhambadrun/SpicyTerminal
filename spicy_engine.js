@@ -89,11 +89,25 @@ var IATA_ACFT_CODES={}; Object.keys(AIRCRAFT).forEach(function(k){IATA_ACFT_CODE
 var _AC_KEYS_BY_LEN=Object.keys(AIRCRAFT).sort(function(a,b){return b.length-a.length;});
 function scanAircraft(regionUpper){
   var sq=squashAircraft(regionUpper);
-  for(var i=0;i<_AC_KEYS_BY_LEN.length;i++){var key=_AC_KEYS_BY_LEN[i];
-    if(key.length>=3 && sq.indexOf(key)>=0) return AIRCRAFT[key];}
+  var hit=_scanAllAircraft(sq);
+  if(hit) return hit;
   var m=/EMBRAER\s+E?(\d{3})\s*-?\s*(E2)?/.exec(regionUpper);
   if(m){var fam="E"+m[1]+(m[2]?"-E2":""); if(AIRCRAFT[fam]) return AIRCRAFT[fam];}
   return null;
+}
+// One-pass scan: single precompiled alternation (longest-first) instead of
+// ~700 indexOf sweeps per call. Picks the longest key found anywhere,
+// matching the old longest-key-wins semantics.
+var _AC_SCAN_RE_G=new RegExp(_AC_KEYS_BY_LEN.filter(function(k){return k.length>=3;})
+  .map(function(k){return k.replace(/[.*+?^${}()|[\]\\\/-]/g,"\\$&");}).join("|"),"g");
+function _scanAllAircraft(sq){
+  _AC_SCAN_RE_G.lastIndex=0;
+  var best=null,m;
+  while((m=_AC_SCAN_RE_G.exec(sq))!==null){
+    if(best===null||m[0].length>best.length) best=m[0];
+    _AC_SCAN_RE_G.lastIndex=m.index+1;   // overlap-safe: advance one char, not past the match
+  }
+  return best?AIRCRAFT[best]:null;
 }
 function inferAircraft(airline, flightNo, orig, dest, distanceMi){
   var code=FLIGHT_EQUIPMENT[airline+"|"+String(flightNo)];
@@ -361,7 +375,7 @@ function Seg(){
 function renderSegment(s){
   var cls=(s.booking_class||CABIN_DEFAULT_CLASS[s.cabin]||"Y").toUpperCase();
   var arr=s.arr_time;
-  if(s.arr_day_shift>=1) arr=arr+"\u00a5"+s.arr_day_shift;
+  if(s.arr_day_shift>=1||s.arr_day_shift<0) arr=arr+"\u00a5"+s.arr_day_shift;
   var line1=[String(s.seg),s.airline,s.flight_no,s.date_ddmmm,s.orig,s.dest,
     s.dep_time,arr,cls,s.aircraft||"???",s.flight_time||"0.00",
     s.distance?String(s.distance):"0","N"].join(" ");
@@ -416,7 +430,11 @@ function _cabinNear(lines, li){
       for(var c=0;c<CABIN_RES.length;c++) if(CABIN_RES[c][1].test(lines[j])) return CABIN_RES[c][0];}}
   return "";
 }
-function fullRe(reStr,tok){ return new RegExp("^(?:"+reStr+")$").exec(tok); }
+var _fullReCache={};
+function fullRe(reStr,tok){
+  var re=_fullReCache[reStr]||(_fullReCache[reStr]=new RegExp("^(?:"+reStr+")$"));
+  return re.exec(tok);
+}
 
 function tryGdsLines(text, used){
   var lines=text.replace(/\u00a0/g," ").replace(/\u2007/g," ").replace(/\u202f/g," ").split("\n");
@@ -425,7 +443,7 @@ function tryGdsLines(text, used){
     var toks=lines[li].split(/\s+/).filter(function(t){return t.length;});
     if(toks.length<7) continue;
     var i=0;
-    if(i+1<toks.length && /^\d{1,2}$/.test(toks[i]) &&
+    if(i+1<toks.length && /^\d{1,3}$/.test(toks[i]) &&
        fullRe(AIRLINE_TOK+"\\d{0,4}[A-Z]?", (toks[i+1]||"").toUpperCase().replace(/\*/g,""))) i++;
     var al=null,flt=null,flt_cls=null,g;
     g=new RegExp("^("+AIRLINE_TOK+")(\\d{1,4})([A-Z])?$").exec((toks[i]||"").toUpperCase().replace(/\*/g,""));
@@ -463,13 +481,13 @@ function tryGdsLines(text, used){
     var dct=(i<toks.length)?toks[i]:"";                       // raw dep clock token (noon "N" marker)
     var dc=dct?_gdsClock(dct):null;
     if(!dc) continue; i++;
-    var am=(i<toks.length)?/^(\d{3,4}[APNM])[\¥+‡]?(\d)?$/.exec(toks[i].toUpperCase()):null;
+    var am=(i<toks.length)?/^(\d{3,4}[APNM])[\¥+‡]?(-?\d)?$/.exec(toks[i].toUpperCase()):null;
     if(!am) continue;
     var ac=_gdsClock(am[1]);
     if(!ac) continue;
-    var shift=am[2]?parseInt(am[2],10):0;
+    var shift=am[2]?parseInt(am[2],10):0;          // "-1" = lands the previous day (eastbound across the date line)
     i++;
-    if(i<toks.length && /^[\¥+‡]?([0-3])$/.test(toks[i])){
+    if(i<toks.length && /^[\¥+‡]?(-1|[0-3])$/.test(toks[i])){
       shift=parseInt(toks[i].replace(/[\¥+‡]/g,""),10); i++; }
     if(i<toks.length){                                        // arrival date -> overnight shift ("945A  07FEB")
       var ad=/^(\d{1,2})([A-Z]{3})(?:\d{2,4})?$/.exec(toks[i].toUpperCase());
@@ -496,7 +514,7 @@ function tryGdsLines(text, used){
     seg.orig=orig; seg.dest=dest;
     seg.dep_time=/N$/i.test(dct)?"1200N":fmtClock(dc[0],dc[1]);   // noon stays N (1200N, not 1200P)
     seg.arr_time=/N$/.test(am[1])?"1200N":fmtClock(ac[0],ac[1]);
-    seg.arr_day_shift=Math.min(Math.max(shift,0),3);
+    seg.arr_day_shift=Math.min(Math.max(shift,-1),3);
     seg.booking_class=cls;
     seg.aircraft=acft||"???";
     seg.cabin=_cabinNear(lines,li)||CLASS_TO_CABIN[cls]||"ECONOMY";
@@ -635,24 +653,44 @@ function mergeHiddenStops(segs){
   return out;
 }
 
-/* ---------------- chronological sort (v3.3) ---------------- */
+/* ---------------- chronological sort (v3.4.1) ---------------- */
 function sortChronologically(segs){
   if(segs.length<2) return segs;
   var mons=segs.map(function(s){var p=_ddmmmParts(s.date_ddmmm);return p?p[1]:0;});
   var have=mons.filter(function(m){return m;});
   var wrap=have.length && (Math.max.apply(null,have)-Math.min.apply(null,have)>6);
-  return segs.map(function(s,idx){return [idx,s];}).sort(function(A,B){
-    var ka=keyOf(A[1],A[0],wrap), kb=keyOf(B[1],B[0],wrap);
-    return ka-kb;
-  }).map(function(t){return t[1];});
-  function keyOf(s,idx,wrap){
+  // Year-turnover pivot: the "trip year" starts at the month that follows the
+  // largest circular gap between booked months (e.g. DEC..MAY -> gap MAY->DEC,
+  // so DEC starts the trip and JAN-MAY belong to the following year). The old
+  // hardcoded "m<=4" pivot broke any itinerary returning in MAY or JUN.
+  var pivot=13;
+  if(wrap){
+    var uniq=[]; have.forEach(function(m){if(uniq.indexOf(m)<0)uniq.push(m);});
+    uniq.sort(function(a,b){return a-b;});
+    var bestGap=-1;
+    for(var i=0;i<uniq.length;i++){
+      var nxt=uniq[(i+1)%uniq.length]+(i===uniq.length-1?12:0);
+      var gap=nxt-uniq[i];
+      if(gap>bestGap){bestGap=gap;pivot=uniq[(i+1)%uniq.length];}
+    }
+  }
+  // Precompute one key per segment (utcOffset -> dstActive walks calendar
+  // days; never recompute it inside the comparator).
+  var keys=segs.map(function(s,idx){
     var p=_ddmmmParts(s.date_ddmmm);
     if(!p) return 1e9+idx/1e6;
-    var d=p[0],m=p[1];
-    if(wrap&&m<=4) m+=12;
+    var d=p[0],m=p[1],yAdd=0;
+    if(wrap&&m<pivot){m+=12;yAdd=1;}
     var c=_clockMin(s.dep_time); if(c===null)c=0;
+    // Compare in UTC when the departure airport is known: a 14MAY 1245A HKG
+    // departure really happens BEFORE a 13MAY 1115P YVR departure.
+    var off=utcOffset(s.orig,{y:_TODAY.y+yAdd,m:p[1],d:Math.min(d,28)});
+    if(off!==null) c-=off*60;
     return (m*31+d)*1440+c+idx/1e6;
-  }
+  });
+  return segs.map(function(s,idx){return idx;})
+    .sort(function(a,b){return keys[a]-keys[b];})
+    .map(function(idx){return segs[idx];});
 }
 
 /* ---------------- prose / Google-Flights path ---------------- */

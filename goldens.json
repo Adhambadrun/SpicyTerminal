@@ -111,5 +111,17 @@
   "text": "Los Angeles (LAX) to London (LHR) on Wed, Sep 16\n\nAA\nLos Angeles (LAX) to London (LHR)\n\nWed, Sep 16\n\nIB 4237 (Operated by American Airlines)\n\n6:05 PM\nto12:45 PM+1\n(10h 40m)\n\nBoeing 777-300ER | Business Class (I)\n\n\nBA\nBritish Airways\n\n10:30 AM\n\nSep 21, 2026\n\n1:50 PM\n\nSep 21, 2026\n\n11h 20m\n\nLHR to LAX\n\nLondon (LHR) to Los Angeles (LAX) on Mon, Sep 21\n\nBA\nLondon (LHR) to Los Angeles (LAX)\n\nMon, Sep 21\n\nAA 6955 (Operated by British Airways)\n\n10:30 AM\nto1:50 PM\n(11h 20m)\n\nBoeing 777-300ER | Business Class (I)",
   "output": "1 IB 4237 16SEP LAX LHR 605P 1245P¥1 I 77W 10.40 5443 N\nDEP-LOS ANGELES INTL\nARR-LONDON HEATHROW\nCABIN-BUSINESS\n\n2 AA 6955 21SEP LHR LAX 1030A 150P I 77W 11.20 5443 N\nDEP-LONDON HEATHROW\nARR-LOS ANGELES INTL\nCABIN-BUSINESS\n\n<--additional-->\n1 IB 4237I 16SEP\n2 AA 6955I 21SEP",
   "warnings": []
+ },
+ "dec_may_year_wrap": {
+  "text": "1   B6 603   V 29DEC   JFK YVR   624P 1039P\n2   CX 865   I 30DEC   YVR HKG   105A 625A¥1\n3   CX 139   I 31DEC   HKG SYD   845A 850P\n4   CX 100   I 13MAY   SYD HKG   205P 930P\n5   CX 888   I 14MAY   HKG YVR   1245A 925P-1\n6   B6 604   O 13MAY   YVR JFK   1115P 748A¥1",
+  "output": "1 B6 603 29DEC JFK YVR 624P 1039P V 738 7.15 2442 N\nDEP-JOHN F KENNEDY INTL\nARR-VANCOUVER INTL\nCABIN-ECONOMY\n\n2 CX 865 30DEC YVR HKG 105A 625A¥1 I 359 13.20 6381 N\nDEP-VANCOUVER INTL\nARR-HONG KONG INTL\nCABIN-BUSINESS\n\n3 CX 139 31DEC HKG SYD 845A 850P I 359 9.05 4594 N\nDEP-HONG KONG INTL\nARR-SYDNEY KINGSFORD SMITH\nCABIN-BUSINESS\n\n4 CX 100 13MAY SYD HKG 205P 930P I 359 9.25 4594 N\nDEP-SYDNEY KINGSFORD SMITH\nARR-HONG KONG INTL\nCABIN-BUSINESS\n\n5 CX 888 14MAY HKG YVR 1245A 925P¥-1 I 359 11.40 6381 N\nDEP-HONG KONG INTL\nARR-VANCOUVER INTL\nCABIN-BUSINESS\n\n6 B6 604 13MAY YVR JFK 1115P 748A¥1 O 738 5.33 2442 N\nDEP-VANCOUVER INTL\nARR-JOHN F KENNEDY INTL\nCABIN-BUSINESS\n\n<--additional-->\n1 B6 603V 29DEC\n2 CX 865I 30DEC\n3 CX 139I 31DEC\n4 CX 100I 13MAY\n5 CX 888I 14MAY\n6 B6 604O 13MAY",
+  "warnings": [
+   "S1: aircraft inferred 738 (B6 603, route estimate)",
+   "S2: aircraft inferred 359 (CX 865, route estimate)",
+   "S3: aircraft inferred 359 (CX 139, route estimate)",
+   "S4: aircraft inferred 359 (CX 100, route estimate)",
+   "S5: aircraft inferred 359 (CX 888, route estimate)",
+   "S6: aircraft inferred 738 (B6 604, route estimate)"
+  ]
  }
 }
