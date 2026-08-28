@@ -1,4 +1,8 @@
 [build]
-  publish = "."
-# Single static file: index.html needs no build step.
-# Deploy: drag the web/ folder (or just index.html) onto https://app.netlify.com/drop
+  command = "npm run build"
+  publish = "public"
+
+# The build emits the single-file app to public/index.html so deploys ship
+# only the app itself — never the repo's screenshots and source files.
+# Drag-and-drop deploy: https://app.netlify.com/drop still works with the
+# generated index.html alone.

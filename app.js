@@ -429,7 +429,10 @@ function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
   var cv = document.createElement("canvas");
   cv.width = targetW;
   cv.height = targetH;
-  var ctx = cv.getContext("2d");
+  // willReadFrequently keeps the backing store in CPU memory: getImageData
+  // below is 5-10x faster than reading back a GPU texture.  Browsers without
+  // the option simply ignore it.
+  var ctx = cv.getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(srcCanvas, 0, 0, targetW, targetH);
@@ -457,28 +460,24 @@ function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
   // If mode === "auto", dark background (bgLum < 128) -> invert so text is black on white.
   var isDark = (mode === "invert") ? true : (mode === "normal") ? false : (bgLum < 128);
 
-  // 2. Grayscale & conditional inversion
-  var grays = new Uint8ClampedArray(targetW * targetH);
-  var p = 0;
-  for (var i = 0; i < len; i += 4) {
-    var r = data[i], g = data[i+1], b = data[i+2];
-    if (isDark) { r = 255 - r; g = 255 - g; b = 255 - b; }
-    var gl = (r * 299 + g * 587 + b * 114) / 1000;
-    grays[p++] = gl;
-  }
-
   if (mode === "gray") {
+    // Contrast-stretched grayscale (no hard threshold).
     var range = Math.max(1, maxLum - minLum);
-    p = 0;
+    var p = 0;
     for (var i = 0; i < len; i += 4) {
-      var gNorm = Math.round(((grays[p++] - minLum) / range) * 255);
+      var gl = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000;
+      if (isDark) gl = 255 - gl;
+      var gNorm = Math.round(((gl - minLum) / range) * 255);
       data[i] = gNorm; data[i+1] = gNorm; data[i+2] = gNorm; data[i+3] = 255;
     }
   } else {
+    // Fused grayscale + conditional inversion + threshold in a single pass
+    // over the pixels (the separate gray buffer write is eliminated).
     var thresh = thresholdVal || 150;
-    p = 0;
+    var invCut = 255 - thresh;
     for (var i = 0; i < len; i += 4) {
-      var val = grays[p++] > thresh ? 255 : 0;
+      var gl = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000;
+      var val = (isDark ? gl < invCut : gl > thresh) ? 255 : 0;
       data[i] = val; data[i+1] = val; data[i+2] = val; data[i+3] = 255;
     }
   }
@@ -554,9 +553,25 @@ function parseImageDirect(im) {
           { mode: "gray", thresh: 0, label: "grayscale" }
         ];
         var bestRaw = "";
-        for (var pIdx = 0; pIdx < passes.length; pIdx++) {
+        var pIdx = 0;
+        function step() {
+          if (settled) return;
+          if (pIdx >= passes.length) {
+            if (bestRaw.trim().length > 5) {
+              var cleanedFinal = cleanOcrText(bestRaw);
+              var resFinal = window.SpicyEngine.parse(cleanedFinal);
+              if (resFinal[0] && resFinal[0].length > 0) {
+                finish({ segs: resFinal[0], warns: resFinal[1], text: cleanedFinal,
+                  rawOcr: bestRaw, method: "OCRAD (best text)", dur: elapsed() });
+                return;
+              }
+            }
+            finish({ segs: [], warns: ["Could not detect flights"], text: bestRaw,
+              method: "OCRAD (failed)", dur: elapsed() });
+            return;
+          }
+          var cfg = passes[pIdx++];
           try {
-            var cfg = passes[pIdx];
             var procCv = preprocessCanvasForOcr(srcCv, cfg.mode, cfg.thresh);
             var raw = window.OCRAD(procCv) || "";
             if (raw.trim().length > bestRaw.trim().length) bestRaw = raw;
@@ -570,19 +585,12 @@ function parseImageDirect(im) {
               }
             }
           } catch (passErr) { /* try the next preprocessing mode */ }
+          // A difficult screenshot can need several full-frame OCR passes.
+          // Yield once between them so the page keeps painting while the
+          // hard work continues.
+          setTimeout(step, 0);
         }
-
-        if (bestRaw.trim().length > 5) {
-          var cleanedFinal = cleanOcrText(bestRaw);
-          var resFinal = window.SpicyEngine.parse(cleanedFinal);
-          if (resFinal[0] && resFinal[0].length > 0) {
-            finish({ segs: resFinal[0], warns: resFinal[1], text: cleanedFinal,
-              rawOcr: bestRaw, method: "OCRAD (best text)", dur: elapsed() });
-            return;
-          }
-        }
-        finish({ segs: [], warns: ["Could not detect flights"], text: bestRaw,
-          method: "OCRAD (failed)", dur: elapsed() });
+        step();
       }
     }
 
@@ -597,7 +605,7 @@ function parseImageDirect(im) {
       var srcCv = document.createElement("canvas");
       srcCv.width = img.naturalWidth || img.width;
       srcCv.height = img.naturalHeight || img.height;
-      var ctx = srcCv.getContext("2d");
+      var ctx = srcCv.getContext("2d", { willReadFrequently: true });
       if (!ctx) { finish({ segs: [], warns: ["Canvas is not available"], text: "", method: "none", dur: 0 }); return; }
       ctx.drawImage(img, 0, 0);
       begin(srcCv);
@@ -767,21 +775,28 @@ function fastDownscale(file, maxSide, quality) {
 }
 
 function addThumb(im, slot) {
-  var img = new Image();
-  img.onload = function() {
-    var ts = Math.min(26 / img.height, 56 / img.width);
+  // Paint straight from the retained downscale canvas: no second full-size
+  // base64 decode, so thumbnails appear with zero extra image work.
+  function paintFrom(src, w, h) {
+    var ts = Math.min(26 / h, 56 / w);
     var th = document.createElement("canvas");
-    th.width = Math.max(1, Math.round(img.width * ts));
-    th.height = Math.max(1, Math.round(img.height * ts));
+    th.width = Math.max(1, Math.round(w * ts));
+    th.height = Math.max(1, Math.round(h * ts));
     var ctx = th.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(img, 0, 0, th.width, th.height);
+    ctx.drawImage(src, 0, 0, th.width, th.height);
     var ti = document.createElement("img");
     ti.src = th.toDataURL("image/jpeg", 0.5);
     ti.alt = fileName(im);
     ti.title = fileName(im) + " attached";
     $("thumbs").appendChild(ti);
-  };
+  }
+  if (im.canvas && im.canvas.width && im.canvas.height) {
+    paintFrom(im.canvas, im.canvas.width, im.canvas.height);
+    return;
+  }
+  var img = new Image();
+  img.onload = function() { paintFrom(img, img.width || img.naturalWidth, img.height || img.naturalHeight); };
   img.src = "data:" + im.mime + ";base64," + im.b64;
 }
 function addFileBadge(file, kind) {
@@ -867,7 +882,10 @@ function renderAttachmentResults(results, token, batch, started) {
     lastOut = outText;
     out.innerHTML = esc(outText);
     var ms = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - started);
-    setStatus("IMAGE PARSED — " + allSegs.length + " seg(s) (" + ms + "ms)" + (warns.length ? "  ·  " + warns.join(" · ") : ""), warns.length > 0);
+    // An attached PDF cannot be read offline; say so instead of letting the
+    // user assume it was part of this result.
+    var pdfNote = (readyDocuments().length && !gemKey()) ? "  ·  PDF needs Gemini (AI AUTO)" : "";
+    setStatus("IMAGE PARSED — " + allSegs.length + " seg(s) (" + ms + "ms)" + (warns.length ? "  ·  " + warns.join(" · ") : "") + pdfNote, warns.length > 0);
     var imgs = readyImages();
     if (imgs.length === 1 && imgs[0]._hash) imgCacheSet(imgs[0]._hash, outText);
     recordStat("img_direct", ms);
@@ -949,20 +967,36 @@ function processAttachments(arr, kinds, token, batch) {
   if (textFiles.length) tasks.push(appendTextFiles(textFiles, token));
   if (pdfJobs.length) tasks.push(Promise.all(pdfJobs).then(function() {
     if (token !== attachmentVersion || pendingDocumentJobs > 0) return;
-    if (readyImages().length) {
-      if (pendingImageJobs === 0) convertImageAttachments(latestAttachmentBatch);
-    } else if (gemKey()) {
-      convertAi(true, "PDF attachment");
-    } else {
-      setStatus("PDF ATTACHED — AI AUTO needs a Gemini key", true);
-    }
+    // Images may still be decoding.  Their completion path owns the combined
+    // conversion so AI is never fired with only half of the attachments.
+    if (pendingImageJobs > 0) return;
+    finishAttachmentConversion(token);
   }));
   if (imageJobs.length) tasks.push(Promise.all(imageJobs).then(function() {
-    if (token === attachmentVersion && pendingImageJobs === 0) convertImageAttachments(latestAttachmentBatch);
+    if (token === attachmentVersion && pendingImageJobs === 0) finishAttachmentConversion(token);
   }));
   var unsupported = arr.filter(function(_, i) { return kinds[i] === "unsupported"; });
   if (unsupported.length) setStatus("UNSUPPORTED ATTACHMENT — " + fileName(unsupported[0]), true);
   if (!tasks.length && !unsupported.length) setStatus("NO READABLE ATTACHMENTS", true);
+}
+// Single decision point once every attachment of the current generation has
+// finished loading.  Keeps image+PDF combos deterministic: exactly one
+// conversion, with every attachment included.
+function finishAttachmentConversion(token) {
+  if (token !== attachmentVersion) return;
+  var imgs = readyImages(), docs = readyDocuments();
+  if (imgs.length) {
+    // Offline OCR cannot read PDFs.  When one is attached and a key exists,
+    // send images and documents to AI together instead of dropping the PDF
+    // from an offline-only render.
+    if (docs.length && gemKey()) { convertAi(true, "image+PDF attachment"); return; }
+    convertImageAttachments(latestAttachmentBatch);
+    return;
+  }
+  if (docs.length) {
+    if (gemKey()) convertAi(true, "PDF attachment");
+    else setStatus("PDF ATTACHED — AI AUTO needs a Gemini key", true);
+  }
 }
 function handleFiles(fileList) {
   var arr = Array.prototype.slice.call(fileList || []);
@@ -1043,8 +1077,10 @@ function convert(auto) {
 
   // Images are parsed together, in attachment order. This fixes the old
   // first-image-only behavior and prevents concurrent OCR callbacks from
-  // overwriting each other.
+  // overwriting each other.  A PDF rides along through the AI path when a
+  // key exists, because offline OCR cannot read it.
   if (hasImg) {
+    if (docs.length && gemKey()) { convertAi(auto, "image+PDF attachment"); return; }
     convertImageAttachments(latestAttachmentBatch);
     return;
   }

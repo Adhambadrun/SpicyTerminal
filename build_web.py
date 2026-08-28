@@ -2,7 +2,8 @@
 """build_web.py — assemble the single-file Netlify-ready index.html.
 
 Repo layout:
-  index.html                    <- emitted here (repo root, build artifact)
+  index.html                    <- emitted here (repo root, offline copy)
+  public/index.html             <- emitted here (deploy output: Vercel/Netlify)
   logo.png                      -> tab favicon tile (resized to 128x128)
   wordmark_alpha.png            -> transparent-bg wordmark (header + welcome)
   index_template.html           -> page template with __PLACEHOLDER__ slots
@@ -71,3 +72,11 @@ html = (tpl.replace("__LOGO_MARK_B64__", mark)
 dst = SRC / "index.html"
 dst.write_text(html, encoding="utf-8")
 print(f"Built {dst}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
+
+# Deploy output.  public/ is the default output directory on Vercel and the
+# publish directory in netlify.toml, so a `git push` deploy ships ONLY the
+# single-file app — never the repo's screenshots, sources or archives.
+pub = SRC / "public"
+pub.mkdir(exist_ok=True)
+(pub / "index.html").write_text(html, encoding="utf-8")
+print(f"Built {pub / 'index.html'}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
