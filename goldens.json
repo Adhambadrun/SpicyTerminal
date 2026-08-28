@@ -94,8 +94,8 @@
     "warnings": [
       "S1: aircraft inferred E75 (AA 5021, flight table)",
       "S2: aircraft inferred 738 (AA 1727, route estimate)",
-      "S3: aircraft inferred 388 (EK 204, route estimate)",
-      "S4: aircraft inferred 388 (EK 763, route estimate)",
+      "S3: aircraft inferred 388 (EK 204, flight table)",
+      "S4: aircraft inferred 388 (EK 763, route database)",
       "S5: aircraft inferred 738 (FA 250, route estimate)",
       "S6: aircraft inferred 738 (FA 251, route estimate)",
       "S7: aircraft inferred 738 (FA 536, route estimate)",
