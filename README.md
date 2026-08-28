@@ -24,17 +24,26 @@ hallucinations, no re-rolling the dice.
 
 ## Deploy
 
-The whole app is one static file: `index.html`.
+The whole app is one static file, built by `npm run build` into
+`public/index.html` (an offline copy is also written to the repo root).
 
-- **Netlify Drop**: drag this folder onto <https://app.netlify.com/drop>
-- **Netlify from Git**: connect this repo, no build command, publish directory `.`
+- **Vercel**: import this repo — `vercel.json` already sets the build command
+  and output directory, so every `git push` to `main` deploys automatically.
+- **Netlify from Git**: connect this repo — `netlify.toml` builds and
+  publishes `public/`.
+- **Netlify Drop**: drag the generated `index.html` onto <https://app.netlify.com/drop>
+
+Only the single built file is ever deployed; repository screenshots, sources
+and archives are never shipped.
 
 ## Structure
 
 | file | role |
 |---|---|
-| `index.html` | the app (everything inlined, build artifact) |
-| `netlify.toml` | publish config |
+| `index.html` | the app (everything inlined, offline build artifact) |
+| `public/` | deploy output (built, git-ignored) |
+| `vercel.json` | Vercel build + output-directory config |
+| `netlify.toml` | Netlify build + publish config |
 | `ocrad.js` | pure offline OCR engine bundled locally |
 | `app.js` | UI logic (offline image parser, auto-convert, AI mistake detector & self-learning) |
 | `spicy_engine.js` | the conversion engine |
@@ -45,6 +54,8 @@ The whole app is one static file: `index.html`.
 | `test_engine.js` + `goldens.json` | parity tests vs the reference outputs — `node test_engine.js` |
 | `test_big_wide.js` | wide test suite across 156 checks |
 | `test_very_wide.js` | 5,000 random online flight test suite |
+| `test_offline_images.js` | OCR cleaner + real-image OCR speed tests |
+| `test_attachment_pipeline.js` | end-to-end attachment pipeline tests (drop / paste / picker / PDF / HEIC / cache) |
 
 ## Privacy
 
