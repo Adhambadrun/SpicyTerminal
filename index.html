@@ -207,11 +207,25 @@ var IATA_ACFT_CODES={}; Object.keys(AIRCRAFT).forEach(function(k){IATA_ACFT_CODE
 var _AC_KEYS_BY_LEN=Object.keys(AIRCRAFT).sort(function(a,b){return b.length-a.length;});
 function scanAircraft(regionUpper){
   var sq=squashAircraft(regionUpper);
-  for(var i=0;i<_AC_KEYS_BY_LEN.length;i++){var key=_AC_KEYS_BY_LEN[i];
-    if(key.length>=3 && sq.indexOf(key)>=0) return AIRCRAFT[key];}
+  var hit=_scanAllAircraft(sq);
+  if(hit) return hit;
   var m=/EMBRAER\s+E?(\d{3})\s*-?\s*(E2)?/.exec(regionUpper);
   if(m){var fam="E"+m[1]+(m[2]?"-E2":""); if(AIRCRAFT[fam]) return AIRCRAFT[fam];}
   return null;
+}
+// One-pass scan: single precompiled alternation (longest-first) instead of
+// ~700 indexOf sweeps per call. Picks the longest key found anywhere,
+// matching the old longest-key-wins semantics.
+var _AC_SCAN_RE_G=new RegExp(_AC_KEYS_BY_LEN.filter(function(k){return k.length>=3;})
+  .map(function(k){return k.replace(/[.*+?^${}()|[\]\\\/-]/g,"\\$&");}).join("|"),"g");
+function _scanAllAircraft(sq){
+  _AC_SCAN_RE_G.lastIndex=0;
+  var best=null,m;
+  while((m=_AC_SCAN_RE_G.exec(sq))!==null){
+    if(best===null||m[0].length>best.length) best=m[0];
+    _AC_SCAN_RE_G.lastIndex=m.index+1;   // overlap-safe: advance one char, not past the match
+  }
+  return best?AIRCRAFT[best]:null;
 }
 function inferAircraft(airline, flightNo, orig, dest, distanceMi){
   var code=FLIGHT_EQUIPMENT[airline+"|"+String(flightNo)];
@@ -534,7 +548,11 @@ function _cabinNear(lines, li){
       for(var c=0;c<CABIN_RES.length;c++) if(CABIN_RES[c][1].test(lines[j])) return CABIN_RES[c][0];}}
   return "";
 }
-function fullRe(reStr,tok){ return new RegExp("^(?:"+reStr+")$").exec(tok); }
+var _fullReCache={};
+function fullRe(reStr,tok){
+  var re=_fullReCache[reStr]||(_fullReCache[reStr]=new RegExp("^(?:"+reStr+")$"));
+  return re.exec(tok);
+}
 
 function tryGdsLines(text, used){
   var lines=text.replace(/\u00a0/g," ").replace(/\u2007/g," ").replace(/\u202f/g," ").split("\n");
@@ -543,7 +561,7 @@ function tryGdsLines(text, used){
     var toks=lines[li].split(/\s+/).filter(function(t){return t.length;});
     if(toks.length<7) continue;
     var i=0;
-    if(i+1<toks.length && /^\d{1,2}$/.test(toks[i]) &&
+    if(i+1<toks.length && /^\d{1,3}$/.test(toks[i]) &&
        fullRe(AIRLINE_TOK+"\\d{0,4}[A-Z]?", (toks[i+1]||"").toUpperCase().replace(/\*/g,""))) i++;
     var al=null,flt=null,flt_cls=null,g;
     g=new RegExp("^("+AIRLINE_TOK+")(\\d{1,4})([A-Z])?$").exec((toks[i]||"").toUpperCase().replace(/\*/g,""));
@@ -774,11 +792,9 @@ function sortChronologically(segs){
       if(gap>bestGap){bestGap=gap;pivot=uniq[(i+1)%uniq.length];}
     }
   }
-  return segs.map(function(s,idx){return [idx,s];}).sort(function(A,B){
-    var ka=keyOf(A[1],A[0]), kb=keyOf(B[1],B[0]);
-    return ka-kb;
-  }).map(function(t){return t[1];});
-  function keyOf(s,idx){
+  // Precompute one key per segment (utcOffset -> dstActive walks calendar
+  // days; never recompute it inside the comparator).
+  var keys=segs.map(function(s,idx){
     var p=_ddmmmParts(s.date_ddmmm);
     if(!p) return 1e9+idx/1e6;
     var d=p[0],m=p[1],yAdd=0;
@@ -789,7 +805,10 @@ function sortChronologically(segs){
     var off=utcOffset(s.orig,{y:_TODAY.y+yAdd,m:p[1],d:Math.min(d,28)});
     if(off!==null) c-=off*60;
     return (m*31+d)*1440+c+idx/1e6;
-  }
+  });
+  return segs.map(function(s,idx){return idx;})
+    .sort(function(a,b){return keys[a]-keys[b];})
+    .map(function(idx){return segs[idx];});
 }
 
 /* ---------------- prose / Google-Flights path ---------------- */
