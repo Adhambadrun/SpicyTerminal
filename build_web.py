@@ -11,27 +11,47 @@ Repo layout:
 
 Run from anywhere:  python3 build_web.py
 """
-import base64, pathlib, io
+import base64, pathlib, io, subprocess, tempfile
 
 SRC = pathlib.Path(__file__).resolve().parent
 
 def png64(src, resize):
-    from PIL import Image
-    im = Image.open(src)
-    if "x" in resize:
-        w_s, h_s = resize.split("x")
-        if w_s and h_s:
-            w, h = int(w_s), int(h_s)
-        elif w_s:
-            w = int(w_s)
-            h = int(im.height * (w / im.width))
-        else:
-            h = int(h_s)
-            w = int(im.width * (h / im.height))
-        im = im.resize((w, h), Image.Resampling.LANCZOS)
-    buf = io.BytesIO()
-    im.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode()
+    """Return a resized PNG as base64 without making Pillow mandatory.
+
+    The app is a static artifact and should still build on a clean machine.
+    Pillow is convenient locally, but ImageMagick or the original PNG are
+    perfectly adequate fallbacks and avoid a mysterious build failure.
+    """
+    try:
+        from PIL import Image
+        im = Image.open(src)
+        if "x" in resize:
+            w_s, h_s = resize.split("x")
+            if w_s and h_s:
+                w, h = int(w_s), int(h_s)
+            elif w_s:
+                w = int(w_s)
+                h = int(im.height * (w / im.width))
+            else:
+                h = int(h_s)
+                w = int(im.width * (h / im.height))
+            im = im.resize((w, h), Image.Resampling.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode()
+    except ImportError:
+        # ImageMagick is available on common Linux/macOS developer images.
+        # Use a temporary file so no generated assets are left in the repo.
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png") as out:
+                subprocess.run(["convert", str(src), "-resize", resize, str(out.name)],
+                               check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return base64.b64encode(pathlib.Path(out.name).read_bytes()).decode()
+        except (OSError, subprocess.SubprocessError):
+            # Last resort: a valid unresized source still produces a working
+            # site; the build must never fail solely because an optional image
+            # optimizer is unavailable.
+            return base64.b64encode(src.read_bytes()).decode()
 
 tpl = (SRC / "index_template.html").read_text(encoding="utf-8")
 mark = png64(SRC / "logo.png", "128x128")          # tab favicon
