@@ -290,6 +290,19 @@ function cleanOcrText(rawText) {
     s = s.replace(new RegExp("\\b" + m + "\\b", "gi"), monthMap[m]);
   });
 
+  // Day number OCR repairs before/after month (e.g. l Sep -> 1 Sep, ls Sep -> 15 Sep, lo -> 10)
+  // ET image test showed OCRAD reading 1 as l, 15 as ls, 10 as lo, 31 as 3l etc
+  s = s.replace(/\b[lI]\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "1 $1");
+  s = s.replace(/\b[lI]s\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "15 $1");
+  s = s.replace(/\b[lI][oO]\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "10 $1");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+[lI]\b/gi, "$1 1");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+[lI]s\b/gi, "$1 15");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+[lI][oO]\b/gi, "$1 10");
+  // 31 often read as 3l
+  s = s.replace(/\b3[lI]\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "31 $1");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+3[lI]\b/gi, "$1 31");
+
+
   // 4. Durations: e.g. 10 hr4O min, 2h 3Om, 4 hr 30 min (must not match GDS booking class / dates / airports)
   s = s.replace(/\b([0-9]{1,2})\s*h(?:r|ours?)?[ \t]*([0-9oOsSlIzZ]{1,2})\s*(?:m|min|minutes?)\b/gi, function(_, h, m) {
     var cm = m.replace(/[oO]/g, "0").replace(/[sS]/g, "5").replace(/[lIi]/g, "1").replace(/[zZ]/g, "2");
