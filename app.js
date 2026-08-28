@@ -240,6 +240,9 @@ function cleanOcrText(rawText) {
   s = s.replace(/_F[KC]\b/g, "JFK");
   s = s.replace(/\b[lI1]FK\b/g, "JFK");
   s = s.replace(/\bCAl\b/g, "CAI");
+  s = s.replace(/\bLNR\b/g, "LHR");
+  s = s.replace(/\bIHR\b/g, "LHR");
+  s = s.replace(/\b0RD\b/g, "ORD");
   s = s.replace(/\bSlN\b/g, "SIN");
   s = s.replace(/\blST\b/g, "IST");
   s = s.replace(/\bLAx\b/g, "LAX");
@@ -1057,7 +1060,7 @@ function renderDirectSync(text){
 }
 
 function convert(auto) {
-  if (converting) return;
+  // Never let a stuck AI call freeze CONVERT. AI uses `converting`; text parse is sync.
   var raw = inp.value || "";
   var text = raw.replace(/\[screenshot attached[^\n]*\]\n?/g, "");
   var imgs = readyImages();
@@ -1217,7 +1220,12 @@ var AI_SEGMENT_RULES =
   "segments must equal the number of flights shown in the source.";
 
 function convertAi(fromAuto, reason){
-  if(converting){ setStatus("AI ALREADY RUNNING — one moment…"); return; }
+  if(converting){
+    if(!window._aiStartedAt || Date.now()-window._aiStartedAt < 12000){
+      setStatus("AI ALREADY RUNNING — one moment…"); return;
+    }
+    converting=false; // stale lock (network never returned) — allow retry
+  }
   if(pendingImageJobs > 0 || pendingDocumentJobs > 0){
     setStatus("ATTACHMENT STILL LOADING…");
     return;
@@ -1230,6 +1238,7 @@ function convertAi(fromAuto, reason){
   var requestAttachmentBatch=latestAttachmentBatch;
   var aiImages=readyImages(), aiDocuments=readyDocuments();
   converting=true;
+  window._aiStartedAt=Date.now();
   setStatus((aiImages.length||aiDocuments.length)?"AI CONVERTING (attachment)…":"AI CONVERTING…");
   var task=text.trim() ? "Convert the following flight data into GDS Black Window format. If anything is missing or ambiguous, fill it from aviation knowledge — never leave fields blank or ???."+AI_SEGMENT_RULES+"\n\n"+text
     : "Convert the attached image(s) and document(s) into GDS Black Window format. Convert ALL options shown. Fill any missing field from aviation knowledge — never blank, never ???."+AI_SEGMENT_RULES;
@@ -1238,7 +1247,7 @@ function convertAi(fromAuto, reason){
   aiDocuments.forEach(function(doc){ parts.push({inline_data:{mime_type:doc.mime,data:doc.b64}}); });
   var body={ system_instruction:{parts:[{text: window.SpicyEngine.MASTER_PROMPT}]}, contents:[{role:"user",parts:parts}], generationConfig:{temperature:0.0,maxOutputTokens:4096} };
   geminiGenerate(key, body).then(function(j){
-    converting=false;
+    converting=false; window._aiStartedAt=0;
     if(requestAttachmentVersion!==attachmentVersion || requestAttachmentBatch!==latestAttachmentBatch){
       // The attachment changed while the AI was answering: the reply belongs to
       // the previous input.  Say so instead of leaving a frozen "CONVERTING…".

@@ -147,8 +147,17 @@ var _EXTRA_FLIGHT_EQUIPMENT = {
   "EK|235":"77W","EK|236":"77W",   // ORD - DXB
   "EK|926":"388","EK|927":"388",   // CAI - DXB
   "EK|925":"388","EK|928":"388",
-  "EK|201":"388","EK|202":"388","EK|203":"388","EK|204":"388"
+  "EK|201":"388","EK|202":"388","EK|203":"388","EK|204":"388",
+  "BA|1543":"788","BA|1542":"788", // ORD - LHR
+  "BA|396":"32Q","BA|397":"32Q"    // LHR - CAI
 };
+var _AIRPORT_OCR = {LNR:"LHR",IHR:"LHR","1HR":"LHR","0RD":"ORD",CAl:"CAI",CA1:"CAI"};
+function repairAirport(code){
+  var u=(code||"").toUpperCase();
+  if(AIRPORTS[u]) return u;
+  if(_AIRPORT_OCR[u] && AIRPORTS[_AIRPORT_OCR[u]]) return _AIRPORT_OCR[u];
+  return u;
+}
 Object.keys(_EXTRA_ROUTE_EQUIPMENT).forEach(function(k){
   if(!ROUTE_EQUIPMENT[k]) ROUTE_EQUIPMENT[k]=_EXTRA_ROUTE_EQUIPMENT[k]; });
 Object.keys(_EXTRA_FLIGHT_EQUIPMENT).forEach(function(k){
@@ -549,6 +558,8 @@ function tryGdsLines(text, used){
       apA=toks[i].toUpperCase(); apB=toks[i+1].toUpperCase();
     }
     if(!/^[A-Z]{3}$/.test(apA) || !/^[A-Z]{3}$/.test(apB)) continue;
+    apA=repairAirport(apA); apB=repairAirport(apB);
+    if(!AIRPORTS[apA] || !AIRPORTS[apB]) continue;
     var orig=apA, dest=apB;
     if(orig===dest) continue;
     i+=2;
