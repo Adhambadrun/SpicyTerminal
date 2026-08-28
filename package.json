@@ -5,7 +5,9 @@
   "main": "spicy_engine.js",
   "scripts": {
     "build": "python3 build_web.py",
-    "test": "node test_engine.js && node test_big_wide.js && node test_very_wide.js && node test_offline_images.js"
+    "test": "node test_engine.js && node test_big_wide.js && node test_very_wide.js && node test_offline_images.js",
+    "test:10k": "node test_10k_pic_convert.js",
+    "test:protocol": "node test_autonomous_protocol.js"
   },
   "dependencies": {
     "ocrad.js": "^0.0.1"

@@ -85,6 +85,17 @@ function squashAircraft(text){
   return sq;
 }
 function lookupAircraft(text){ var sq=squashAircraft(text); return AIRCRAFT[sq]||null; }
+// Supplemental aircraft type variants for full IATA Type Designator compliance
+var _EXTRA_AC = {
+  "A321-200NEO": "32Q", "A321200NEO": "32Q", "A321-200": "321", "A321200": "321",
+  "A320-200NEO": "32N", "A320200NEO": "32N", "A320-200": "320", "A320200": "320",
+  "A319-100NEO": "319", "A319-100": "319",
+  "737-MAX8": "7M8", "737-MAX-8": "7M8", "737MAX-8": "7M8", "737-8MAX": "7M8",
+  "737-MAX9": "7M9", "737-MAX-9": "7M9", "737MAX-9": "7M9", "737-9MAX": "7M9",
+  "737-MAX7": "7M7", "737-MAX-7": "7M7", "737MAX-7": "7M7", "737-7MAX": "7M7",
+  "737-MAX10": "7MJ", "737-MAX-10": "7MJ", "737MAX-10": "7MJ", "737-10MAX": "7MJ"
+};
+Object.keys(_EXTRA_AC).forEach(function(k){ if(!AIRCRAFT[k]) AIRCRAFT[k]=_EXTRA_AC[k]; });
 var IATA_ACFT_CODES={}; Object.keys(AIRCRAFT).forEach(function(k){IATA_ACFT_CODES[AIRCRAFT[k]]=1;});
 var _AC_KEYS_BY_LEN=Object.keys(AIRCRAFT).sort(function(a,b){return b.length-a.length;});
 function scanAircraft(regionUpper){
@@ -392,8 +403,11 @@ function renderItinerary(segs){
   var blocks=segs.map(renderSegment);
   var additional=["<--additional-->"];
   segs.forEach(function(s){
-    var cls=(s.booking_class||CABIN_DEFAULT_CLASS[s.cabin]||"Y").toUpperCase();
-    additional.push(s.seg+" "+s.airline+" "+s.flight_no+cls+" "+s.date_ddmmm);});
+    var cls=(s.booking_class||CABIN_DEFAULT_CLASS[s.cabin]||"Y").toUpperCase().trim();
+    var al=String(s.airline||"").trim();
+    var fn=String(s.flight_no||"").trim();
+    var dt=String(s.date_ddmmm||"").trim();
+    additional.push(s.seg+" "+al+" "+fn+cls+" "+dt);});
   return blocks.join("\n\n")+"\n\n"+additional.join("\n");
 }
 

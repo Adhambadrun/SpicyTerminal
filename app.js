@@ -219,14 +219,36 @@ function cleanOcrText(rawText) {
   s = s.replace(/[-–—]/g, " - ");
   s = s.replace(/[ \t]{2,}/g, " ");
 
-  // 3. Day shifts: +l, +I, +i, +z, etc.
-  s = s.replace(/([+\-¥])\s*[lIi1]/g, "$11");
-  s = s.replace(/([+\-¥])\s*[zZ2]/g, "$12");
-  s = s.replace(/([+\-¥])\s*[sS5]/g, "$15");
-  s = s.replace(/(AM|PM)\s*([+\-¥])\s*([0-9])/gi, "$1$2$3");
+  // 3. Day shifts: 12h, 24h, compact, and parenthesized
+  s = s.replace(/(\d{1,2}[:.]\d{2})\s*\+\s*[lIi1]\b/gi, "$1+1");
+  s = s.replace(/(\d{1,2}[:.]\d{2})\s*\+\s*[zZ2]\b/gi, "$1+2");
+  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[lIi1]\b/gi, "$1+1");
+  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[zZ2]\b/gi, "$1+2");
+  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[sS5]\b/gi, "$1+5");
+  s = s.replace(/\(\s*\+\s*[lIi1]\s*(?:day)?\s*\)/gi, "(+1)");
+  s = s.replace(/\(\s*\+\s*[zZ2]\s*(?:days?)?\s*\)/gi, "(+2)");
+  s = s.replace(/¥\s*[lIi1]/g, "¥1");
+  s = s.replace(/¥\s*[zZ2]/g, "¥2");
+  s = s.replace(/\b(AM|PM|[APNM])\s*-\s*([1-3lI])(?![0-9A-Za-z]*[:\.\/])/gi, function(_, ap, shift) {
+    return ap + "-" + (shift === "l" || shift === "I" ? "1" : shift);
+  });
 
-  // 4. Durations: e.g. 10 hr4O min, 2h 3Om, 4 hr 30 min
-  s = s.replace(/(\d+)\s*h(?:r|ours?)?\s*([0-9A-Za-z]+)\s*m(?:in|inutes?)?/gi, function(_, h, m) {
+  // Airline + Flight prefix handling: e.g. "BA · Flight 114" -> "BA 114", "Flight AA 123" -> "AA 123"
+  s = s.replace(/\b([A-Z0-9]{2})\s*[-·•.]*\s*Flight\s*([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
+  s = s.replace(/\bFlight\s+([A-Za-z]{2}|[0-9][A-Za-z]|[A-Za-z][0-9])[ \t]+([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
+  s = s.replace(/\bFlight\s+([0-9A-Za-z]{1,5})\b/gi, "$1");
+
+  // Full month names to 3-letter month (e.g. September -> SEP)
+  var monthMap = {
+    january:"JAN", february:"FEB", march:"MAR", april:"APR", may:"MAY", june:"JUN",
+    july:"JUL", august:"AUG", september:"SEP", october:"OCT", november:"NOV", december:"DEC"
+  };
+  Object.keys(monthMap).forEach(function(m) {
+    s = s.replace(new RegExp("\\b" + m + "\\b", "gi"), monthMap[m]);
+  });
+
+  // 4. Durations: e.g. 10 hr4O min, 2h 3Om, 4 hr 30 min (must not match GDS booking class / dates / airports)
+  s = s.replace(/\b([0-9]{1,2})\s*h(?:r|ours?)?[ \t]*([0-9oOsSlIzZ]{1,2})\s*(?:m|min|minutes?)\b/gi, function(_, h, m) {
     var cm = m.replace(/[oO]/g, "0").replace(/[sS]/g, "5").replace(/[lIi]/g, "1").replace(/[zZ]/g, "2");
     return h + " hr " + cm + " min";
   });
@@ -249,20 +271,24 @@ function cleanOcrText(rawText) {
     [/Term[il1]nal/gi, "Terminal"],
     [/lberia/gi, "Iberia"],
     [/\b([Tt])(\d)([Tt])\b/g, "7$27"],
+    [/Boeing\s+TTT/gi, "Boeing 777"],
     [/\bA3[sS]0\b/gi, "A350"],
     [/\bA38[oO]\b/gi, "A380"],
     [/\bA32[oO]\b/gi, "A320"],
-    [/\b([Nn]ou)\b/gi, "Nov"],
-    [/\b([Ff]eh)\b/gi, "Feb"],
-    [/\b([Aa]ua|[Aa]uq)\b/gi, "Aug"],
-    [/\b([Dd]et)\b/gi, "Dec"]
+    [/(?<![:\d])([0-2]?[1-9]|[123]0|31)[ \t]*([Nn]ou)\b/gi, "$1 NOV"],
+    [/\b([Nn]ou)[ \t]+([0-2]?[1-9]|[123]0|31)\b(?![:\.\d])/gi, "NOV $2"],
+    [/(?<![:\d])([0-2]?[1-9]|[123]0|31)[ \t]*([Aa]uq)\b/gi, "$1 AUG"],
+    [/\b([Aa]uq)[ \t]+([0-2]?[1-9]|[123]0|31)\b(?![:\.\d])/gi, "AUG $2"],
+    [/(?<![:\d])([0-2]?[1-9]|[123]0|31)[ \t]*([Ff]eh)\b/gi, "$1 FEB"],
+    [/\b([Ff]eh)[ \t]+([0-2]?[1-9]|[123]0|31)\b(?![:\.\d])/gi, "FEB $2"],
+    [/(?<![:\d])([0-2]?[1-9]|[123]0|31)[ \t]*([Dd]et)\b/gi, "$1 DEC"],
+    [/\b([Dd]et)[ \t]+([0-2]?[1-9]|[123]0|31)\b(?![:\.\d])/gi, "DEC $2"]
   ];
   dictWords.forEach(function(pair) { s = s.replace(pair[0], pair[1]); });
 
-  // 6. Times with colons (robust to letter glyph confusions in hours/minutes):
-  // e.g. 7:ss PM, T:SS PM, 12:4s PM, ll:zs PM
-  s = s.replace(/\b([0-9A-Za-z]{1,2})[:\.](\w{2})\s*([AP]M?|[ap]m?)/g, function(_, h, m, ap) {
-    var ch = h.replace(/[lIi]/g, "1").replace(/[oO]/g, "0").replace(/[Tt]/g, "7");
+  // 6. Times with colons (both 12h with AM/PM and 24h clocks): e.g. 7:ss PM, ll:39, T:SS PM, 12:4s PM
+  s = s.replace(/\b([0-9A-Za-z]{1,2})[:\.](\w{2})(?:\s*([AP]M?|[ap]m?))?\b/g, function(match, h, m, ap) {
+    var ch = h.replace(/[lIi]/g, "1").replace(/[oO]/g, "0").replace(/[Tt]/g, "7").replace(/[zZ]/g, "2").replace(/[sS]/g, "5");
     var cm = m.replace(/ss/gi, "55")
               .replace(/zs/gi, "25")
               .replace(/so/gi, "50")
@@ -273,8 +299,11 @@ function cleanOcrText(rawText) {
               .replace(/[sS]/g, "5")
               .replace(/[oO]/g, "0")
               .replace(/[lIi]/g, "1")
-              .replace(/[zZ]/g, "2");
-    return ch + ":" + cm + " " + ap.toUpperCase();
+              .replace(/[zZ]/g, "2")
+              .replace(/[tT]/g, "7");
+    var hNum = parseInt(ch, 10), mNum = parseInt(cm, 10);
+    if (hNum > 23 || mNum > 59) return match;
+    return ch + ":" + cm + (ap ? " " + ap.toUpperCase() : "");
   });
 
   // 7. Compact GDS clocks: 9s0P, 94SA, 1120A, etc.
@@ -288,19 +317,29 @@ function cleanOcrText(rawText) {
     s = s.replace(/\bOR\s+/gi, "QR ");
   }
 
-  // 8. Airline code + Flight number:
+  // 8. Glued flight numbers + airport: e.g. 114lFK -> 114 JFK, ZO4lFK -> 204 JFK
+  s = s.replace(/\b([0-9A-Za-z]{1,4})[lI1]FK\b/gi, "$1 JFK");
+  s = s.replace(/\b([0-9]{1,4})([A-Z]{3})\b/g, "$1 $2");
+
+  // 9. Airline code + Flight number:
   // e.g. "IB 4z37", "QR los9", "BA ll4", "LH 4OO", "DL 001"
   var dAir = (window.SPICY_DATA && window.SPICY_DATA.airlines) ? Object.keys(window.SPICY_DATA.airlines) : [];
   if (dAir.length) {
-    var airRe = new RegExp("\\b(" + dAir.join("|") + ")\\s+([0-9A-Za-z]{1,5})\\b", "g");
-    s = s.replace(airRe, function(_, code, num) {
+    var airRe = new RegExp("\\b(" + dAir.join("|") + ")[ \\t]+([0-9A-Za-z]{1,5})\\b", "g");
+    s = s.replace(airRe, function(match, code, num, offset) {
+      if (/^(AM|PM)$/i.test(code)) {
+        var before = s.slice(Math.max(0, offset - 8), offset);
+        if (/\d\s*$/i.test(before)) return match;
+      }
+      if (!/[0-9]/.test(num) && !/^[loszbBtT]+$/i.test(num)) return match;
       var cnum = num.replace(/[oO]/g, "0")
                     .replace(/[lIi]/g, "1")
                     .replace(/[zZ]/g, "2")
                     .replace(/[sS]/g, "5")
                     .replace(/[b]/g, "6")
                     .replace(/[B]/g, "8")
-                    .replace(/[gq]/g, "9");
+                    .replace(/[gq]/g, "9")
+                    .replace(/[tT]/g, "7");
       return code + " " + cnum;
     });
   }
