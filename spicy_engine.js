@@ -141,7 +141,13 @@ var _EXTRA_ROUTE_EQUIPMENT = {
   "EK|DXB|RUH":"388","EK|DXB|KWI":"388","EK|DXB|JNB":"388","EK|DXB|SIN":"388",
   "EK|DXB|BKK":"388","EK|DXB|HKG":"388","EK|DXB|ICN":"388","EK|DXB|NRT":"388",
   "EK|DXB|SYD":"388","EK|DXB|MEL":"388","EK|DXB|BNE":"388","EK|DXB|PER":"388",
-  "EK|DXB|KUL":"388","EK|DXB|TPE":"388"
+  "EK|DXB|KUL":"388","EK|DXB|TPE":"388",
+  // Ethiopian Airlines – real equipment for reported failing routes (weekly report)
+  "ET|ORD|ADD":"788","ET|ADD|ORD":"788",
+  "ET|ADD|CAI":"788","ET|CAI|ADD":"788",
+  "ET|ADD|JFK":"788","ET|JFK|ADD":"788",
+  "ET|ADD|IAD":"788","ET|IAD|ADD":"788",
+  "ET|ADD|YYZ":"788","ET|YYZ|ADD":"788"
 };
 var _EXTRA_FLIGHT_EQUIPMENT = {
   "EK|235":"77W","EK|236":"77W",   // ORD - DXB
@@ -149,9 +155,14 @@ var _EXTRA_FLIGHT_EQUIPMENT = {
   "EK|925":"388","EK|928":"388",
   "EK|201":"388","EK|202":"388","EK|203":"388","EK|204":"388",
   "BA|1543":"788","BA|1542":"788", // ORD - LHR
-  "BA|396":"32Q","BA|397":"32Q"    // LHR - CAI
+  "BA|396":"32Q","BA|397":"32Q",    // LHR - CAI
+  // Ethiopian – from weekly report failure (ET 575, ET 452 etc)
+  "ET|575":"788","ET|574":"788",
+  "ET|452":"788","ET|453":"788",
+  "ET|550":"788","ET|551":"788",
+  "ET|552":"788","ET|553":"788"
 };
-var _AIRPORT_OCR = {LNR:"LHR",IHR:"LHR","1HR":"LHR","0RD":"ORD",CAl:"CAI",CA1:"CAI"};
+var _AIRPORT_OCR = {LNR:"LHR",IHR:"LHR","1HR":"LHR","0RD":"ORD",CAl:"CAI",CA1:"CAI",A0D:"ADD",AD0:"ADD",ADD_:"ADD",BOI:"BOI",BOL:"BOI"};
 function repairAirport(code){
   var u=(code||"").toUpperCase();
   if(AIRPORTS[u]) return u;
@@ -825,8 +836,7 @@ function pickTimes(wTimes,pTimes){
 function parseProse(text){
   var headers=findSideHeaders(text);
   var anchors=findAnchors(text);
-  if(!anchors.length) return [[],true];  // second = "no anchors" flag
-  // block assignment: anchor belongs to the nearest header at/before it
+  if(!anchors.length) return [[],true];
   function headerFor(posI){
     var best=null;
     for(var i=0;i<headers.length;i++) if(headers[i][0]<=posI) best=headers[i]; else break;
@@ -835,6 +845,75 @@ function parseProse(text){
   function nextHeaderAfter(startPos){
     for(var i=0;i<headers.length;i++) if(headers[i][0]>startPos) return headers[i][0];
     return text.length;
+  }
+  function nextHeaderAfterPos(posI){
+    for(var i=0;i<headers.length;i++) if(headers[i][0]>posI) return headers[i];
+    return null;
+  }
+  // Improved header chooser that looks inside the paragraph containing the anchor
+  function chooseHeaderForAnchor(aIdx, chosenHeaders){
+    var a=anchors[aIdx];
+    var paraStart = text.lastIndexOf("\n\n", a.start);
+    if(paraStart<0) paraStart=0; else paraStart+=2;
+    var paraEnd = text.indexOf("\n\n", a.end);
+    if(paraEnd<0) paraEnd=text.length;
+    var nextAnchorStart = (aIdx+1<anchors.length) ? anchors[aIdx+1].start : text.length;
+    var prevAnchorEnd = (aIdx>0) ? anchors[aIdx-1].end : 0;
+
+    var beforeInPara=[], afterInPara=[];
+    for(var hi=0;hi<headers.length;hi++){
+      var h=headers[hi];
+      if(h[0] >= paraStart && h[0] <= paraEnd){
+        if(h[0] <= a.start) beforeInPara.push(h);
+        else afterInPara.push(h);
+      }
+    }
+    // If we have headers inside paragraph, prefer the closest before, else closest after
+    if(beforeInPara.length){
+      var best=beforeInPara[0], bestDist=a.start - best[0];
+      for(var i=1;i<beforeInPara.length;i++){
+        var d=a.start - beforeInPara[i][0];
+        if(d>=0 && d<bestDist){bestDist=d; best=beforeInPara[i];}
+      }
+      // If this header was already chosen for previous anchor and there's a blank line between, check after
+      if(aIdx>0 && chosenHeaders && chosenHeaders[aIdx-1] && chosenHeaders[aIdx-1][0]===best[0]){
+        var between = text.slice(best[0], a.start);
+        if(between.indexOf("\n\n")>=0 && afterInPara.length){
+          var bestAfter=afterInPara[0], bestAfterDist=bestAfter[0]-a.start;
+          for(var j=1;j<afterInPara.length;j++){
+            var d2=afterInPara[j][0]-a.start;
+            if(d2>=0 && d2<bestAfterDist){bestAfterDist=d2; bestAfter=afterInPara[j];}
+          }
+          return bestAfter;
+        }
+      }
+      return best;
+    }
+    if(afterInPara.length){
+      var bestA=afterInPara[0], bestADist=bestA[0]-a.start;
+      for(var k=1;k<afterInPara.length;k++){
+        var d=afterInPara[k][0]-a.start;
+        if(d>=0 && d<bestADist){bestADist=d; bestA=afterInPara[k];}
+      }
+      return bestA;
+    }
+    // No header in paragraph – look for header immediately after anchor but before next anchor (ET-style)
+    var nextHdr = nextHeaderAfterPos(a.start);
+    if(nextHdr && nextHdr[0] < nextAnchorStart){
+      var between = text.slice(a.end, nextHdr[0]);
+      if(between.indexOf("\n\n")<0 && nextHdr[0] - a.start < 200){
+        // Also ensure previous header (if any) is outside paragraph or used by previous flight
+        var prevHdr = headerFor(a.start);
+        if(!prevHdr) return nextHdr;
+        var betweenPrev = text.slice(prevHdr[0], a.start);
+        if(betweenPrev.indexOf("\n\n")>=0) return nextHdr;
+        // If prevHdr was chosen for previous anchor, prefer next
+        if(aIdx>0 && chosenHeaders && chosenHeaders[aIdx-1] && chosenHeaders[aIdx-1][0]===prevHdr[0]){
+          return nextHdr;
+        }
+      }
+    }
+    return headerFor(a.start);
   }
   var gCabin=null,m;
   m=ALL_CABIN_RE.exec(text);
@@ -845,19 +924,61 @@ function parseProse(text){
   if(gm) gClass=gm[1].toUpperCase();
 
   var segs=[];
+  var chosenHeaders=[];
   for(var ai=0;ai<anchors.length;ai++){
     var a=anchors[ai];
-    var hdr=headerFor(a.start);
-    var winStart=hdr?hdr[0]:text.lastIndexOf("\n\n",a.start); if(winStart<0) winStart=0;
-    var winEnd=hdr?nextHeaderAfter(hdr[0]):text.length;
+    var hdr=chooseHeaderForAnchor(ai, chosenHeaders);
+    var winStart, winEnd;
+    if(hdr){
+      if(hdr[0] > a.start){
+        // Header after anchor (ET 575\nORD to ADD) – start window at paragraph start, not header
+        var paraBefore = text.lastIndexOf("\n\n", a.start);
+        if(paraBefore<0) paraBefore=0;
+        winStart = paraBefore;
+      } else {
+        winStart = hdr[0];
+      }
+      winEnd = nextHeaderAfter(hdr[0]);
+    } else {
+      winStart = text.lastIndexOf("\n\n",a.start); if(winStart<0) winStart=0;
+      winEnd = text.length;
+    }
     // but never past the next anchor's header start
     if(ai+1<anchors.length){
-      var h2=headerFor(anchors[ai+1].start);
-      if(h2 && h2!==hdr) winEnd=Math.min(winEnd,h2[0]);
-      else{
-        // No separate header for the next flight (plain prose / OCR text):
-        // this segment's window must still stop before the next flight, or it
-        // steals the following leg's date, route, times and duration.
+      var nextA=anchors[ai+1];
+      var h2=chooseHeaderForAnchor(ai+1, chosenHeaders);
+      // If h2 is the same as current hdr, it means next anchor will reuse same header – don't cut yet, let next anchor handle it
+      // If h2 is different and is before next anchor, cut current window before h2, unless h2 is actually current's after-header
+      if(h2 && hdr && h2[0]!==hdr[0]){
+        if(h2[0] > a.start && h2[0] < nextA.start){
+          // h2 is between current and next anchor – it belongs to next, so current must end before h2
+          // Unless current's hdr is after current anchor and h2 is the next header after hdr (then winEnd is already h2)
+          if(h2[0] > a.end) winEnd=Math.min(winEnd,h2[0]);
+        } else if(h2[0] >= nextA.start){
+          var para=text.lastIndexOf("\n\n",nextA.start);
+          var bound=(para>a.end)?para:nextA.start;
+          if(bound>a.end) winEnd=Math.min(winEnd,bound);
+        }
+      } else if(h2 && !hdr){
+        // Current has no header, next has one. Check if there's a header between current and next that is current's
+        var betweenHeaders=[];
+        for(var hi2=0;hi2<headers.length;hi2++){
+          if(headers[hi2][0] > a.start && headers[hi2][0] < nextA.start) betweenHeaders.push(headers[hi2]);
+        }
+        if(betweenHeaders.length===1){
+          // Single header between – it belongs to current, so window should go to paragraph before next anchor
+          var para2=text.lastIndexOf("\n\n",nextA.start);
+          var bound2=(para2>a.end)?para2:nextA.start;
+          if(bound2>a.end) winEnd=Math.min(winEnd,bound2);
+        } else if(betweenHeaders.length>1){
+          winEnd=Math.min(winEnd, betweenHeaders[1][0]);
+        } else {
+          var nextStart=nextA.start;
+          var para=text.lastIndexOf("\n\n",nextStart);
+          var bound=(para>a.end)?para:nextStart;
+          if(bound>a.end) winEnd=Math.min(winEnd,bound);
+        }
+      } else {
         var nextStart=anchors[ai+1].start;
         var para=text.lastIndexOf("\n\n",nextStart);
         var bound=(para>a.end)?para:nextStart;
@@ -988,6 +1109,7 @@ function parseProse(text){
     if(acft) seg.aircraft=acft;
     seg.warnings=warn;
     seg._date_parts=seg_day?[seg_day,seg_mon]:null;
+    chosenHeaders[ai]=hdr;
     segs.push(seg);
   }
   fillAircraft(segs);
