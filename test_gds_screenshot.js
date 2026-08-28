@@ -30,6 +30,8 @@
  *            reply is ignored
  *        6c. junk direct read (???? placeholders) -> AI auto re-reads and
  *            replaces the placeholders without a manual press
+ *   7. Welcome screen asks for the API-generated key first (save+start,
+ *      nudge without a key, offline escape hatch, built markup)
  */
 const fs = require("fs");
 const path = require("path");
@@ -672,6 +674,49 @@ let makeSandboxGlobal;
     assert(s.out().includes("UA 5918"), "6c: placeholders replaced by real itinerary");
     assert(!/DEP-\?{3}/.test(s.out()), "6c: no ??? airports remain");
     assert(genCallsOf(s).length === 1, `6c: exactly one AI call (got ${genCallsOf(s).length})`);
+  }
+
+  /* ================= 7. Welcome screen: API key first ================= */
+  console.log("\n=== 7. Welcome screen asks for the API key first ===");
+
+  // 7a. START without a key -> the card stays, a nudge appears (never a silent enter).
+  {
+    const s = makeSandbox({});
+    s.el("enterBtn").fire("click");
+    assert(!s.el("welcome")._classes.has("hidden"), "7a: welcome stays visible without a key");
+    assert(/ADD YOUR API KEY FIRST/.test(s.status()), `7a: nudge shown (status: "${s.status()}")`);
+    assert(/free and takes 20 seconds/.test(s.el("welcomeKeyWarn")._text), "7a: inline guidance points at Generate Api");
+    assert(!s._store.has("spicy_seen"), "7a: not marked as seen");
+  }
+
+  // 7b. Paste the generated key -> saved, card closes, ready.
+  {
+    const s = makeSandbox({});
+    s.el("gemKeyWelcome").value = "AIza-test-key-123";
+    s.el("enterBtn").fire("click");
+    assert(s._store.get("spicy_gem_key") === "AIza-test-key-123", "7b: key saved from the welcome card");
+    assert(s.el("welcome")._classes.has("hidden"), "7b: welcome closed after saving");
+    assert(s._store.get("spicy_seen") === "1", "7b: marked as seen");
+    assert(/KEY SAVED/.test(s.status()), `7b: confirmed (status: "${s.status()}")`);
+  }
+
+  // 7c. Offline escape hatch -> app stays usable without a key.
+  {
+    const s = makeSandbox({});
+    s.el("enterOffline").fire("click");
+    assert(s.el("welcome")._classes.has("hidden"), "7c: welcome closed via offline link");
+    assert(!s._store.has("spicy_gem_key"), "7c: no key stored");
+    assert(/OFFLINE MODE/.test(s.status()), `7c: offline status (status: "${s.status()}")`);
+  }
+
+  // 7d. Built artifact carries the new welcome markup (key input + made-with-love).
+  {
+    const built = fs.readFileSync(path.join(REPO, "index.html"), "utf8");
+    assert(built.includes("gemKeyWelcome"), "7d: built index.html has the welcome key input");
+    assert(/SAVE KEY &amp; START|SAVE KEY & START/.test(built), "7d: built index.html has SAVE KEY & START");
+    assert(built.includes("enterOffline"), "7d: built index.html has the offline link");
+    assert(/Made with .*love.* by Adham Badran/.test(built), "7d: built index.html mentions made with love");
+    assert(built.includes("♥"), "7d: built index.html has the heart");
   }
 
   console.log(`\n=== SUMMARY: ${PASS} passed, ${FAIL} failed ===`);

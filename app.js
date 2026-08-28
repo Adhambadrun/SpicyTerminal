@@ -2330,10 +2330,38 @@ $("btnCopy").addEventListener("click", function() {
   }
 });
 
-if(!localStorage.getItem("spicy_seen")) $("welcome").classList.remove("hidden");
-$("enterBtn").addEventListener("click", function(){
+if(!localStorage.getItem("spicy_seen")) {
+  $("welcome").classList.remove("hidden");
+  // A returning visitor that cleared the welcome card but still has a key
+  // sees the input pre-filled, so START never nags for what is already saved.
+  if (gemKey()) $("gemKeyWelcome").value = gemKey();
+}
+function closeWelcome(){
   $("welcome").classList.add("hidden");
   try { localStorage.setItem("spicy_seen", "1"); } catch (e) {}
+}
+function welcomeKeyNudge(msg){
+  var warn = $("welcomeKeyWarn");
+  if (warn) { warn.textContent = msg; warn.classList.remove("hidden"); }
+  var keyInput = $("gemKeyWelcome");
+  if (keyInput) { keyInput.classList.add("keywarn"); keyInput.focus(); }
+  setStatus("ADD YOUR API KEY FIRST — or continue offline", true);
+}
+$("enterBtn").addEventListener("click", function(){
+  var entered = ($("gemKeyWelcome").value || "").trim();
+  if (entered) {
+    try { localStorage.setItem("spicy_gem_key", entered); } catch (e) {}
+    $("gemKey").value = entered;
+    closeWelcome();
+    setStatus("KEY SAVED — READY");
+    return;
+  }
+  if (gemKey()) { closeWelcome(); return; }
+  welcomeKeyNudge("Add your API key first — it is free and takes 20 seconds (Generate Api above).");
+});
+$("enterOffline").addEventListener("click", function(){
+  closeWelcome();
+  setStatus("OFFLINE MODE — add a key anytime with GENERATE API", true);
 });
 $("setClose").addEventListener("click", function(){ $("setModal").classList.add("hidden"); });
 $("setSave").addEventListener("click", function(){

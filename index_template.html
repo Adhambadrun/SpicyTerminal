@@ -57,7 +57,16 @@ background:rgba(4,8,12,.35);backdrop-filter:blur(9px);-webkit-backdrop-filter:bl
 padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba(0,0,0,.55)}
 .welcome img{width:230px;display:block;margin:0 auto 18px}
 .welcome .made{color:#eef4f7;font-size:14px;margin-bottom:9px}
+.welcome .made .heart{color:#ff6f6f;font-size:13px}
 .welcome .sub{color:#637888;font-size:11px;line-height:1.7;margin-bottom:20px}
+.welcome .keybox{margin-bottom:16px;text-align:left}
+.welcome .keybox .how{color:#637888;font-size:11px;line-height:1.7;margin:0 0 2px}
+.welcome .keybox .how a{color:#53d977}
+.welcome .keybox input{width:100%;background:#070b0f;border:1px solid #22313c;border-radius:6px;color:#dbe7de;font-family:var(--mono);font-size:12px;padding:8px;margin:8px 0 2px;outline:0}
+.welcome .keybox input.keywarn{border-color:#c9413a}
+.welcome .keywarnmsg{color:#f0a35c;font-size:10.5px;line-height:1.6;margin-top:6px}
+.welcome .skip{display:block;margin:12px auto 0;color:#3e4f59;font-size:10.5px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono)}
+.welcome .skip:hover{color:#8fa6b2}
 .welcome button{background:#22c55e;color:#05230f;padding:10px 34px;font-size:13px;letter-spacing:1px}
 .modal{position:fixed;inset:0;z-index:51;display:flex;align-items:center;justify-content:center;background:rgba(4,8,12,.55);backdrop-filter:blur(6px)}
 .modal .card{background:#0c1218;border:1px solid #1e2b34;border-radius:10px;padding:20px 22px;width:400px;max-width:92vw}
@@ -115,9 +124,17 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
     <!-- Wordmark is loaded from the header image at runtime so the 300KB+
          base64 isn't duplicated in the single-file artifact. -->
     <img id="wordmarkWelcome" src="" alt="SpicyTerminal">
-    <div class="made">Made by Adham Badran</div>
+    <div class="made">Made with <span class="heart">♥</span> love by Adham Badran</div>
     <div class="sub">Fast text &amp; screenshot conversion — no stuck scans.</div>
-    <button id="enterBtn">ENTER</button>
+    <div class="keybox">
+      <p class="how">Before you start, add your API key —
+        <a id="genKey3" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Generate Api</a>
+        (free, takes 20 seconds), then paste it below.</p>
+      <input id="gemKeyWelcome" placeholder="Paste your Gemini API key" autocomplete="off" spellcheck="false">
+      <div class="keywarnmsg hidden" id="welcomeKeyWarn"></div>
+    </div>
+    <button id="enterBtn">SAVE KEY &amp; START</button>
+    <button class="skip" id="enterOffline" type="button">continue offline without a key →</button>
   </div>
 </div>
 
