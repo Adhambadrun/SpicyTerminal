@@ -33,6 +33,14 @@ var pendingImageJobs = 0;
 var pendingDocumentJobs = 0;
 var imageParseVersion = -1;
 var imageParsePromise = null;
+
+// Speculative AI fallback state. When the fast direct OCR passes have not
+// produced segments after AI_SPECULATE_AFTER_MS, the Gemini call is started
+// immediately and races the remaining bounded direct re-reads instead of
+// waiting for them serially (which was 14.5s of local grinding before the
+// request even left the browser — the "attachment takes forever" path).
+var aiSpeculation = { batch: 0, fired: false, painted: false, done: false, timer: null };
+var directPaintedBatch = 0;
 var AUTHOR_EMAIL = "adhambadraan@gmail.com";
 
 /* ---------- utils ---------- */
@@ -505,6 +513,12 @@ var OCR_MAX_TOTAL_MS = 2200;
 var OCR_NATIVE_TIMEOUT_MS = 250;
 var OCR_WORKER_BOOT_MS = 1200;
 var OCR_WORKER_PASS_MS = 2200;
+// A healthy direct read answers well inside this window (typical: 300-700ms).
+// Past it, the screenshot is one of the hard cases that would previously end
+// in "undetected attachment" — so the AI fallback starts NOW and overlaps the
+// remaining bounded direct re-reads. First *preferred* winner paints: direct
+// still wins the race whenever it succeeds; AI only answers what direct cannot.
+var AI_SPECULATE_AFTER_MS = 1500;
 var ocrWorkerState = null;
 var ocrWorkerDisabled = false;
 
@@ -931,6 +945,10 @@ function parseImageDirect(im) {
           var sIdx = 0;
           function stepRescue() {
             if (settled) return;
+            if (aiSpeculationPainted()) {
+              finish({ segs: [], warns: ["skipped — AI answered first"], text: bestRaw, method: "OCRAD (skipped)", dur: elapsed() });
+              return;
+            }
             if (sIdx >= steps.length || elapsed() >= OCR_MAX_TOTAL_MS + RESCUE_TOTAL_MS) {
               finalizeRescue();
               return;
@@ -963,6 +981,13 @@ function parseImageDirect(im) {
         }
         function step() {
           if (settled) return;
+          // A speculative AI reply already answered this batch: stop the now
+          // pointless local grinding (bounded by the current pass) instead of
+          // burning the full rescue budget on a result nobody will display.
+          if (aiSpeculationPainted()) {
+            finish({ segs: [], warns: ["skipped — AI answered first"], text: bestRaw, method: "OCRAD (skipped)", dur: elapsed() });
+            return;
+          }
           if (pIdx >= passes.length) { startRescue(); return; }
           if (elapsed() >= OCR_MAX_TOTAL_MS) {
             startRescue("OCR stopped after " + Math.round(OCR_MAX_TOTAL_MS / 1000) + "s — try a tighter screenshot crop");
@@ -1543,12 +1568,28 @@ function readFileAsBase64(file) {
     rd.readAsDataURL(file);
   });
 }
+/* ---------- speculative AI fallback helpers ---------- */
+function aiSpeculationClearTimer() {
+  if (aiSpeculation.timer) { clearTimeout(aiSpeculation.timer); aiSpeculation.timer = null; }
+}
+function aiSpeculationPainted() {
+  // Batch-aware: only a painted reply for the CURRENT attachment batch may
+  // stop local OCR work. Stale state from an older (or key-less) batch never
+  // aborts a fresh parse.
+  return !!(aiSpeculation.fired && aiSpeculation.painted && aiSpeculation.batch === latestAttachmentBatch);
+}
+// Placeholder fields the engine emits when it truly could not read a field
+// (unknown airport "DEP-???", unreadable date/route "????"). A result that
+// still contains these is not a finished itinerary.
+function itineraryHasUnknownFields(text) {
+  return /-\?\?|\?\?\?\?/.test(String(text || ""));
+}
 function renderAttachmentResults(results, token, batch, started) {
   if (token !== attachmentVersion || batch !== latestAttachmentBatch) return;
-  var allSegs = [], warns = [];
+  var allSegs = [], warns = [], imgSegs = 0;
   results.forEach(function(res) {
     if (!res) return;
-    if (res.segs && res.segs.length) allSegs = allSegs.concat(res.segs);
+    if (res.segs && res.segs.length) { allSegs = allSegs.concat(res.segs); imgSegs += res.segs.length; }
     if (res.warns) res.warns.forEach(function(w) { if (warns.indexOf(w) < 0) warns.push(w); });
   });
 
@@ -1584,6 +1625,17 @@ function renderAttachmentResults(results, token, batch, started) {
 
   if (allSegs.length) {
     var outText = window.SpicyEngine.renderItinerary(allSegs);
+    // A late direct re-read must never stamp over a complete itinerary the
+    // speculative AI call already wrote — not when it only managed placeholder
+    // fields (mistake log: "1 FM 107 ???? ???? Y 738 0.00 0 N / DEP-???"),
+    // and not when it contributes nothing the AI answer did not already cover
+    // (e.g. only the typed text re-parsed while the image read found nothing).
+    if (aiSpeculation.batch === batch && aiSpeculation.painted &&
+        (!imgSegs || itineraryHasUnknownFields(outText))) {
+      setStatus("KEPT AI RESULT — direct re-read was incomplete", true);
+      return;
+    }
+    directPaintedBatch = batch;
     lastOut = outText;
     out.textContent = outText;
     var ms = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - started);
@@ -1594,10 +1646,21 @@ function renderAttachmentResults(results, token, batch, started) {
     var imgs = readyImages();
     if (imgs.length === 1 && imgs[0]._hash) imgCacheSet(imgs[0]._hash, outText);
     recordStat("img_direct", ms);
+    // The direct read produced segments but left unreadable placeholder fields
+    // behind. That is a partial read, not a result — re-read it with AI in the
+    // background instead of making the user notice the ???? and press AI.
+    if (itineraryHasUnknownFields(outText) && gemKey() && readyImages().length && !(inp.value || "").trim()) {
+      if (aiSpeculation.batch === batch && aiSpeculation.fired && !aiSpeculation.done) return; // its reply is already in flight and will replace this
+      setStatus("DIRECT READ INCOMPLETE — AI re-reading…", true);
+      convertAi(true, "AI correction");
+    }
     return;
   }
 
   if (gemKey()) {
+    // The speculative call already answered (or is still in flight) for this
+    // batch: never fire a second AI request for the same attachment set.
+    if (aiSpeculation.batch === batch && aiSpeculation.fired && (aiSpeculation.painted || !aiSpeculation.done)) return;
     recordStat("ai_fallback");
     setStatus("Image parse did not detect flights — trying AI…");
     convertAi(true, "undetected attachment");
@@ -1639,8 +1702,31 @@ function convertImageAttachments(batch) {
   }).then(function() {
     // An older batch may still finish after a newer one starts. Only that
     // batch may release the shared promise reference.
-    if (imageParseVersion === batch) imageParsePromise = null;
+    if (imageParseVersion === batch) {
+      imageParsePromise = null;
+      // Direct settled inside the speculation window: the AI call it was
+      // about to fire is unnecessary — cancel it (normal instant path).
+      if (aiSpeculation.batch === batch && !aiSpeculation.fired) aiSpeculationClearTimer();
+    }
   });
+  if (gemKey()) {
+    // Speculative AI fallback: if the fast direct passes have not answered by
+    // AI_SPECULATE_AFTER_MS, start Gemini NOW and let it race the remaining
+    // bounded direct re-reads (previously these ran serially: 2.2s of passes
+    // + 12s of rescue BEFORE the AI request even started).
+    aiSpeculationClearTimer();
+    aiSpeculation = { batch: batch, fired: false, painted: false, done: false,
+      timer: setTimeout(function() {
+        aiSpeculation.timer = null;
+        if (token !== attachmentVersion || batch !== latestAttachmentBatch) return;
+        if (imageParseVersion !== batch || !imageParsePromise) return; // direct already settled
+        aiSpeculation.fired = true;
+        aiSpeculation.done = false;
+        recordStat("ai_fallback");
+        setStatus("DIRECT READ UNCLEAR — AI RUNNING IN PARALLEL…");
+        convertAi(true, "undetected attachment", batch);
+      }, AI_SPECULATE_AFTER_MS) };
+  }
 }
 function appendTextFiles(files, token) {
   return Promise.all(files.map(function(file) {
@@ -1717,6 +1803,9 @@ function handleFiles(fileList) {
   // new batch will parse the complete, merged attachment list once decoding ends.
   cancelOcrWork();
   invalidateAiForAttachmentChange();
+  // A new batch invalidates any pending speculative AI fallback timer; the
+  // batch-aware guards make a stale reply harmless, but never fire it late.
+  aiSpeculationClearTimer();
   // A new attachment is a new conversion request; never leave the previous
   // itinerary copyable while the replacement is being decoded.
   out.textContent = "";
@@ -1939,7 +2028,10 @@ var AI_SEGMENT_RULES =
   "one segment per flight, and count them before you answer — the number of "+
   "segments must equal the number of flights shown in the source.";
 
-function convertAi(fromAuto, reason){
+function convertAi(fromAuto, reason, specBatch){
+  // specBatch: this call is the speculative fallback fired while direct OCR
+  // was still re-reading that attachment batch. Its reply must lose to a
+  // direct result that landed first, and must mark the speculation resolved.
   if(converting){
     if(!window._aiStartedAt || Date.now()-window._aiStartedAt < 12000){
       setStatus("AI ALREADY RUNNING — one moment…"); return;
@@ -1977,6 +2069,16 @@ function convertAi(fromAuto, reason){
       setStatus("AI REPLY IGNORED — attachment changed, press ✦ AI again", true);
       return;
     }
+    // The direct engine answered first while this speculative call was in
+    // flight: the deterministic itinerary stays, the duplicate reply is
+    // dropped (no repaint, no double cache write). A direct result that only
+    // produced placeholder fields (???? / DEP-???) is NOT a result — the
+    // speculative reply is allowed through to replace it.
+    if(specBatch && directPaintedBatch===specBatch && !itineraryHasUnknownFields(lastOut)){
+      if(aiSpeculation.batch===specBatch){ aiSpeculation.done = true; }
+      setStatus("AI REPLY IGNORED — direct result kept");
+      return;
+    }
     var ps=(((j.candidates||[])[0]||{}).content||{}).parts||[];
     var t=ps.map(function(p){return p.text||"";}).join("").trim();
     if(!t) throw new Error((j.error&&j.error.message)||"empty AI reply");
@@ -1985,6 +2087,10 @@ function convertAi(fromAuto, reason){
     if(rr&&rr[0].length&&rr[0].length >= (t.split("\n").filter(function(l){return / N$/.test(l);}).length)){ t=window.SpicyEngine.renderItinerary(rr[0]); }
     var previousDirect = lastOut;
     lastOut=t; out.textContent=t;
+    // Speculative reply won the race (direct never produced segments): mark it
+    // painted so the still-running direct re-reads stop at their next pass
+    // boundary and the batch completion path does not fire a second AI call.
+    if(specBatch && aiSpeculation.batch===specBatch){ aiSpeculation.painted = true; aiSpeculation.done = true; }
     // An AI reply that still contains unknown airports is not a finished
     // itinerary — show it, but never dress it up as a clean result.
     if(/(DEP|ARR)-\??\?{2,}/.test(t)){
@@ -2000,6 +2106,9 @@ function convertAi(fromAuto, reason){
     detectMistakesAndLearn(text || "[screenshot]", previousDirect, t, reason);
   }).catch(function(e){
     if(requestId!==aiRequestId || requestAttachmentVersion!==attachmentVersion || requestAttachmentBatch!==latestAttachmentBatch) return;
+    // A failed speculative attempt re-opens the normal fallback path so the
+    // batch completion handler may retry (next model in the queue).
+    if(specBatch && aiSpeculation.batch===specBatch){ aiSpeculation.done = true; aiSpeculation.painted = false; }
     converting=false; window._aiStartedAt=0;
     if(fallback){ lastOut=fallback; out.textContent=fallback; setStatus("AI failed — previous result kept", true); }
     else{ setStatus("AI failed: "+String(e.message||e).slice(0,70), true); }
@@ -2221,10 +2330,38 @@ $("btnCopy").addEventListener("click", function() {
   }
 });
 
-if(!localStorage.getItem("spicy_seen")) $("welcome").classList.remove("hidden");
-$("enterBtn").addEventListener("click", function(){
+if(!localStorage.getItem("spicy_seen")) {
+  $("welcome").classList.remove("hidden");
+  // A returning visitor that cleared the welcome card but still has a key
+  // sees the input pre-filled, so START never nags for what is already saved.
+  if (gemKey()) $("gemKeyWelcome").value = gemKey();
+}
+function closeWelcome(){
   $("welcome").classList.add("hidden");
   try { localStorage.setItem("spicy_seen", "1"); } catch (e) {}
+}
+function welcomeKeyNudge(msg){
+  var warn = $("welcomeKeyWarn");
+  if (warn) { warn.textContent = msg; warn.classList.remove("hidden"); }
+  var keyInput = $("gemKeyWelcome");
+  if (keyInput) { keyInput.classList.add("keywarn"); keyInput.focus(); }
+  setStatus("ADD YOUR API KEY FIRST — or continue offline", true);
+}
+$("enterBtn").addEventListener("click", function(){
+  var entered = ($("gemKeyWelcome").value || "").trim();
+  if (entered) {
+    try { localStorage.setItem("spicy_gem_key", entered); } catch (e) {}
+    $("gemKey").value = entered;
+    closeWelcome();
+    setStatus("KEY SAVED — READY");
+    return;
+  }
+  if (gemKey()) { closeWelcome(); return; }
+  welcomeKeyNudge("Add your API key first — it is free and takes 20 seconds (Generate Api above).");
+});
+$("enterOffline").addEventListener("click", function(){
+  closeWelcome();
+  setStatus("OFFLINE MODE — add a key anytime with GENERATE API", true);
 });
 $("setClose").addEventListener("click", function(){ $("setModal").classList.add("hidden"); });
 $("setSave").addEventListener("click", function(){

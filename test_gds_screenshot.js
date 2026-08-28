@@ -19,6 +19,19 @@
  *      still recovers all 3 segments offline
  *   4. AI fallback speed: a previously saved model is tried immediately
  *      (no blocking model-list round trip) and model fallback is bounded
+ *   5. AI garbage reply is flagged, not dressed up as success
+ *   6. Speculative AI fallback: when direct OCR is still grinding, the AI
+ *      call starts in PARALLEL (~1.5s) instead of after the full ~14.5s
+ *      serial gauntlet (passes + rescue) — and whichever side produces the
+ *      trustworthy answer first wins:
+ *        6a. undetected image  -> AI paints early, exactly one AI call,
+ *            still-running direct passes abort at the next boundary
+ *        6b. slow direct read  -> direct paints, the late speculative AI
+ *            reply is ignored
+ *        6c. junk direct read (???? placeholders) -> AI auto re-reads and
+ *            replaces the placeholders without a manual press
+ *   7. Welcome screen asks for the API-generated key first (save+start,
+ *      nudge without a key, offline escape hatch, built markup)
  */
 const fs = require("fs");
 const path = require("path");
@@ -552,6 +565,158 @@ let makeSandboxGlobal;
     assert(done, `garbage path settled (status: "${s.status()}")`);
     assert(/INCOMPLETE/.test(s.status()), `garbage reply flagged (status: "${s.status()}")`);
     assert(!/^AI CONVERTED\b/.test(s.status()), "garbage reply not reported as clean success");
+  }
+
+  /* ================= 6. Speculative AI fallback race ================= */
+  console.log("\n=== 6. Speculative AI fallback: AI starts in parallel with direct OCR ===");
+
+  const busyWait = ms => { const t = Date.now(); while (Date.now() - t < ms) {} };
+  const statsOf = s => { try { return JSON.parse(s._store.get("spicy_weekly_stats_v1") || "{}"); } catch (e) { return {}; } };
+  const genCallsOf = s => s._fetchLog.filter(f => f.url.indexOf(":generateContent") >= 0);
+  const GDS_CLEAN_TEXT = [
+    "1 UA 5918 31AUG ORD YYZ 435P 737P N E75 2.02 437",
+    "DEP-CHICAGO O HARE INTL",
+    "ARR-TORONTO PEARSON INTL",
+    "CABIN-ECONOMY",
+    "",
+    "2 AC 920 31AUG YYZ ATH 910P 140P+1 D 789 9.30 4968",
+    "DEP-TORONTO PEARSON INTL",
+    "ARR-ATHENS ELEFTHERIOS VENIZELOS",
+    "CABIN-BUSINESS",
+    "",
+    "3 A3 934 01SEP ATH CAI 505P 705P Z 32N 2.00 694",
+    "DEP-ATHENS ELEFTHERIOS VENIZELOS",
+    "ARR-CAIRO INTL",
+    "CABIN-BUSINESS",
+  ].join("\n");
+
+  // 6a. The weekly-report failure mode: "undetected attachment / direct found
+  //     0". OCR grinds slowly and finds nothing; the AI call must START while
+  //     direct is still working (t_gen well under the ~14.5s serial path),
+  //     paint as soon as it returns, and remain the ONLY AI call.
+  {
+    const genAt = [];
+    const s = makeSandbox({
+      ocrad() { busyWait(1500); return ""; }, // slow, hopeless direct read
+      fetch(url) {
+        if (url.indexOf(":generateContent") >= 0) {
+          genAt.push(Date.now());
+          return { json: () => new Promise(r => setTimeout(() => r(gemOkBody), 1000)) };
+        }
+        throw new Error("unexpected fetch: " + url);
+      },
+    });
+    s._store.set("spicy_gem_key", "test-key");
+    s._store.set("spicy_gem_model", "gemini-3.7-flash");
+    const tDrop = Date.now();
+    s.drop([gdsFile()]);
+    const done = await waitUntil(() => /AI CONVERTED|AI failed|IMAGE PARSED|NOT READ/.test(s.status()), 30000);
+    assert(done, `6a: settled (status: "${s.status()}")`);
+    assert(/AI CONVERTED/.test(s.status()), `6a: AI answered (status: "${s.status()}")`);
+    const tGen = genAt[0] ? genAt[0] - tDrop : Infinity;
+    assert(genAt.length === 1, `6a: exactly one generateContent call (got ${genAt.length})`);
+    assert(tGen < 5000, `6a: AI call started in parallel after ${tGen}ms (< 5s; serial path was ~14.5s+)`);
+    const totalMs = Date.now() - tDrop;
+    assert(totalMs < 10000, `6a: whole conversion finished in ${totalMs}ms (< 10s; serial path was ~15s+)`);
+    assert(s.out().includes("UA 5918"), "6a: AI itinerary painted");
+    assert(!/IMAGE PARSED/.test(s.status()), `6a: no fake offline success (status: "${s.status()}")`);
+    await new Promise(r => setTimeout(r, 2500)); // direct pipeline fully settles
+    assert(genCallsOf(s).length === 1, `6a: still exactly one AI call after direct settled (got ${genCallsOf(s).length})`);
+    assert(s.out().includes("UA 5918"), "6a: AI itinerary not overwritten by the failed direct re-read");
+    const st = statsOf(s);
+    assert((st.aiFallback || 0) === 1, `6a: ai_fallback stat recorded once (got ${st.aiFallback})`);
+    assert(!(st.imgDirect > 0), "6a: no img_direct stat (direct never produced segments)");
+  }
+
+  // 6b. Direct re-read succeeds late (after the speculative call fired): the
+  //     deterministic result must win and the late AI reply must be ignored.
+  {
+    let ocrCalls = 0;
+    const s = makeSandbox({
+      ocrad() { ocrCalls++; return ocrCalls <= 2 ? (busyWait(800), "") : GDS_CLEAN_TEXT; },
+      fetch(url) {
+        if (url.indexOf(":generateContent") >= 0)
+          return { json: () => new Promise(r => setTimeout(() => r({
+            candidates: [{ content: { parts: [{ text:
+              "1 XX 9999 31AUG ORD YYZ 435P 737P N E75 2.02 437\nDEP-CHICAGO O HARE INTL\nARR-TORONTO PEARSON INTL\nCABIN-ECONOMY" }] } }], // must never appear
+          }), 2000)) };
+        throw new Error("unexpected fetch: " + url);
+      },
+    });
+    s._store.set("spicy_gem_key", "test-key");
+    s._store.set("spicy_gem_model", "gemini-3.7-flash");
+    s.drop([gdsFile()]);
+    const ignored = await waitUntil(() => /AI REPLY IGNORED — direct result kept/.test(s.status()), 30000);
+    assert(ignored, `6b: late speculative reply ignored (status: "${s.status()}")`);
+    assert(s.out().includes("UA 5918"), "6b: deterministic itinerary kept");
+    assert(!s.out().includes("XX 9999"), "6b: AI duplicate never painted");
+    assert(genCallsOf(s).length === 1, `6b: exactly one speculative AI call (got ${genCallsOf(s).length})`);
+  }
+
+  // 6c. Direct reads junk placeholders (mistake log: "1 FM 107 ???? ???? Y
+  //     0.00 0 N / DEP-???"): AI re-reads automatically instead of waiting
+  //     for the user to notice and press the button.
+  {
+    const s = makeSandbox({
+      ocrad() { return "1 FM 107 ???? ???? Y 738 0.00 0 N\nDEP-???\nARR-???\nCABIN-ECONOMY"; },
+      fetch(url) {
+        if (url.indexOf(":generateContent") >= 0)
+          return { json: () => Promise.resolve(gemOkBody) };
+        throw new Error("unexpected fetch: " + url);
+      },
+    });
+    s._store.set("spicy_gem_key", "test-key");
+    s._store.set("spicy_gem_model", "gemini-3.7-flash");
+    s.drop([gdsFile()]);
+    const done = await waitUntil(() => /AI CONVERTED|AI failed/.test(s.status()), 30000);
+    assert(done, `6c: settled (status: "${s.status()}")`);
+    assert(/AI CONVERTED/.test(s.status()), `6c: auto AI re-read happened (status: "${s.status()}")`);
+    assert(s.out().includes("UA 5918"), "6c: placeholders replaced by real itinerary");
+    assert(!/DEP-\?{3}/.test(s.out()), "6c: no ??? airports remain");
+    assert(genCallsOf(s).length === 1, `6c: exactly one AI call (got ${genCallsOf(s).length})`);
+  }
+
+  /* ================= 7. Welcome screen: API key first ================= */
+  console.log("\n=== 7. Welcome screen asks for the API key first ===");
+
+  // 7a. START without a key -> the card stays, a nudge appears (never a silent enter).
+  {
+    const s = makeSandbox({});
+    s.el("enterBtn").fire("click");
+    assert(!s.el("welcome")._classes.has("hidden"), "7a: welcome stays visible without a key");
+    assert(/ADD YOUR API KEY FIRST/.test(s.status()), `7a: nudge shown (status: "${s.status()}")`);
+    assert(/free and takes 20 seconds/.test(s.el("welcomeKeyWarn")._text), "7a: inline guidance points at Generate Api");
+    assert(!s._store.has("spicy_seen"), "7a: not marked as seen");
+  }
+
+  // 7b. Paste the generated key -> saved, card closes, ready.
+  {
+    const s = makeSandbox({});
+    s.el("gemKeyWelcome").value = "AIza-test-key-123";
+    s.el("enterBtn").fire("click");
+    assert(s._store.get("spicy_gem_key") === "AIza-test-key-123", "7b: key saved from the welcome card");
+    assert(s.el("welcome")._classes.has("hidden"), "7b: welcome closed after saving");
+    assert(s._store.get("spicy_seen") === "1", "7b: marked as seen");
+    assert(/KEY SAVED/.test(s.status()), `7b: confirmed (status: "${s.status()}")`);
+  }
+
+  // 7c. Offline escape hatch -> app stays usable without a key.
+  {
+    const s = makeSandbox({});
+    s.el("enterOffline").fire("click");
+    assert(s.el("welcome")._classes.has("hidden"), "7c: welcome closed via offline link");
+    assert(!s._store.has("spicy_gem_key"), "7c: no key stored");
+    assert(/OFFLINE MODE/.test(s.status()), `7c: offline status (status: "${s.status()}")`);
+  }
+
+  // 7d. Built artifact carries the new welcome markup (key input + made-with-love).
+  {
+    const built = fs.readFileSync(path.join(REPO, "index.html"), "utf8");
+    assert(built.includes("gemKeyWelcome"), "7d: built index.html has the welcome key input");
+    assert(/SAVE KEY &amp; START|SAVE KEY & START/.test(built), "7d: built index.html has SAVE KEY & START");
+    assert(built.includes("enterOffline"), "7d: built index.html has the offline link");
+    assert(/Made with .*love.* by Adham Badran/.test(built), "7d: built index.html mentions made with love");
+    assert(built.includes("♥"), "7d: built index.html has the heart");
   }
 
   console.log(`\n=== SUMMARY: ${PASS} passed, ${FAIL} failed ===`);

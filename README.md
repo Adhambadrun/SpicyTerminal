@@ -13,6 +13,7 @@ handling, hidden-stop merging, one chronological ticket order. No
 hallucinations, no re-rolling the dice.
 
 - **Fast, bounded offline screenshots**: OCR is lazy-loaded, uses a worker where available, caps oversized frames, and has a short native-OCR deadline—so a stalled scanner cannot leave the app spinning forever.
+- **Parallel AI fallback**: when the fast direct OCR passes have not found flights after ~1.5s, the Gemini fallback starts *immediately* and races the remaining bounded direct re-reads instead of running after them serially — a screenshot the offline engine cannot read answers in AI-time (not 14.5s-of-local-grinding + AI-time). The deterministic result always wins when both succeed; a junk direct read full of `????` placeholders is auto re-read by AI without a manual press.
 - **AI mistake detection & self-learning**: AI detects discrepancies and teaches the tool to fix them automatically on future conversions.
 - **Smart fallback**: Only falls back to AI in case an unreadable or handwritten screenshot cannot be detected offline.
 - **Reliable attachments**: `+ ATTACH`, drag-and-drop, and clipboard screenshots share one queue; image extensions are detected even when a browser supplies no MIME type, multiple images are parsed together in order, and stale work cannot overwrite a cleared request. Each screenshot has a small red `×` remove button, can be clicked to review full-size, and can also be removed from the review screen.
