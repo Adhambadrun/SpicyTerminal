@@ -118,9 +118,11 @@ function inferAircraft(airline, flightNo, orig, dest, distanceMi){
   var narrow=pair[0], wide=pair[1];
   var d=distanceMi||0;
   if(!d && AIRPORTS[orig] && AIRPORTS[dest]) d=haversineMiles(orig,dest)||0;
-  var pick=(d>=3500)?wide:narrow;
+  // wide-body threshold: 3000 mi catches transatlantic (JFK-LHR 3442) that old 3500 missed
+  var pick=(d>=3000)?wide:narrow;
   if(pick===narrow && d){var t=AIRCRAFT_TYPES[pick];
-    if(t && t[5] && d*NM_PER_MI > t[5]*1.02) pick=wide;}
+    // use 1.0 factor (not 1.02) — 738 range 2935 nm, JFK-LHR 2987 nm must flip to wide
+    if(t && t[5] && d*NM_PER_MI > t[5]) pick=wide;}
   return [pick,"route estimate"];
 }
 function rangeAdvisory(code, orig, dest, distanceMi){
@@ -573,10 +575,21 @@ function _ddmmmParts(ddmmm){
   return [parseInt(m[1],10), MONTHS.indexOf(m[2].toUpperCase())+1];
 }
 function _clockMin(tok){
-  var m=/^(\d{1,2})(\d{2})([AP])$/.exec((tok||"").trim());
+  var t=(tok||"").trim().toUpperCase();
+  // handle GDS noon/midnight markers: 1200N = noon 12:00 (720), 1200M = midnight 00:00 (0)
+  if(t==="1200N") return 12*60;
+  if(t==="1200M") return 0;
+  var m=/^(\d{1,2})(\d{2})([APNM])$/.exec(t);
   if(!m) return null;
   var h=parseInt(m[1],10)%12, mi=parseInt(m[2],10);
-  if(m[3]==="P") h+=12;
+  var ap=m[3];
+  if(ap==="P"||ap==="N") h+=12;
+  if(ap==="N" && h===24) h=12; // 1200N already handled but keep safe: noon = 12*60
+  if(ap==="M") h=0; // midnight
+  // 12A = midnight 0, 12P = noon 12
+  if(ap==="A" && m[1]==="12") h=0;
+  if(ap==="P" && m[1]==="12") h=12;
+  if(ap==="N") h=12;
   return h*60+mi;
 }
 function _groundMinutes(a,b){
@@ -658,7 +671,7 @@ function sortChronologically(segs){
   if(segs.length<2) return segs;
   var mons=segs.map(function(s){var p=_ddmmmParts(s.date_ddmmm);return p?p[1]:0;});
   var have=mons.filter(function(m){return m;});
-  var wrap=have.length && (Math.max.apply(null,have)-Math.min.apply(null,have)>6);
+  var wrap=have.length && (Math.max.apply(null,have)-Math.min.apply(null,have)>=6);
   // Year-turnover pivot: the "trip year" starts at the month that follows the
   // largest circular gap between booked months (e.g. DEC..MAY -> gap MAY->DEC,
   // so DEC starts the trip and JAN-MAY belong to the following year). The old
