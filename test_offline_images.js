@@ -178,6 +178,9 @@ assert(html.includes("adhambadraan@gmail.com"), "index.html contains author emai
 assert(html.includes("btnWeeklyReport"), "index.html contains btnWeeklyReport button");
 assert(html.includes("reportModal"), "index.html contains reportModal dialog");
 assert(html.includes("OCRAD"), "index.html has bundled OCRAD engine");
+assert(html.includes('id="ocradSource" type="text/plain"'), "index.html defers OCRAD compilation until a screenshot needs it");
+assert(html.includes("attachmentReviewModal"), "index.html includes the screenshot review dialog");
+assert(html.includes("attachment-remove"), "index.html includes the small screenshot remove control");
 
 console.log(`\n=== SUMMARY: ${PASS} passed, ${FAIL} failed ===`);
 if (FAIL > 0) process.exit(1);

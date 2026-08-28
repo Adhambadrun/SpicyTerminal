@@ -45,7 +45,7 @@ def png64(src, resize):
         # Use a temporary file so no generated assets are left in the repo.
         try:
             with tempfile.NamedTemporaryFile(suffix=".png") as out:
-                subprocess.run(["convert", str(src), "-resize", resize, str(out.name)],
+                subprocess.run(["convert", str(src), "-strip", "-resize", resize, str(out.name)],
                                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return base64.b64encode(pathlib.Path(out.name).read_bytes()).decode()
         except (OSError, subprocess.SubprocessError):

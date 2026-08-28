@@ -1,6 +1,6 @@
 /* app.js — SpicyTerminal Web UI — Instant Conversion & AI Self-Learner
    Features:
-   - Instant screenshots: fast conversion with zero AI needed (<1s)
+   - Bounded screenshot OCR: lazy-loaded worker path plus a no-hang fallback
    - Native TextDetector API + bundled pure JS OCRAD fallback
    - Aviation-aware OCR cleaner (repairs glyph confusions in flight numbers, times, airports, dates)
    - Fallback to AI ONLY in case direct parsing cannot detect flights
@@ -17,8 +17,10 @@ var images = [];
 var documents = [];
 var lastOut = "";
 var converting = false;
-var engineWorker = null;
+var aiRequestId = 0;
 var lastTextFp = "";
+var nextAttachmentId = 0;
+var activeReviewImageId = null;
 
 // Attachment state is deliberately separate from the input text.  A file
 // picker can return an empty/incorrect MIME type and several files can finish
@@ -35,6 +37,16 @@ var AUTHOR_EMAIL = "adhambadraan@gmail.com";
 
 /* ---------- utils ---------- */
 function setStatus(msg, warn) { st.textContent = msg; st.title = msg; st.className = warn ? "warn" : ""; }
+function nowMs() { return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(); }
+function invalidateAiForAttachmentChange() {
+  // The network request itself cannot be reliably cancelled in every browser,
+  // but its response must never repaint a newer attachment set.
+  if (converting) {
+    aiRequestId++;
+    converting = false;
+    window._aiStartedAt = 0;
+  }
+}
 function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 function gemKey() { return localStorage.getItem("spicy_gem_key") || ""; }
 function hashStr(s){
@@ -429,34 +441,84 @@ function cleanOcrText(rawText) {
   return s;
 }
 
-/* ---------- high-speed image preprocessing (<100ms) ---------- */
+/* ---------- bounded, non-blocking screenshot OCR ---------- */
+// OCRAD is reliable but can become very expensive on a full-resolution phone
+// screenshot. Keep every pass inside a predictable pixel/time budget and run
+// the heavy recognizer off the UI thread whenever the browser supports it.
+var OCR_MAX_PIXELS = 1050000;
+var OCR_MAX_SIDE = 1920;
+var OCR_MAX_TOTAL_MS = 6500;
+var OCR_NATIVE_TIMEOUT_MS = 900;
+var OCR_WORKER_BOOT_MS = 2500;
+var OCR_WORKER_PASS_MS = 6000;
+var ocrWorkerState = null;
+var ocrWorkerDisabled = false;
+
+function ocrError(code, message) {
+  var err = new Error(message || code || "OCR error");
+  err.code = code || "ocr_error";
+  return err;
+}
+function ocradSourceText() {
+  var sourceNode = $("ocradSource");
+  return sourceNode ? String(sourceNode.textContent || sourceNode.text || "") : "";
+}
+function canUseOcrad() {
+  return typeof window.OCRAD === "function" || !!ocradSourceText();
+}
+function ensureOcradOnMain() {
+  if (typeof window.OCRAD === "function") return true;
+  var source = ocradSourceText();
+  if (!source) return false;
+  try {
+    // `ocradSource` deliberately has type=text/plain so first paint does not
+    // compile a megabyte of OCR code. Only older browsers that cannot use the
+    // worker evaluate it on the main thread, and only when OCR is requested.
+    if (window.eval) window.eval(source);
+    else eval(source); // eslint-disable-line no-eval
+  } catch (e) { return false; }
+  return typeof window.OCRAD === "function";
+}
+function fitOcrDimensions(width, height) {
+  var w = Math.max(1, Math.round(width || 1));
+  var h = Math.max(1, Math.round(height || 1));
+  var scale = Math.min(1, OCR_MAX_SIDE / Math.max(w, h), Math.sqrt(OCR_MAX_PIXELS / (w * h)));
+  if (scale < 1) {
+    w = Math.max(1, Math.round(w * scale));
+    h = Math.max(1, Math.round(h * scale));
+  }
+  return { w: w, h: h };
+}
+
+/* ---------- high-speed image preprocessing ---------- */
 function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
   var w = srcCanvas.width, h = srcCanvas.height;
   var targetW = w, targetH = h;
 
-  // Glyph height needs to be ~25-35px for clean OCRAD recognition.
-  // If height is small (e.g. < 280px for a flight card row), upscale up to 3x!
+  // Glyph height needs to be ~25-35px for clean OCRAD recognition. Upscale
+  // compact flight cards, then cap the final work area so a dense screenshot
+  // cannot turn one attachment into several seconds of synchronous work.
   if (h < 260) {
-    var scale = Math.min(3.0, 480 / h);
-    targetW = Math.round(w * scale);
-    targetH = Math.round(h * scale);
+    var smallScale = Math.min(3.0, 480 / h);
+    targetW = Math.round(w * smallScale);
+    targetH = Math.round(h * smallScale);
   } else if (w < 800) {
-    var factor = Math.min(2.0, 1000 / w);
-    targetW = Math.round(w * factor);
-    targetH = Math.round(h * factor);
-  } else if (w > 1600) {
-    var factor = 1400 / w;
-    targetW = Math.round(w * factor);
-    targetH = Math.round(h * factor);
+    var narrowScale = Math.min(2.0, 1000 / w);
+    targetW = Math.round(w * narrowScale);
+    targetH = Math.round(h * narrowScale);
   }
+  var bounded = fitOcrDimensions(targetW, targetH);
+  targetW = bounded.w;
+  targetH = bounded.h;
 
   var cv = document.createElement("canvas");
   cv.width = targetW;
   cv.height = targetH;
   // willReadFrequently keeps the backing store in CPU memory: getImageData
-  // below is 5-10x faster than reading back a GPU texture.  Browsers without
-  // the option simply ignore it.
+  // below is substantially faster than reading back a GPU texture. Browsers
+  // without the option simply ignore it.
   var ctx = cv.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Canvas is not available");
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(srcCanvas, 0, 0, targetW, targetH);
@@ -465,11 +527,11 @@ function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
   var data = imgData.data;
   var len = data.length;
 
-  // 1. Full image luminance histogram to accurately detect background mode
+  // One histogram pass determines whether a dark UI should be inverted.
   var hist = new Uint32Array(256);
   var minLum = 255, maxLum = 0;
   for (var i = 0; i < len; i += 4) {
-    var lum = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000 | 0;
+    var lum = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000 | 0;
     hist[lum]++;
     if (lum < minLum) minLum = lum;
     if (lum > maxLum) maxLum = lum;
@@ -479,30 +541,29 @@ function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
     if (hist[k] > maxCount) { maxCount = hist[k]; bgLum = k; }
   }
 
-  // Determine whether to invert:
-  // If mode === "invert", force invert. If mode === "normal", force normal.
-  // If mode === "auto", dark background (bgLum < 128) -> invert so text is black on white.
+  // If mode === "auto", dark background -> invert so text is black on white.
   var isDark = (mode === "invert") ? true : (mode === "normal") ? false : (bgLum < 128);
 
   if (mode === "gray") {
-    // Contrast-stretched grayscale (no hard threshold).
-    var range = Math.max(1, maxLum - minLum);
-    var p = 0;
-    for (var i = 0; i < len; i += 4) {
-      var gl = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000;
+    // Contrast-stretched grayscale (no hard threshold). For an inverted image
+    // the range must be inverted too; otherwise dark screenshots lose detail.
+    var low = isDark ? 255 - maxLum : minLum;
+    var high = isDark ? 255 - minLum : maxLum;
+    var range = Math.max(1, high - low);
+    for (var g = 0; g < len; g += 4) {
+      var gl = (data[g] * 299 + data[g + 1] * 587 + data[g + 2] * 114) / 1000;
       if (isDark) gl = 255 - gl;
-      var gNorm = Math.round(((gl - minLum) / range) * 255);
-      data[i] = gNorm; data[i+1] = gNorm; data[i+2] = gNorm; data[i+3] = 255;
+      var gNorm = Math.max(0, Math.min(255, Math.round(((gl - low) / range) * 255)));
+      data[g] = gNorm; data[g + 1] = gNorm; data[g + 2] = gNorm; data[g + 3] = 255;
     }
   } else {
-    // Fused grayscale + conditional inversion + threshold in a single pass
-    // over the pixels (the separate gray buffer write is eliminated).
+    // Fuse grayscale, conditional inversion and threshold into one pass.
     var thresh = thresholdVal || 150;
     var invCut = 255 - thresh;
-    for (var i = 0; i < len; i += 4) {
-      var gl = (data[i] * 299 + data[i+1] * 587 + data[i+2] * 114) / 1000;
-      var val = (isDark ? gl < invCut : gl > thresh) ? 255 : 0;
-      data[i] = val; data[i+1] = val; data[i+2] = val; data[i+3] = 255;
+    for (var p = 0; p < len; p += 4) {
+      var valueLum = (data[p] * 299 + data[p + 1] * 587 + data[p + 2] * 114) / 1000;
+      var value = (isDark ? valueLum < invCut : valueLum > thresh) ? 255 : 0;
+      data[p] = value; data[p + 1] = value; data[p + 2] = value; data[p + 3] = 255;
     }
   }
 
@@ -510,10 +571,148 @@ function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
   return cv;
 }
 
-/* ---------- instant image parsing engine (<1 second) ---------- */
+/* ---------- OCR worker: keep OCRAD from freezing controls ---------- */
+function releaseOcrWorker(state) {
+  if (!state) return;
+  if (state.bootTimer) clearTimeout(state.bootTimer);
+  if (state.active && state.active.timer) clearTimeout(state.active.timer);
+  try { if (state.worker) state.worker.terminate(); } catch (e) {}
+  try {
+    var api = window.URL || window.webkitURL;
+    if (state.url && api && api.revokeObjectURL) api.revokeObjectURL(state.url);
+  } catch (e) {}
+}
+function rejectOcrWorkerJobs(state, err) {
+  if (!state) return;
+  if (state.active) {
+    var active = state.active;
+    state.active = null;
+    if (active.timer) clearTimeout(active.timer);
+    active.reject(err);
+  }
+  while (state.queue && state.queue.length) state.queue.shift().reject(err);
+}
+function stopOcrWorker(code, message, disable) {
+  var state = ocrWorkerState;
+  if (!state) return;
+  ocrWorkerState = null;
+  if (disable) ocrWorkerDisabled = true;
+  var err = ocrError(code, message);
+  releaseOcrWorker(state);
+  rejectOcrWorkerJobs(state, err);
+}
+function cancelOcrWork() {
+  // A new attachment set or a removed screenshot makes queued OCR obsolete.
+  // Terminating the worker gives the remove/clear button an immediate effect.
+  if (ocrWorkerState) stopOcrWorker("cancelled", "OCR cancelled because attachments changed", false);
+}
+function pumpOcrWorker() {
+  var state = ocrWorkerState;
+  if (!state || !state.ready || state.active || !state.queue.length) return;
+  var job = state.queue.shift();
+  state.active = job;
+  job.timer = setTimeout(function() {
+    if (ocrWorkerState === state && state.active === job) {
+      stopOcrWorker("timeout", "OCR pass took too long — try a tighter screenshot crop", false);
+    }
+  }, OCR_WORKER_PASS_MS);
+  try {
+    var message = { type: "ocr", id: job.id, width: job.width, height: job.height, pixels: job.pixels.buffer };
+    try { state.worker.postMessage(message, [job.pixels.buffer]); }
+    catch (transferError) { state.worker.postMessage(message); }
+  } catch (postError) {
+    stopOcrWorker("unavailable", "OCR worker could not start", true);
+  }
+}
+function makeOcrWorker() {
+  if (ocrWorkerDisabled || ocrWorkerState) return ocrWorkerState;
+  var WorkerCtor = window.Worker || (typeof Worker !== "undefined" ? Worker : null);
+  var BlobCtor = window.Blob || (typeof Blob !== "undefined" ? Blob : null);
+  var urlApi = window.URL || window.webkitURL;
+  var source = ocradSourceText();
+  if (!WorkerCtor || !BlobCtor || !urlApi || !urlApi.createObjectURL || !source) {
+    ocrWorkerDisabled = true;
+    return null;
+  }
+
+  // The already-inlined OCRAD source is reused rather than fetched. That keeps
+  // the single-file/offline build working while moving recognition off-thread.
+  var bridge = "\n;self.onmessage=function(event){var m=event.data||{};if(m.type!==\"ocr\")return;try{var pixels=new Uint8ClampedArray(m.pixels);var text=OCRAD({width:m.width,height:m.height,data:pixels});self.postMessage({id:m.id,text:text||\"\"});}catch(error){self.postMessage({id:m.id,error:String((error&&error.message)||error||\"OCR worker failed\")});}};self.postMessage({type:\"spicy-ocr-ready\"});";
+  var state = { worker: null, url: "", ready: false, queue: [], active: null, nextId: 0, bootTimer: null };
+  try {
+    state.url = urlApi.createObjectURL(new BlobCtor([source, bridge], { type: "application/javascript" }));
+    state.worker = new WorkerCtor(state.url);
+  } catch (e) {
+    releaseOcrWorker(state);
+    ocrWorkerDisabled = true;
+    return null;
+  }
+  ocrWorkerState = state;
+  state.worker.onmessage = function(event) {
+    var msg = event.data || {};
+    if (msg.type === "spicy-ocr-ready") {
+      state.ready = true;
+      if (state.bootTimer) { clearTimeout(state.bootTimer); state.bootTimer = null; }
+      pumpOcrWorker();
+      return;
+    }
+    var job = state.active;
+    if (!job || msg.id !== job.id) return;
+    state.active = null;
+    if (job.timer) clearTimeout(job.timer);
+    if (msg.error) job.reject(ocrError("failed", msg.error));
+    else job.resolve(String(msg.text || ""));
+    pumpOcrWorker();
+  };
+  state.worker.onerror = function() { stopOcrWorker("unavailable", "OCR worker is unavailable in this browser", true); };
+  state.worker.onmessageerror = function() { stopOcrWorker("unavailable", "OCR worker returned an unreadable response", true); };
+  state.bootTimer = setTimeout(function() {
+    if (ocrWorkerState === state && !state.ready) stopOcrWorker("unavailable", "OCR worker did not start", true);
+  }, OCR_WORKER_BOOT_MS);
+  return state;
+}
+function queueOcrWorker(canvas) {
+  var state = makeOcrWorker();
+  if (!state) return null;
+  var ctx, frame;
+  try {
+    ctx = canvas && canvas.getContext && canvas.getContext("2d", { willReadFrequently: true });
+    frame = ctx && ctx.getImageData(0, 0, canvas.width, canvas.height);
+  } catch (e) { return null; }
+  if (!frame || !frame.data || !frame.data.buffer) return null;
+  return new Promise(function(resolve, reject) {
+    state.queue.push({ id: ++state.nextId, width: frame.width || canvas.width, height: frame.height || canvas.height,
+      pixels: frame.data, resolve: resolve, reject: reject, timer: null });
+    pumpOcrWorker();
+  });
+}
+function runOcradOnMain(canvas) {
+  // Yield once before the compatibility path, allowing the PARSING state to
+  // paint even in browsers that disallow blob workers.
+  return new Promise(function(resolve, reject) {
+    setTimeout(function() {
+      try {
+        if (!ensureOcradOnMain()) throw new Error("OCR engine not available");
+        resolve(window.OCRAD(canvas) || "");
+      } catch (e) { reject(e); }
+    }, 0);
+  });
+}
+function recognizeOcrCanvas(canvas) {
+  var workerTask = queueOcrWorker(canvas);
+  if (!workerTask) return runOcradOnMain(canvas);
+  return workerTask.then(function(text) { return text; }, function(err) {
+    // A blocked/unsupported worker should not make screenshots fail. Fall back
+    // to the bundled OCRAD path; timeout/cancel errors remain bounded instead.
+    if (err && err.code === "unavailable") return runOcradOnMain(canvas);
+    throw err;
+  });
+}
+
+/* ---------- instant image parsing engine ---------- */
 function parseImageDirect(im) {
   return new Promise(function(resolve) {
-    var t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    var t0 = nowMs();
     var settled = false;
 
     function finish(result) {
@@ -521,6 +720,7 @@ function parseImageDirect(im) {
       settled = true;
       resolve(result);
     }
+    function elapsed() { return Math.round(nowMs() - t0); }
 
     function begin(srcCv) {
       if (!srcCv || !srcCv.width || !srcCv.height) {
@@ -528,12 +728,100 @@ function parseImageDirect(im) {
         return;
       }
 
-      // Pass 1: native TextDetector where available (usually hardware
-      // accelerated).  It is optional and never allowed to block OCRAD.
+      function runOcradPasses() {
+        // With an OCR worker, OCRAD stays uncompiled on the UI thread until it
+        // is actually needed as a compatibility fallback.
+        if (!canUseOcrad()) {
+          finish({ segs: [], warns: ["OCR engine not available"], text: "", method: "none", dur: elapsed() });
+          return;
+        }
+
+        // A normal screenshot is found on the first pass. Three carefully
+        // chosen variants retain a useful fallback without the old six-pass
+        // worst case; large frames get just two bounded attempts.
+        var passes = [
+          { mode: "auto", thresh: 150, label: "auto (150)" },
+          { mode: "auto", thresh: 175, label: "auto (175)" },
+          { mode: "gray", thresh: 0, label: "grayscale" }
+        ];
+        if (srcCv.width * srcCv.height > 850000) passes = passes.slice(0, 2);
+        var bestRaw = "";
+        var pIdx = 0;
+
+        function finishBest(reason) {
+          if (bestRaw.trim().length > 5) {
+            var cleanedFinal = cleanOcrText(bestRaw);
+            var resFinal = window.SpicyEngine.parse(cleanedFinal);
+            if (resFinal[0] && resFinal[0].length > 0) {
+              finish({ segs: resFinal[0], warns: resFinal[1], text: cleanedFinal,
+                rawOcr: bestRaw, method: "OCRAD (best text)", dur: elapsed() });
+              return;
+            }
+          }
+          finish({ segs: [], warns: [reason || "Could not detect flights"], text: bestRaw,
+            method: "OCRAD (failed)", dur: elapsed() });
+        }
+        function step() {
+          if (settled) return;
+          if (pIdx >= passes.length) { finishBest(); return; }
+          if (elapsed() >= OCR_MAX_TOTAL_MS) {
+            finishBest("OCR stopped after " + Math.round(OCR_MAX_TOTAL_MS / 1000) + "s — try a tighter screenshot crop");
+            return;
+          }
+          var cfg = passes[pIdx++], procCv;
+          try { procCv = preprocessCanvasForOcr(srcCv, cfg.mode, cfg.thresh); }
+          catch (passErr) { setTimeout(step, 0); return; }
+          recognizeOcrCanvas(procCv).then(function(raw) {
+            if (settled) return;
+            raw = String(raw || "");
+            if (raw.trim().length > bestRaw.trim().length) bestRaw = raw;
+            if (raw.trim().length > 5) {
+              var cleaned = cleanOcrText(raw);
+              var res = window.SpicyEngine.parse(cleaned);
+              if (res[0] && res[0].length > 0) {
+                finish({ segs: res[0], warns: res[1], text: cleaned, rawOcr: raw,
+                  method: "OCRAD (" + cfg.label + ")", dur: elapsed() });
+                return;
+              }
+            }
+            // Yield between passes so UI events and attachment removal remain
+            // responsive even when the browser has no Worker support.
+            setTimeout(step, 0);
+          }, function(err) {
+            if (settled) return;
+            if (err && err.code === "cancelled") {
+              finish({ segs: [], warns: ["OCR cancelled"], text: bestRaw, method: "OCRAD (cancelled)", dur: elapsed() });
+              return;
+            }
+            if (err && err.code === "timeout") {
+              finishBest("OCR timed out — try a tighter screenshot crop");
+              return;
+            }
+            setTimeout(step, 0);
+          });
+        }
+        step();
+      }
+
+      // Native TextDetector is the quickest route when present, but some
+      // browser implementations can stall. Race it against a short deadline
+      // so it never leaves the attachment pipeline on PARSING forever.
       if (window.TextDetector) {
+        var nativeSettled = false;
+        var nativeTimer = null;
+        function nativeFallback() {
+          if (nativeSettled || settled) return;
+          nativeSettled = true;
+          if (nativeTimer) clearTimeout(nativeTimer);
+          runOcradPasses();
+        }
         try {
           var td = new window.TextDetector();
+          nativeTimer = setTimeout(nativeFallback, OCR_NATIVE_TIMEOUT_MS);
           Promise.resolve(td.detect(srcCv)).then(function(detected) {
+            if (nativeSettled || settled) return;
+            nativeSettled = true;
+            if (nativeTimer) clearTimeout(nativeTimer);
             if (detected && detected.length) {
               detected.sort(function(a, b) {
                 var ab = a.boundingBox || {}, bb = b.boundingBox || {};
@@ -550,76 +838,18 @@ function parseImageDirect(im) {
               }
             }
             runOcradPasses();
-          }, function() { runOcradPasses(); });
+          }, nativeFallback);
           return;
-        } catch (e) { /* fall through to OCRAD */ }
+        } catch (e) {
+          nativeFallback();
+          return;
+        }
       }
       runOcradPasses();
-
-      function elapsed() {
-        return Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0);
-      }
-      function runOcradPasses() {
-        if (typeof window.OCRAD !== "function") {
-          finish({ segs: [], warns: ["OCR engine not available"], text: "", method: "none", dur: elapsed() });
-          return;
-        }
-
-        // The first pass handles normal screenshots.  More expensive passes
-        // only run when the fast path cannot produce a flight, keeping the
-        // common case very quick without sacrificing difficult screenshots.
-        var passes = [
-          { mode: "auto", thresh: 150, label: "auto (150)" },
-          { mode: "auto", thresh: 175, label: "auto (175)" },
-          { mode: "auto", thresh: 125, label: "auto (125)" },
-          { mode: "invert", thresh: 150, label: "inverted" },
-          { mode: "normal", thresh: 150, label: "normal" },
-          { mode: "gray", thresh: 0, label: "grayscale" }
-        ];
-        var bestRaw = "";
-        var pIdx = 0;
-        function step() {
-          if (settled) return;
-          if (pIdx >= passes.length) {
-            if (bestRaw.trim().length > 5) {
-              var cleanedFinal = cleanOcrText(bestRaw);
-              var resFinal = window.SpicyEngine.parse(cleanedFinal);
-              if (resFinal[0] && resFinal[0].length > 0) {
-                finish({ segs: resFinal[0], warns: resFinal[1], text: cleanedFinal,
-                  rawOcr: bestRaw, method: "OCRAD (best text)", dur: elapsed() });
-                return;
-              }
-            }
-            finish({ segs: [], warns: ["Could not detect flights"], text: bestRaw,
-              method: "OCRAD (failed)", dur: elapsed() });
-            return;
-          }
-          var cfg = passes[pIdx++];
-          try {
-            var procCv = preprocessCanvasForOcr(srcCv, cfg.mode, cfg.thresh);
-            var raw = window.OCRAD(procCv) || "";
-            if (raw.trim().length > bestRaw.trim().length) bestRaw = raw;
-            if (raw.trim().length > 5) {
-              var cleaned = cleanOcrText(raw);
-              var res = window.SpicyEngine.parse(cleaned);
-              if (res[0] && res[0].length > 0) {
-                finish({ segs: res[0], warns: res[1], text: cleaned, rawOcr: raw,
-                  method: "OCRAD (" + cfg.label + ")", dur: elapsed() });
-                return;
-              }
-            }
-          } catch (passErr) { /* try the next preprocessing mode */ }
-          // A difficult screenshot can need several full-frame OCR passes.
-          // Yield once between them so the page keeps painting while the
-          // hard work continues.
-          setTimeout(step, 0);
-        }
-        step();
-      }
     }
 
     // fastDownscale retains the canvas, avoiding a second base64 decode in
-    // the normal path.  The data URL fallback keeps this function reusable.
+    // the normal path. The data URL fallback keeps this function reusable.
     if (im.canvas) {
       begin(im.canvas);
       return;
@@ -640,10 +870,35 @@ function parseImageDirect(im) {
 }
 
 /* ---------- attachment helpers ---------- */
-function readyImages() { return images.filter(function(im) { return !!im; }); }
+function readyImages() { return images.filter(function(im) { return !!im && !im._pending && !im._removed; }); }
 function readyDocuments() { return documents.filter(function(doc) { return !!doc; }); }
 function hasAttachments() { return readyImages().length > 0 || readyDocuments().length > 0 || pendingImageJobs > 0 || pendingDocumentJobs > 0; }
 function fileName(file) { return String((file && file.name) || "attachment"); }
+function imageById(id) {
+  for (var i = 0; i < images.length; i++) {
+    if (images[i] && images[i]._attachmentId === id && !images[i]._removed) return images[i];
+  }
+  return null;
+}
+function imageDataUrl(im) {
+  return im ? "data:" + im.mime + ";base64," + im.b64 : "";
+}
+function revokeImagePreview(im) {
+  if (!im || !im._reviewUrl || !im._reviewUrlIsObjectUrl) return;
+  try {
+    var api = window.URL || window.webkitURL;
+    if (api && api.revokeObjectURL) api.revokeObjectURL(im._reviewUrl);
+  } catch (e) {}
+  im._reviewUrl = "";
+  im._reviewUrlIsObjectUrl = false;
+}
+function makeImagePreviewUrl(file) {
+  try {
+    var api = window.URL || window.webkitURL;
+    if (api && api.createObjectURL) return api.createObjectURL(file);
+  } catch (e) {}
+  return "";
+}
 function fileExtension(file) {
   var name = fileName(file).toLowerCase();
   var dot = name.lastIndexOf(".");
@@ -798,30 +1053,178 @@ function fastDownscale(file, maxSide, quality) {
   });
 }
 
-function addThumb(im, slot) {
-  // Paint straight from the retained downscale canvas: no second full-size
-  // base64 decode, so thumbnails appear with zero extra image work.
+function closeAttachmentReview() {
+  activeReviewImageId = null;
+  var modal = $("attachmentReviewModal");
+  if (modal) modal.classList.add("hidden");
+  var reviewImage = $("attachmentReviewImage");
+  if (reviewImage) {
+    if (reviewImage.removeAttribute) reviewImage.removeAttribute("src");
+    else reviewImage.src = "";
+  }
+}
+function openAttachmentReview(id) {
+  var im = imageById(id);
+  if (!im || im._pending) {
+    if (im && im._pending) setStatus("SCREENSHOT STILL LOADING…");
+    return;
+  }
+  activeReviewImageId = id;
+  var reviewImage = $("attachmentReviewImage");
+  var fallback = imageDataUrl(im);
+  if (reviewImage) {
+    reviewImage.alt = "Attached screenshot: " + fileName(im);
+    reviewImage.onerror = function() {
+      // Object URLs preserve the original screenshot for review. If a browser
+      // cannot render that source, the already-decoded attachment still works.
+      if (fallback && reviewImage.src !== fallback) reviewImage.src = fallback;
+    };
+    reviewImage.src = im._reviewUrl || fallback;
+  }
+  var meta = $("attachmentReviewMeta");
+  if (meta) meta.textContent = fileName(im) + (im.w && im.h ? " · " + im.w + " × " + im.h : "");
+  var modal = $("attachmentReviewModal");
+  if (modal) modal.classList.remove("hidden");
+  var close = $("attachmentReviewClose");
+  if (close && close.focus) setTimeout(function() { close.focus(); }, 0);
+}
+function detachAttachmentThumb(im) {
+  var node = im && im._thumbEl;
+  if (!node) return;
+  try {
+    if (node.parentNode && node.parentNode.removeChild) node.parentNode.removeChild(node);
+    else if (node.remove) node.remove();
+  } catch (e) {}
+  im._thumbEl = null;
+}
+function paintAttachmentThumb(im) {
+  var thumb = im && im._thumbEl;
+  var open = im && im._thumbOpen;
+  if (!im || !thumb || !open || im._pending || im._thumbImage) return;
+  if (thumb.classList) thumb.classList.remove("is-loading");
+  if (im._thumbLoading) {
+    try {
+      if (im._thumbLoading.parentNode && im._thumbLoading.parentNode.removeChild) im._thumbLoading.parentNode.removeChild(im._thumbLoading);
+      else if (im._thumbLoading.remove) im._thumbLoading.remove();
+    } catch (e) {}
+    im._thumbLoading = null;
+  }
+  open.disabled = false;
+  open.title = "Review " + fileName(im);
+  open.setAttribute && open.setAttribute("aria-label", "Review screenshot " + fileName(im));
+
   function paintFrom(src, w, h) {
-    var ts = Math.min(26 / h, 56 / w);
+    if (!imageById(im._attachmentId) || !im._thumbEl || !w || !h) return;
+    var ts = Math.min(32 / h, 60 / w);
     var th = document.createElement("canvas");
     th.width = Math.max(1, Math.round(w * ts));
     th.height = Math.max(1, Math.round(h * ts));
     var ctx = th.getContext("2d");
     if (!ctx) return;
     ctx.drawImage(src, 0, 0, th.width, th.height);
-    var ti = document.createElement("img");
-    ti.src = th.toDataURL("image/jpeg", 0.5);
-    ti.alt = fileName(im);
-    ti.title = fileName(im) + " attached";
-    $("thumbs").appendChild(ti);
+    var image = document.createElement("img");
+    image.className = "attachment-preview-img";
+    image.src = th.toDataURL("image/jpeg", 0.5);
+    image.alt = "";
+    im._thumbImage = image;
+    open.appendChild(image);
   }
   if (im.canvas && im.canvas.width && im.canvas.height) {
     paintFrom(im.canvas, im.canvas.width, im.canvas.height);
     return;
   }
-  var img = new Image();
-  img.onload = function() { paintFrom(img, img.width || img.naturalWidth, img.height || img.naturalHeight); };
-  img.src = "data:" + im.mime + ";base64," + im.b64;
+  var image = new Image();
+  image.onload = function() { paintFrom(image, image.width || image.naturalWidth, image.height || image.naturalHeight); };
+  image.src = imageDataUrl(im);
+}
+function addThumb(im) {
+  // Create the control immediately, including while a large screenshot is
+  // decoding. This means the red × can cancel a slow attachment straight away.
+  if (!im || !im._attachmentId) return;
+  var thumb = document.createElement("span");
+  thumb.className = "attachment-thumb";
+  var open = document.createElement("button");
+  open.type = "button";
+  open.className = "attachment-open";
+  open.title = im._pending ? "Screenshot is loading" : "Review " + fileName(im);
+  open.setAttribute && open.setAttribute("aria-label", "Review screenshot " + fileName(im));
+  var remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "attachment-remove";
+  remove.textContent = "×";
+  remove.title = "Remove " + fileName(im);
+  remove.setAttribute && remove.setAttribute("aria-label", "Remove screenshot " + fileName(im));
+  open.addEventListener("click", function() { openAttachmentReview(im._attachmentId); });
+  remove.addEventListener("click", function(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    if (event && event.stopPropagation) event.stopPropagation();
+    removeImage(im._attachmentId);
+  });
+  thumb.appendChild(open);
+  thumb.appendChild(remove);
+  $("thumbs").appendChild(thumb);
+  im._thumbEl = thumb;
+  im._thumbOpen = open;
+  if (im._pending) {
+    open.disabled = true;
+    var loading = document.createElement("span");
+    loading.className = "attachment-loading";
+    loading.textContent = "…";
+    open.appendChild(loading);
+    im._thumbLoading = loading;
+    if (thumb.classList) thumb.classList.add("is-loading");
+    return;
+  }
+  paintAttachmentThumb(im);
+}
+function removeImage(id) {
+  var removed = null;
+  for (var i = 0; i < images.length; i++) {
+    if (images[i] && images[i]._attachmentId === id) {
+      removed = images[i];
+      removed._removed = true;
+      images[i] = null;
+      break;
+    }
+  }
+  if (!removed) return;
+
+  detachAttachmentThumb(removed);
+  revokeImagePreview(removed);
+  if (activeReviewImageId === id) closeAttachmentReview();
+
+  // Invalidates queued/active OCR and AI replies without discarding other
+  // decoded attachments. The remaining screenshots are re-read as one set.
+  latestAttachmentBatch++;
+  imageParseVersion = -1;
+  imageParsePromise = null;
+  cancelOcrWork();
+  invalidateAiForAttachmentChange();
+  out.innerHTML = "";
+  lastOut = "";
+  var remaining = readyImages();
+  var label = fileName(removed);
+  if (pendingImageJobs > 0 || pendingDocumentJobs > 0) {
+    setStatus("SCREENSHOT REMOVED — updating attachments…");
+    return;
+  }
+  if (remaining.length) {
+    setStatus("SCREENSHOT REMOVED — re-reading " + remaining.length + " image" + (remaining.length === 1 ? "" : "s") + "…");
+    convertImageAttachments(latestAttachmentBatch);
+    return;
+  }
+  if (readyDocuments().length) {
+    setStatus("SCREENSHOT REMOVED — checking remaining attachment…");
+    finishAttachmentConversion(attachmentVersion);
+    return;
+  }
+  var typed = (inp.value || "").trim();
+  if (typed) {
+    setStatus("SCREENSHOT REMOVED — converting text…");
+    convert(false);
+  } else {
+    setStatus("SCREENSHOT REMOVED — " + label);
+  }
 }
 function addFileBadge(file, kind) {
   var badge = document.createElement("span");
@@ -832,17 +1235,42 @@ function addFileBadge(file, kind) {
 }
 function addImage(file, token) {
   var slot = images.length;
-  images.push(null); // reserves picker order while decoding happens asynchronously
+  var attachmentId = "img_" + (++nextAttachmentId);
+  var reviewUrl = makeImagePreviewUrl(file);
+  var pending = { _attachmentId: attachmentId, _pending: true, name: fileName(file),
+    _reviewUrl: reviewUrl, _reviewUrlIsObjectUrl: !!reviewUrl };
+  images.push(pending); // reserve picker order while decoding happens asynchronously
+  addThumb(pending);
   pendingImageJobs++;
   setStatus("IMAGE ATTACHING…");
-  return fastDownscale(file, 1600, 0.88).then(function(im) {
-    if (token !== attachmentVersion) return null;
+  return fastDownscale(file, 1440, 0.86).then(function(im) {
+    // A just-removed image or a cleared generation must not pop back into the
+    // strip when its decoder eventually resolves.
+    if (token !== attachmentVersion || images[slot] !== pending || pending._removed) {
+      revokeImagePreview(pending);
+      return null;
+    }
     im.name = fileName(file);
+    im._attachmentId = attachmentId;
+    im._reviewUrl = pending._reviewUrl || reviewUrl;
+    im._reviewUrlIsObjectUrl = !!im._reviewUrl;
+    pending._reviewUrl = "";
+    pending._reviewUrlIsObjectUrl = false;
+    // Keep the loading control in place; only its image and click state change.
+    im._thumbEl = pending._thumbEl;
+    im._thumbOpen = pending._thumbOpen;
+    pending._thumbEl = null;
+    pending._thumbOpen = null;
     images[slot] = im;
-    addThumb(im, slot);
+    paintAttachmentThumb(im);
     return im;
   }, function(err) {
-    if (token === attachmentVersion) setStatus("IMAGE FAILED — " + fileName(file) + " — " + String(err.message || err).slice(0, 70), true);
+    revokeImagePreview(pending);
+    if (token === attachmentVersion && images[slot] === pending) {
+      images[slot] = null;
+      detachAttachmentThumb(pending);
+      setStatus("IMAGE FAILED — " + fileName(file) + " — " + String(err.message || err).slice(0, 70), true);
+    }
     return null;
   }).then(function(im) {
     if (token === attachmentVersion) pendingImageJobs = Math.max(0, pendingImageJobs - 1);
@@ -1038,13 +1466,22 @@ function finishAttachmentConversion(token) {
   if (docs.length) {
     if (gemKey()) convertAi(true, "PDF attachment");
     else setStatus("PDF ATTACHED — AI AUTO needs a Gemini key", true);
+    return;
   }
+  // This is reachable when an image is removed while it was still decoding.
+  // Do not leave the status bar stuck on an updating/loading message.
+  if ((inp.value || "").trim()) convert(false);
+  else if (/UPDATING ATTACHMENTS/i.test(st.textContent || "")) setStatus("SCREENSHOT REMOVED");
 }
 function handleFiles(fileList) {
   var arr = Array.prototype.slice.call(fileList || []);
   if (!arr.length) return;
   var token = attachmentVersion;
   var batch = ++latestAttachmentBatch;
+  // Stop obsolete local/AI work as soon as another attachment arrives. The
+  // new batch will parse the complete, merged attachment list once decoding ends.
+  cancelOcrWork();
+  invalidateAiForAttachmentChange();
   // A new attachment is a new conversion request; never leave the previous
   // itinerary copyable while the replacement is being decoded.
   out.innerHTML = "";
@@ -1245,6 +1682,7 @@ function convertAi(fromAuto, reason){
     if(!window._aiStartedAt || Date.now()-window._aiStartedAt < 12000){
       setStatus("AI ALREADY RUNNING — one moment…"); return;
     }
+    aiRequestId++; // invalidate the old reply before allowing a retry
     converting=false; // stale lock (network never returned) — allow retry
   }
   if(pendingImageJobs > 0 || pendingDocumentJobs > 0){
@@ -1257,6 +1695,7 @@ function convertAi(fromAuto, reason){
   var fallback=lastOut;
   var requestAttachmentVersion=attachmentVersion;
   var requestAttachmentBatch=latestAttachmentBatch;
+  var requestId=++aiRequestId;
   var aiImages=readyImages(), aiDocuments=readyDocuments();
   converting=true;
   window._aiStartedAt=Date.now();
@@ -1268,10 +1707,11 @@ function convertAi(fromAuto, reason){
   aiDocuments.forEach(function(doc){ parts.push({inline_data:{mime_type:doc.mime,data:doc.b64}}); });
   var body={ system_instruction:{parts:[{text: window.SpicyEngine.MASTER_PROMPT}]}, contents:[{role:"user",parts:parts}], generationConfig:{temperature:0.0,maxOutputTokens:4096} };
   geminiGenerate(key, body).then(function(j){
+    // A newer retry or attachment edit owns the UI now. Ignore this reply
+    // entirely rather than clearing its status or restoring an old itinerary.
+    if(requestId!==aiRequestId) return;
     converting=false; window._aiStartedAt=0;
     if(requestAttachmentVersion!==attachmentVersion || requestAttachmentBatch!==latestAttachmentBatch){
-      // The attachment changed while the AI was answering: the reply belongs to
-      // the previous input.  Say so instead of leaving a frozen "CONVERTING…".
       setStatus("AI REPLY IGNORED — attachment changed, press ✦ AI again", true);
       return;
     }
@@ -1291,7 +1731,8 @@ function convertAi(fromAuto, reason){
     // AI Mistake Detection & Self-Learning: detect mistakes and teach tool to fix it
     detectMistakesAndLearn(text || "[screenshot]", previousDirect, t, reason);
   }).catch(function(e){
-    converting=false;
+    if(requestId!==aiRequestId || requestAttachmentVersion!==attachmentVersion || requestAttachmentBatch!==latestAttachmentBatch) return;
+    converting=false; window._aiStartedAt=0;
     if(fallback){ lastOut=fallback; out.innerHTML=esc(fallback); setStatus("AI failed — previous result kept", true); }
     else{ setStatus("AI failed: "+String(e.message||e).slice(0,70), true); }
   });
@@ -1311,7 +1752,8 @@ function generateWeeklyReportText() {
   var avgImgSpeed = "N/A";
   if (stats.durations && stats.durations.length) {
     var sum = stats.durations.reduce(function(a,b){return a+b;}, 0);
-    avgImgSpeed = Math.round(sum / stats.durations.length) + "ms (< 1s)";
+    var average = Math.round(sum / stats.durations.length);
+    avgImgSpeed = average + "ms" + (average < 1000 ? " (< 1s)" : "");
   }
 
   var lines = [];
@@ -1350,7 +1792,7 @@ function generateWeeklyReportText() {
   }
   lines.push("");
   lines.push("--- 4. RECOMMENDATIONS TO ENHANCE THE TOOL TO THE MAX ---");
-  lines.push("1. Direct Image Engine is operational with zero AI dependency and under-a-second parsing.");
+  lines.push("1. Direct Image Engine is operational with bounded, worker-backed offline parsing.");
   lines.push("2. Maintain continuous tracking of OCR confusions in flight numbers & day shifts.");
   lines.push("3. Keep AI strictly as fallback only for illegible or handwritten images.");
   lines.push("4. Expand local airport / airline alias mappings for emerging routes.");
@@ -1384,6 +1826,19 @@ $("filePick").addEventListener("change", function() {
   var fs = Array.prototype.slice.call(this.files || []);
   this.value = "";
   handleFiles(fs);
+});
+
+$("attachmentReviewClose").addEventListener("click", closeAttachmentReview);
+$("attachmentReviewDone").addEventListener("click", closeAttachmentReview);
+$("attachmentReviewRemove").addEventListener("click", function() {
+  var id = activeReviewImageId;
+  if (id) removeImage(id);
+});
+$("attachmentReviewModal").addEventListener("click", function(event) {
+  if (event && event.target === this) closeAttachmentReview();
+});
+document.addEventListener("keydown", function(event) {
+  if (event && event.key === "Escape" && activeReviewImageId) closeAttachmentReview();
 });
 
 // Drag & drop anywhere.  Guard dataTransfer because synthetic drag events
@@ -1459,6 +1914,10 @@ $("btnClear").addEventListener("click", function() {
   // canvases. They may finish later, but can no longer repaint the cleared UI.
   attachmentVersion++;
   latestAttachmentBatch++;
+  cancelOcrWork();
+  invalidateAiForAttachmentChange();
+  images.forEach(revokeImagePreview);
+  closeAttachmentReview();
   pendingImageJobs = 0;
   pendingDocumentJobs = 0;
   imageParseVersion = -1;

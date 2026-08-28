@@ -12,10 +12,10 @@ aircraft codes, 12-hour GDS clocks, overnight markers, exact booking-class
 handling, hidden-stop merging, one chronological ticket order. No
 hallucinations, no re-rolling the dice.
 
-- **Pics now 100% offline, no AI, instant fast as hell**: screenshots convert pure offline with zero AI key needed in under a second.
+- **Fast, bounded offline screenshots**: OCR is lazy-loaded, uses a worker where available, caps oversized frames, and has a short native-OCR deadline—so a stalled scanner cannot leave the app spinning forever.
 - **AI mistake detection & self-learning**: AI detects discrepancies and teaches the tool to fix them automatically on future conversions.
 - **Smart fallback**: Only falls back to AI in case an unreadable or handwritten screenshot cannot be detected offline.
-- **Reliable attachments**: `+ ATTACH`, drag-and-drop, and clipboard screenshots share one queue; image extensions are detected even when a browser supplies no MIME type, multiple images are parsed together in order, and stale work cannot overwrite a cleared request.
+- **Reliable attachments**: `+ ATTACH`, drag-and-drop, and clipboard screenshots share one queue; image extensions are detected even when a browser supplies no MIME type, multiple images are parsed together in order, and stale work cannot overwrite a cleared request. Each screenshot has a small red `×` remove button, can be clicked to review full-size, and can also be removed from the review screen.
 - **Text and PDF attachments**: `.txt`, `.eml`, `.csv`, `.json`, `.html`, `.ics`, and similar text exports are read instantly; PDFs are passed to AI only when the user explicitly supplies a Gemini key.
 - **Weekly report**: One-click weekly performance and enhancement reports sent to `adhambadraan@gmail.com` to improve and enhance the tool to the max.
 - 100% offline, private — itineraries and screenshots never leave the browser.
