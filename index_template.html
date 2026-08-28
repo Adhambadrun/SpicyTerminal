@@ -37,9 +37,10 @@ button:hover{filter:brightness(1.14)}
 .status{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:4px var(--pad-x) 10px;font-size:11px;flex:none}
 #st{color:var(--green);letter-spacing:.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #st.warn{color:#f0a35c}
-#report:hover,#genKey:hover{color:#8fa6b2}
+#report:hover,#genKey:hover,#btnWeeklyReport:hover{color:#8fa6b2}
 .linkbtn{color:#3e4f59;font-size:11px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono);font-weight:400;flex:none;white-space:nowrap;min-height:auto}
-#genKey{margin-left:auto;margin-right:16px}
+#genKey{margin-left:auto;margin-right:12px}
+#btnWeeklyReport{margin-right:12px}
 /* welcome — small card, app visible behind (translucent backdrop) */
 .welcome{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
 background:rgba(4,8,12,.35);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
@@ -65,7 +66,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 <body>
 <header>
   <img src="data:image/png;base64,__LOGO_FULL_B64__" alt="SpicyTerminal">
-  <div class="credit">made by Lamar Garcia</div>
+  <div class="credit">made by Adham Badran</div>
 </header>
 <main>
   <section class="pane"><h2>INPUT</h2>
@@ -87,14 +88,15 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 <div class="status">
   <span id="st">READY</span>
   <button id="genKey" class="linkbtn">Generate Api</button>
+  <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
   <button id="report" class="linkbtn">Report a bug</button>
 </div>
 
 <div class="welcome hidden" id="welcome">
   <div class="card">
     <img src="data:image/png;base64,__LOGO_FULL_B64__" alt="SpicyTerminal">
-    <div class="made">Made by Lamar García</div>
-    <div class="sub">Updates and bug fixes are applied automatically.</div>
+    <div class="made">Made by Adham Badran</div>
+    <div class="sub">100% offline text &amp; screenshot conversion in under a second.</div>
     <button id="enterBtn">ENTER</button>
   </div>
 </div>
@@ -102,7 +104,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 <div class="modal hidden" id="setModal">
   <div class="card">
     <h3>AI (GEMINI) KEY</h3>
-    <p>Only needed for screenshots / very messy text. Stored in this browser only.
+    <p>Only needed if an unreadable screenshot or very messy text cannot be parsed offline. Plain text and normal screenshots convert 100% offline with zero key needed.
     No key yet? <a id="genKey2" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:#53d977">Generate Api</a> (free, takes 20 seconds), then paste it here.</p>
     <input id="gemKey" placeholder="Gemini API key" autocomplete="off">
     <div class="row">
@@ -112,6 +114,20 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
   </div>
 </div>
 
+<div class="modal hidden" id="reportModal">
+  <div class="card" style="width:560px;max-width:94vw">
+    <h3>WEEKLY PERFORMANCE &amp; LEARNING REPORT</h3>
+    <p>Weekly report for <strong style="color:#53d977">adhambadraan@gmail.com</strong> — tracks offline speed, detected mistakes, and self-learning fixes to enhance the tool.</p>
+    <textarea id="reportContent" readonly style="width:100%;height:220px;background:#070b0f;border:1px solid #22313c;border-radius:6px;color:#dbe7de;font-family:var(--mono);font-size:11px;padding:8px;margin-bottom:12px;outline:0;white-space:pre-wrap"></textarea>
+    <div class="row">
+      <button class="ghost" id="reportClose">CLOSE</button>
+      <button class="ghost" id="reportCopy">COPY REPORT</button>
+      <button class="save" id="reportSend">EMAIL ADHAM</button>
+    </div>
+  </div>
+</div>
+
+<script>__OCRAD_JS__</script>
 <script>__SPICY_DATA__</script>
 <script>__SPICY_ENGINE__</script>
 <script>__APP_JS__</script>

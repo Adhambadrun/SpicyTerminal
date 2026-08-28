@@ -1,0 +1,13 @@
+{
+  "name": "spicyterminal",
+  "version": "4.0.0",
+  "description": "Deterministic offline flight conversion engine and GDS black window formatter",
+  "main": "spicy_engine.js",
+  "scripts": {
+    "build": "python3 build_web.py",
+    "test": "node test_engine.js && node test_big_wide.js && node test_very_wide.js && node test_offline_images.js"
+  },
+  "dependencies": {
+    "ocrad.js": "^0.0.1"
+  }
+}

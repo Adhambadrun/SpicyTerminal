@@ -1,6 +1,9 @@
 # workspace safety archive — never upload this to GitHub
 _BACKUP_DO_NOT_UPLOAD.tar.gz
 
+# dependencies
+node_modules/
+
 # OS junk
 .DS_Store
 Thumbs.db
