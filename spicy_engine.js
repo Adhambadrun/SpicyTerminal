@@ -117,6 +117,43 @@ function _scanAllAircraft(sq){
   }
   return best?AIRCRAFT[best]:null;
 }
+/* Supplemental equipment knowledge.
+   The generic narrow/wide-by-distance guess is meaningless for carriers that
+   operate no narrowbody at all (Emirates): it handed the A380 to the ultra
+   long-haul sectors and the 777 to the short trunk routes — exactly backwards.
+   These tables state the real assignment for the routes that guess got wrong. */
+var _EXTRA_ROUTE_EQUIPMENT = {
+  // Emirates 777-300ER (long, thinner US/other sectors)
+  "EK|DXB|ORD":"77W","EK|DXB|SEA":"77W","EK|DXB|DFW":"77W","EK|DXB|IAH":"77W",
+  "EK|DXB|BOS":"77W","EK|DXB|MIA":"77W","EK|DXB|EWR":"77W","EK|DXB|MEX":"77W",
+  "EK|DXB|YYZ":"77W","EK|DXB|CPT":"77W","EK|DXB|NBO":"77W","EK|DXB|ADD":"77W",
+  "EK|DXB|DOH":"77W","EK|DXB|BAH":"77W","EK|DXB|MCT":"77W","EK|DXB|AMM":"77W",
+  "EK|DXB|BEY":"77W","EK|DXB|TUN":"77W","EK|DXB|ALG":"77W","EK|DXB|CMN":"77W",
+  "EK|DXB|ATH":"77W","EK|DXB|LIS":"77W","EK|DXB|DUB":"77W","EK|DXB|OSL":"77W",
+  "EK|DXB|ARN":"77W","EK|DXB|CPH":"77W","EK|DXB|BUD":"77W","EK|DXB|WAW":"77W",
+  "EK|DXB|PRG":"77W","EK|DXB|BRU":"77W",
+  // Emirates A380 (dense trunk routes, short and long alike)
+  "EK|DXB|CAI":"388","EK|DXB|JFK":"388","EK|DXB|LAX":"388","EK|DXB|SFO":"388",
+  "EK|DXB|IAD":"388","EK|DXB|LGW":"388","EK|DXB|MAN":"388","EK|DXB|BHX":"388",
+  "EK|DXB|CDG":"388","EK|DXB|AMS":"388","EK|DXB|FRA":"388","EK|DXB|MUC":"388",
+  "EK|DXB|ZRH":"388","EK|DXB|VIE":"388","EK|DXB|MAD":"388","EK|DXB|BCN":"388",
+  "EK|DXB|FCO":"388","EK|DXB|MXP":"388","EK|DXB|IST":"388","EK|DXB|JED":"388",
+  "EK|DXB|RUH":"388","EK|DXB|KWI":"388","EK|DXB|JNB":"388","EK|DXB|SIN":"388",
+  "EK|DXB|BKK":"388","EK|DXB|HKG":"388","EK|DXB|ICN":"388","EK|DXB|NRT":"388",
+  "EK|DXB|SYD":"388","EK|DXB|MEL":"388","EK|DXB|BNE":"388","EK|DXB|PER":"388",
+  "EK|DXB|KUL":"388","EK|DXB|TPE":"388"
+};
+var _EXTRA_FLIGHT_EQUIPMENT = {
+  "EK|235":"77W","EK|236":"77W",   // ORD - DXB
+  "EK|926":"388","EK|927":"388",   // CAI - DXB
+  "EK|925":"388","EK|928":"388",
+  "EK|201":"388","EK|202":"388","EK|203":"388","EK|204":"388"
+};
+Object.keys(_EXTRA_ROUTE_EQUIPMENT).forEach(function(k){
+  if(!ROUTE_EQUIPMENT[k]) ROUTE_EQUIPMENT[k]=_EXTRA_ROUTE_EQUIPMENT[k]; });
+Object.keys(_EXTRA_FLIGHT_EQUIPMENT).forEach(function(k){
+  if(!FLIGHT_EQUIPMENT[k]) FLIGHT_EQUIPMENT[k]=_EXTRA_FLIGHT_EQUIPMENT[k]; });
+
 function inferAircraft(airline, flightNo, orig, dest, distanceMi){
   var code=FLIGHT_EQUIPMENT[airline+"|"+String(flightNo)];
   if(code) return [code,"flight table"];
@@ -806,17 +843,47 @@ function parseProse(text){
     if(ai+1<anchors.length){
       var h2=headerFor(anchors[ai+1].start);
       if(h2 && h2!==hdr) winEnd=Math.min(winEnd,h2[0]);
+      else{
+        // No separate header for the next flight (plain prose / OCR text):
+        // this segment's window must still stop before the next flight, or it
+        // steals the following leg's date, route, times and duration.
+        var nextStart=anchors[ai+1].start;
+        var para=text.lastIndexOf("\n\n",nextStart);
+        var bound=(para>a.end)?para:nextStart;
+        if(bound>a.end) winEnd=Math.min(winEnd,bound);
+      }
     }
-    var region=text.slice(winStart,winEnd);
-    var sel=text.slice(a.end,winEnd);
+    // ...and it must not start before the previous flight ends, or this
+    // segment inherits the earlier leg's date, route and times.
+    if(ai>0){
+      var hPrev=headerFor(anchors[ai-1].start);
+      if(!hdr || hPrev===hdr){
+        var prevEnd=anchors[ai-1].end;
+        var para2=text.lastIndexOf("\n\n",a.start);
+        var lower=(para2>prevEnd)?para2:prevEnd;
+        if(lower>winStart && lower<a.start) winStart=lower;
+      }
+    }
+    var region=text.slice(winStart,winEnd);    var sel=text.slice(a.end,winEnd);
     var oth=text.slice(winStart,a.start);
     var seg=Seg();
     seg.seg=segs.length+1;
     seg.airline=a.code; seg.flight_no=a.num;
 
-    // date: own region, header-first
+    // date: own region, header-first.  When a block holds more than one date
+    // (two flights on consecutive lines), the one nearest this flight number
+    // wins — the first date in the window may belong to the previous leg.
+    var aRelS=a.start-winStart, aRelE=a.end-winStart;
+    function _distTo(pos){ return pos<aRelS ? aRelS-pos : (pos>aRelE ? pos-aRelE : 0); }
     var dates=findDates(region), d=null;
-    if(dates.length) d=dates[0];
+    if(dates.length){
+      d=dates[0];
+      var bestD=_distTo(dates[0].pos);
+      for(var di=1;di<dates.length;di++){
+        var dd=_distTo(dates[di].pos);
+        if(dd<bestD){ bestD=dd; d=dates[di]; }
+      }
+    }
     var seg_day=null, seg_mon=null;
     if(d){seg_day=d.day;seg_mon=d.mon;seg.date_ddmmm=makeDate(seg_day,seg_mon);}
     var flightDate=_TODAY;
@@ -826,11 +893,20 @@ function parseProse(text){
     var orig=hdr?hdr[1]:null, dest=hdr?hdr[2]:null;
     if(!orig||!dest){
       var men=_airportMentions(region);
-      var uniqM=[]; men.forEach(function(t){if(uniqM.indexOf(t[1])<0)uniqM.push(t[1]);});
-      for(var k=0;k<uniqM.length;k++){
-        if(orig===uniqM[k]||dest===uniqM[k]) continue;
-        if(!orig)orig=uniqM[k];
-        else if(!dest)dest=uniqM[k];
+      // Keep the nearest mention of each code, then take the two codes closest
+      // to this flight number — a neighbouring leg's airports sit further away.
+      var near={}, order=[];
+      men.forEach(function(t){
+        var dist=_distTo(t[0]);
+        if(!near[t[1]]){ near[t[1]]={code:t[1],pos:t[0],dist:dist}; order.push(near[t[1]]); }
+        else if(dist<near[t[1]].dist){ near[t[1]].pos=t[0]; near[t[1]].dist=dist; }
+      });
+      var byDist=order.slice().sort(function(x,y){return x.dist-y.dist;});
+      var chosen=byDist.slice(0,2).sort(function(x,y){return x.pos-y.pos;});
+      for(var k=0;k<chosen.length;k++){
+        if(orig===chosen[k].code||dest===chosen[k].code) continue;
+        if(!orig)orig=chosen[k].code;
+        else if(!dest)dest=chosen[k].code;
       }
     }
     if(dest===orig) dest=null;

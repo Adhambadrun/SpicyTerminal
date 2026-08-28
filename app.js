@@ -877,6 +877,24 @@ function renderAttachmentResults(results, token, batch, started) {
   }
   allSegs.forEach(function(seg, i) { seg.seg = i + 1; });
 
+  // Safety net: two different flights that came out with an identical route,
+  // date and departure time are not a real itinerary — a field from the first
+  // leg leaked onto the second.  Never present that silently as a result.
+  var bled = false, seen = {};
+  allSegs.forEach(function(seg) {
+    var k = seg.orig + "|" + seg.dest + "|" + seg.date_ddmmm + "|" + seg.dep_time;
+    if (seen[k] && seen[k] !== seg.airline + seg.flight_no) bled = true;
+    seen[k] = seg.airline + seg.flight_no;
+  });
+  if (bled) {
+    if (gemKey()) {
+      setStatus("SEGMENTS LOOK DUPLICATED — re-reading with AI…", true);
+      convertAi(true, "duplicated segment guard");
+      return;
+    }
+    warns.push("segments repeat the same route/date — verify legs 2+ (add a Gemini key and press ✦ AI for a re-read)");
+  }
+
   if (allSegs.length) {
     var outText = window.SpicyEngine.renderItinerary(allSegs);
     lastOut = outText;
@@ -1130,8 +1148,8 @@ function convert(auto) {
 function aiModelSet(m){ window._aiModel=m; try{localStorage.setItem("spicy_gem_model",m);}catch(e){} }
 function aiModelGet(){ try{return localStorage.getItem("spicy_gem_model")||"";}catch(e){return"";} }
 function discoverModel(key){
-  return fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="+encodeURIComponent(key))
-    .then(function(r){return r.json();}).then(function(j){
+  return fetchJson("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="+encodeURIComponent(key), {}, 25000)
+    .then(function(j){
       if(j.error) throw new Error(String(j.error.message||"model list failed"));
       var ms=(j.models||[]).filter(function(m){
         var n=(m.name||"").toLowerCase();
@@ -1151,7 +1169,24 @@ function modelQueue(key){
   if(window._aiModelList&&window._aiModelList.length) return Promise.resolve(build(window._aiModelList));
   return discoverModel(key).then(function(){return build(window._aiModelList);}, function(){ var fav=aiModelGet(); return fav?[fav]:Promise.reject(new Error("could not list models on this key")); });
 }
-function geminiPost(key, model, body){ return fetch("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(function(r){return r.json();}); }
+/* Every Gemini call is time-boxed.  Without this a stalled connection leaves
+   the UI sitting on "AI CONVERTING…" forever, which looks exactly like the
+   button doing nothing at all. */
+function fetchJson(url, opts, ms){
+  var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  var o = {}; for(var k in (opts||{})) o[k]=opts[k];
+  if(ctl) o.signal = ctl.signal;
+  var timedOut = false, timer = setTimeout(function(){ timedOut = true; if(ctl) try{ctl.abort();}catch(e){} }, ms || 60000);
+  return fetch(url, o).then(function(r){
+    clearTimeout(timer);
+    return r.json().catch(function(){ throw new Error("AI sent an unreadable reply (HTTP "+r.status+")"); });
+  }, function(err){
+    clearTimeout(timer);
+    if(timedOut) throw new Error("AI timed out after "+Math.round((ms||60000)/1000)+"s — press ✦ AI again");
+    throw new Error("network error reaching Gemini — check the connection");
+  });
+}
+function geminiPost(key, model, body){ return fetchJson("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}, 75000); }
 function geminiGenerate(key, body){
   return modelQueue(key).then(function(q){
     var i=0, lastMsg="";
@@ -1172,8 +1207,17 @@ function geminiGenerate(key, body){
     return attempt();
   });
 }
+var AI_SEGMENT_RULES =
+  "\n\nREAD EVERY LEG SEPARATELY. Each flight in the source has its OWN date, "+
+  "own origin, own destination, own departure and arrival times, own aircraft, "+
+  "own flight time and own distance. NEVER copy any field from one leg onto "+
+  "another leg: if leg 2 is a different route or a different day, it must show "+
+  "that different route and day. Output the legs in the order they are flown, "+
+  "one segment per flight, and count them before you answer — the number of "+
+  "segments must equal the number of flights shown in the source.";
+
 function convertAi(fromAuto, reason){
-  if(converting) return;
+  if(converting){ setStatus("AI ALREADY RUNNING — one moment…"); return; }
   if(pendingImageJobs > 0 || pendingDocumentJobs > 0){
     setStatus("ATTACHMENT STILL LOADING…");
     return;
@@ -1187,15 +1231,20 @@ function convertAi(fromAuto, reason){
   var aiImages=readyImages(), aiDocuments=readyDocuments();
   converting=true;
   setStatus((aiImages.length||aiDocuments.length)?"AI CONVERTING (attachment)…":"AI CONVERTING…");
-  var task=text.trim() ? "Convert the following flight data into GDS Black Window format. If anything is missing or ambiguous, fill it from aviation knowledge — never leave fields blank or ???.\n\n"+text
-    : "Convert the attached image(s) and document(s) into GDS Black Window format. Convert ALL options shown. Fill any missing field from aviation knowledge — never blank, never ???.";
+  var task=text.trim() ? "Convert the following flight data into GDS Black Window format. If anything is missing or ambiguous, fill it from aviation knowledge — never leave fields blank or ???."+AI_SEGMENT_RULES+"\n\n"+text
+    : "Convert the attached image(s) and document(s) into GDS Black Window format. Convert ALL options shown. Fill any missing field from aviation knowledge — never blank, never ???."+AI_SEGMENT_RULES;
   var parts=[{text: task}];
   aiImages.forEach(function(im){ parts.push({inline_data:{mime_type:im.mime,data:im.b64}}); });
   aiDocuments.forEach(function(doc){ parts.push({inline_data:{mime_type:doc.mime,data:doc.b64}}); });
   var body={ system_instruction:{parts:[{text: window.SpicyEngine.MASTER_PROMPT}]}, contents:[{role:"user",parts:parts}], generationConfig:{temperature:0.0,maxOutputTokens:4096} };
   geminiGenerate(key, body).then(function(j){
     converting=false;
-    if(requestAttachmentVersion!==attachmentVersion || requestAttachmentBatch!==latestAttachmentBatch) return;
+    if(requestAttachmentVersion!==attachmentVersion || requestAttachmentBatch!==latestAttachmentBatch){
+      // The attachment changed while the AI was answering: the reply belongs to
+      // the previous input.  Say so instead of leaving a frozen "CONVERTING…".
+      setStatus("AI REPLY IGNORED — attachment changed, press ✦ AI again", true);
+      return;
+    }
     var ps=(((j.candidates||[])[0]||{}).content||{}).parts||[];
     var t=ps.map(function(p){return p.text||"";}).join("").trim();
     if(!t) throw new Error((j.error&&j.error.message)||"empty AI reply");
