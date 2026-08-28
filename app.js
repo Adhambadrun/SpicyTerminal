@@ -271,6 +271,10 @@ function cleanOcrText(rawText) {
   s = s.replace(/[•·—–]/g, " - ");
   s = s.replace(/[-–—]/g, " - ");
   s = s.replace(/[ \t]{2,}/g, " ");
+  // The dash pass above also splits a GDS previous-day marker ("140P-1" and
+  // its "+1"/"¥1" cousins). Put them back — the engine treats those as day
+  // shifts on the arrival time.
+  s = s.replace(/(\d{1,2})\s*([APNM])(\s*[\+¥‡])? - (\d)\b/gi, "$1$2$3-$4");
 
   // Glued airports e.g. DOHtoCAI -> DOH to CAI, JFK-LHR -> JFK - LHR
   s = s.replace(/\b([A-Za-z]{3})\s*to\s*([A-Za-z]{3})\b/gi, "$1 to $2");
@@ -300,6 +304,10 @@ function cleanOcrText(rawText) {
   s = s.replace(/\(\s*\+\s*[zZ2]\s*(?:days?)?\s*\)/gi, "(+2)");
   s = s.replace(/¥\s*[lIi1tT]/g, "¥1");
   s = s.replace(/¥\s*[zZ2]/g, "¥2");
+  // GDS overnight markers OCR mangled on the clock: "140P+_" / "910P¥l"
+  s = s.replace(/\b(\d{1,2})\s*([APNM])(\s*[\+¥‡]\s*)([_|lIi1tT])\b/gi, "$1$2$31");
+  s = s.replace(/\b(\d{1,2})\s*([APNM])(\s*[\+¥‡]\s*)([zZ2])\b/gi, "$1$2$32");
+  s = s.replace(/\b(\d{1,2})\s*([APNM])(\s*[\+¥‡]\s*)([sS5])\b/gi, "$1$2$35");
   s = s.replace(/\b(AM|PM|[APNM])\s*-\s*([1-3lItT])(?![0-9A-Za-z]*[:\.\/])/gi, function(_, ap, shift) {
     return ap + "-" + (shift === "l" || shift === "I" || shift === "t" ? "1" : shift);
   });
@@ -361,6 +369,8 @@ function cleanOcrText(rawText) {
     [/Premtum/gi, "Premium"],
     [/Nonstop/gi, "Nonstop"],
     [/Fl[il1]ght/gi, "Flight"],
+    [/<ABIN/gi, "CABIN"],
+    [/E<ONOMY/gi, "ECONOMY"],
     [/Operated\s+by/gi, "Operated by"],
     [/Departs?/gi, "Departs"],
     [/Arr[il1]ves?/gi, "Arrives"],
@@ -463,6 +473,15 @@ function cleanOcrText(rawText) {
     }
   }
 
+  // 9a. Corrupted months sitting next to a day ("31 AUC" -> "31 AUG").
+  // The GDS line parser repairs these as well; this catches prose pastes.
+  var _monthOcr = {AUC:"AUG",AUQ:"AUG",AU6:"AUG","4UG":"AUG","4UC":"AUG",J4N:"JAN",J0N:"JAN",J1N:"JAN",
+    F0B:"FEB",F3B:"FEB",F08:"FEB",F38:"FEB",M4R:"MAR",M48:"MAR","4PR":"APR","4P8":"APR",M4Y:"MAY",
+    J6N:"JUN",J0L:"JUL",J4L:"JUL",J01:"JUL",SE0:"SEP",SE6:"SEP",S3P:"SEP",SEB:"SEP",
+    "0C7":"OCT","0CT":"OCT",N0V:"NOV",N08:"NOV",NQV:"NOV",D0C:"DEC",D06:"DEC",D3C:"DEC",D00:"DEC"};
+  s = s.replace(/\b(\d{1,2})\s+([A-Z0-9]{3})\b/g, function(_, d, m) { var f = _monthOcr[m.toUpperCase()]; return f ? d + " " + f : _; });
+  s = s.replace(/\b([A-Z0-9]{3})\s+(\d{1,2})\b/g, function(_, m, d) { var f = _monthOcr[m.toUpperCase()]; return f ? f + " " + d : _; });
+
   // 9. Dates: "16 sep", "18nov", etc.
   for (var mi = 0; mi < _cleanMonthRes.length; mi++) {
     var _mr = _cleanMonthRes[mi];
@@ -513,6 +532,40 @@ function ensureOcradOnMain() {
     else eval(source); // eslint-disable-line no-eval
   } catch (e) { return false; }
   return typeof window.OCRAD === "function";
+}
+// Overlapping horizontal strips for the last-rescan OCR pass. A full
+// phone/desktop screenshot scaled to the pixel budget leaves glyphs
+// too small for OCRAD; re-reading ~45% of the frame height in 3
+// overlapping bands roughly doubles glyph size, and the overlap
+// guarantees a text line is never cut across a band boundary.
+function computeOcrBands(w, h) {
+  if (h < 500) return [];   // small frame: the full-frame passes are enough
+  var bands = [];
+  if (h < 900) {
+    var bh = Math.ceil(h * 0.6);
+    bands.push({ y: 0, h: bh });
+    bands.push({ y: Math.max(0, h - bh), h: bh });
+  } else {
+    var bh2 = Math.ceil(h * 0.45);
+    bands.push({ y: 0, h: bh2 });
+    bands.push({ y: Math.round(h * 0.3), h: bh2 });
+    bands.push({ y: Math.max(0, h - bh2), h: bh2 });
+  }
+  return bands;
+}
+function cropCanvas(src, x, y, w, h) {
+  var y0 = Math.max(0, Math.min(src.height - 1, y));
+  var h0 = Math.min(h, src.height - y0);
+  if (h0 <= 0) return null;
+  var cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h0;
+  var ctx = cv.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(src, 0, y0, w, h0, 0, 0, w, h0);
+  return cv;
 }
 function fitOcrDimensions(width, height) {
   var w = Math.max(1, Math.round(width || 1));
@@ -579,6 +632,28 @@ function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
   // If mode === "auto", dark background -> invert so text is black on white.
   var isDark = (mode === "invert") ? true : (mode === "normal") ? false : (bgLum < 128);
 
+  // Otsu binarization threshold from the histogram computed above. Used
+  // when the fixed 150/175 cuts misjudge the image (dim amber terminal
+  // text, heavy JPEG noise). Degenerate histograms fall back to 150.
+  var otsu = 150;
+  if (mode === "otsu") {
+    var totalPx = (len / 4) | 0;
+    var sumAll = 0, oK;
+    for (oK = 0; oK < 256; oK++) sumAll += oK * hist[oK];
+    var wB = 0, sumB = 0, bestVar = -1;
+    for (oK = 0; oK < 256; oK++) {
+      wB += hist[oK];
+      if (!wB) continue;
+      var wF = totalPx - wB;
+      if (!wF) break;
+      sumB += oK * hist[oK];
+      var mB = sumB / wB, mF = (sumAll - sumB) / wF;
+      var between = wB * wF * (mB - mF) * (mB - mF);
+      if (between > bestVar) { bestVar = between; otsu = oK; }
+    }
+    if (otsu < 30 || otsu > 225) otsu = 150;
+  }
+
   if (mode === "gray") {
     // Contrast-stretched grayscale (no hard threshold). For an inverted image
     // the range must be inverted too; otherwise dark screenshots lose detail.
@@ -593,11 +668,17 @@ function preprocessCanvasForOcr(srcCanvas, mode, thresholdVal) {
     }
   } else {
     // Fuse grayscale, conditional inversion and threshold into one pass.
-    var thresh = thresholdVal || 150;
+    var thresh = (mode === "otsu") ? otsu : (thresholdVal || 150);
     var invCut = 255 - thresh;
     for (var p = 0; p < len; p += 4) {
       var valueLum = (data[p] * 299 + data[p + 1] * 587 + data[p + 2] * 114) / 1000;
-      var value = (isDark ? valueLum < invCut : valueLum > thresh) ? 255 : 0;
+      // Fixed cuts keep the historic convention (dark images test against
+      // 255-thresh). The Otsu cut was derived from this image's own two
+      // clusters, so use it directly as the split point: text is the side
+      // away from the background, in either polarity.
+      var value = (mode === "otsu")
+        ? ((isDark ? valueLum < thresh : valueLum > thresh) ? 255 : 0)
+        : ((isDark ? valueLum < invCut : valueLum > thresh) ? 255 : 0);
       data[p] = value; data[p + 1] = value; data[p + 2] = value; data[p + 3] = 255;
     }
   }
@@ -795,6 +876,77 @@ function parseImageDirect(im) {
         if (srcCv.width * srcCv.height > 850000) passes = passes.slice(0, 2);
         var bestRaw = "";
         var pIdx = 0;
+        // Rescue budget: the normal passes get OCR_MAX_TOTAL_MS; once
+        // they fail we spend one generous extra window on an Otsu pass
+        // and overlapping bands before admitting defeat (and falling
+        // back to the much slower AI call).
+        var RESCUE_TOTAL_MS = 12000;
+        var rescueStarted = false;
+
+        function startRescue(reason) {
+          if (settled || rescueStarted) return;
+          rescueStarted = true;
+          setStatus("PARSING (detailed re-read)…");
+          var texts = [];
+          var steps = [];
+          function ocrStep(makeCv) {
+            return function(done) {
+              if (settled) return;
+              var cv;
+              try { cv = makeCv(); } catch (e) { return done("", "failed"); }
+              if (!cv) return done("", "failed");
+              recognizeOcrCanvas(cv).then(function(raw) { done(String(raw || "")); },
+                function(err) { done("", err && err.code); });
+            };
+          }
+          steps.push(ocrStep(function() { return preprocessCanvasForOcr(srcCv, "otsu", 0); }));
+          computeOcrBands(srcCv.width, srcCv.height).forEach(function(b) {
+            steps.push(ocrStep(function() {
+              var band = cropCanvas(srcCv, 0, b.y, srcCv.width, b.h);
+              if (!band) return null;
+              return preprocessCanvasForOcr(band, "otsu", 0);
+            }));
+          });
+          function finalizeRescue() {
+            var lines = [], seen = {};
+            texts.forEach(function(t) {
+              t.split("\n").forEach(function(l) {
+                var k = l.trim();
+                if (k.length > 2 && !seen[k]) { seen[k] = 1; lines.push(l); }
+              });
+            });
+            var merged = lines.join("\n");
+            if (merged.trim().length > bestRaw.trim().length) bestRaw = merged;
+            if (merged.trim().length > 5) {
+              var cleanedRes = cleanOcrText(merged);
+              var resRes = window.SpicyEngine.parse(cleanedRes);
+              if (resRes[0] && resRes[0].length > 0) {
+                finish({ segs: resRes[0], warns: resRes[1], text: cleanedRes,
+                  rawOcr: merged, method: "OCRAD (detailed re-read)", dur: elapsed() });
+                return;
+              }
+            }
+            finishBest(reason);
+          }
+          var sIdx = 0;
+          function stepRescue() {
+            if (settled) return;
+            if (sIdx >= steps.length || elapsed() >= OCR_MAX_TOTAL_MS + RESCUE_TOTAL_MS) {
+              finalizeRescue();
+              return;
+            }
+            steps[sIdx++](function(raw, errCode) {
+              if (errCode === "cancelled") {
+                finish({ segs: [], warns: ["OCR cancelled"], text: bestRaw,
+                  method: "OCRAD (cancelled)", dur: elapsed() });
+                return;
+              }
+              if (raw && raw.trim()) texts.push(raw);
+              setTimeout(stepRescue, 0);
+            });
+          }
+          stepRescue();
+        }
 
         function finishBest(reason) {
           if (bestRaw.trim().length > 5) {
@@ -811,9 +963,9 @@ function parseImageDirect(im) {
         }
         function step() {
           if (settled) return;
-          if (pIdx >= passes.length) { finishBest(); return; }
+          if (pIdx >= passes.length) { startRescue(); return; }
           if (elapsed() >= OCR_MAX_TOTAL_MS) {
-            finishBest("OCR stopped after " + Math.round(OCR_MAX_TOTAL_MS / 1000) + "s — try a tighter screenshot crop");
+            startRescue("OCR stopped after " + Math.round(OCR_MAX_TOTAL_MS / 1000) + "s — try a tighter screenshot crop");
             return;
           }
           var cfg = passes[pIdx++], procCv;
@@ -842,7 +994,7 @@ function parseImageDirect(im) {
               return;
             }
             if (err && err.code === "timeout") {
-              finishBest("OCR timed out — try a tighter screenshot crop");
+              startRescue("OCR timed out — try a tighter screenshot crop");
               return;
             }
             setTimeout(step, 0);
@@ -1711,7 +1863,14 @@ function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function modelQueue(key){
   function build(list){ var fav=aiModelGet(), q=[]; if(fav&&list.indexOf(fav)>=0)q.push(fav); list.forEach(function(m){if(q.indexOf(m)<0)q.push(m);}); if(!q.length&&fav)q.push(fav); return q; }
   if(window._aiModelList&&window._aiModelList.length) return Promise.resolve(build(window._aiModelList));
-  return discoverModel(key).then(function(){return build(window._aiModelList);}, function(){ var fav=aiModelGet(); return fav?[fav]:Promise.reject(new Error("could not list models on this key")); });
+  var fav=aiModelGet();
+  // A model that worked in a previous session is almost always still valid.
+  // Start with it immediately instead of blocking on the model-list round
+  // trip (2-25s on every fresh page load). Discovery still happens — only
+  // after this model fails, inside geminiGenerate, where it cannot delay
+  // the first attempt.
+  if(fav) return Promise.resolve([fav]);
+  return discoverModel(key).then(function(){return build(window._aiModelList);}, function(){ return Promise.reject(new Error("could not list models on this key")); });
 }
 /* Every Gemini call is time-boxed.  Without this a stalled connection leaves
    the UI sitting on "AI CONVERTING…" forever, which looks exactly like the
@@ -1732,8 +1891,9 @@ function fetchJson(url, opts, ms){
 }
 function geminiPost(key, model, body){ return fetchJson("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent?key="+encodeURIComponent(key),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}, 75000); }
 function geminiGenerate(key, body){
+  var MAX_MODELS=3; // never walk an entire model list: at most 3 models total
   return modelQueue(key).then(function(q){
-    var i=0, lastMsg="";
+    var i=0, lastMsg="", listed=!!window._aiModelList;
     function tryModel(model, tries){
       window._aiModel=model;
       return geminiPost(key,model,body).then(function(j){
@@ -1747,7 +1907,26 @@ function geminiGenerate(key, body){
         throw new Error(msg);
       });
     }
-    function attempt(){ return tryModel(q[i],0).then(null,function(e){ if(e.fatal) throw e; i++; if(i>=q.length) throw new Error(lastMsg.slice(0,90)+" — try again shortly"); return attempt(); }); }
+    function attempt(){
+      return tryModel(q[i],0).then(null,function(e){
+        if(e.fatal) throw e;
+        i++;
+        if(i>=q.length && !listed && i===1){
+          // The previously saved model failed: list models once now and
+          // continue with the best candidates (the cap still applies).
+          listed=true;
+          return discoverModel(key).then(function(){
+            var extra=(window._aiModelList||[]).slice();
+            var fav=aiModelGet();
+            if(fav&&extra.indexOf(fav)<0) extra.unshift(fav);
+            extra.forEach(function(m){ if(m!==q[0]&&q.indexOf(m)<0&&i<MAX_MODELS) q.push(m); });
+            return attempt();
+          },function(){ throw new Error(lastMsg.slice(0,90)+" — try again shortly"); });
+        }
+        if(i>=q.length||i>=MAX_MODELS) throw new Error(lastMsg.slice(0,90)+" — try again shortly");
+        return attempt();
+      });
+    }
     return attempt();
   });
 }
@@ -1806,7 +1985,13 @@ function convertAi(fromAuto, reason){
     if(rr&&rr[0].length&&rr[0].length >= (t.split("\n").filter(function(l){return / N$/.test(l);}).length)){ t=window.SpicyEngine.renderItinerary(rr[0]); }
     var previousDirect = lastOut;
     lastOut=t; out.textContent=t;
-    setStatus("AI CONVERTED"+(reason?" ("+reason+")":""));
+    // An AI reply that still contains unknown airports is not a finished
+    // itinerary — show it, but never dress it up as a clean result.
+    if(/(DEP|ARR)-\??\?{2,}/.test(t)){
+      setStatus("AI REPLY INCOMPLETE — unknown airport(s); crop the screenshot tighter and press ✦ AI again", true);
+    } else {
+      setStatus("AI CONVERTED"+(reason?" ("+reason+")":""));
+    }
     if(aiImages.length===1&&aiDocuments.length===0&&aiImages[0]._hash) imgCacheSet(aiImages[0]._hash, t);
     if(text.trim()){ tCacheSet(fp(text), t); lastTextFp=fp(text); }
     if(reason&&text.trim()) learnRecord(text,t,reason);

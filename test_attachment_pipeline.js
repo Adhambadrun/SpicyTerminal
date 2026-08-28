@@ -168,26 +168,33 @@ function makeCanvas(w, h) {
           buf[o] = px[0]; buf[o + 1] = px[1]; buf[o + 2] = px[2]; buf[o + 3] = 255;
         }
     },
-    drawImage(src, dx, dy, dw, dh) {
+    drawImage(src, ...args) {
       ensure();
       let sp = null;
       if (src && src.__pixels) sp = src.__pixels;
       else if (src && canvasSources.has(src)) sp = canvasSources.get(src)();
       if (!sp) throw new Error("drawImage: source has no pixels");
-      const sw = sp.w, sh = sp.h, rgba = sp.rgba;
-      dw = dw === undefined ? sw : dw; dh = dh === undefined ? sh : dh;
-      for (let yy = 0; yy < dh; yy++) {
-        for (let xx = 0; xx < dw; xx++) {
-          const fx = Math.min(sw - 1, Math.max(0, (xx + 0.5) * sw / dw - 0.5));
-          const fy = Math.min(sh - 1, Math.max(0, (yy + 0.5) * sh / dh - 0.5));
-          const x0 = fx | 0, y0 = fy | 0, x1 = Math.min(sw - 1, x0 + 1), y1 = Math.min(sh - 1, y0 + 1);
-          const ax = fx - x0, ay = fy - y0, bx = 1 - ax, by = 1 - ay;
-          const o00 = (y0 * sw + x0) * 4, o10 = (y0 * sw + x1) * 4;
-          const o01 = (y1 * sw + x0) * 4, o11 = (y1 * sw + x1) * 4;
-          const o = (((yy + (dy | 0)) * cv.width) + (xx + (dx | 0))) * 4;
+      // canvas API: drawImage(img, dx, dy, dw, dh) or
+      // drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) — args excludes img.
+      let sx = 0, sy = 0, sw = sp.w, sh = sp.h, dx = 0, dy = 0, dw = sp.w, dh = sp.h;
+      if (args.length === 4) { dx = args[0]; dy = args[1]; dw = args[2]; dh = args[3]; }
+      else if (args.length === 8) { sx = args[0]; sy = args[1]; sw = args[2]; sh = args[3]; dx = args[4]; dy = args[5]; dw = args[6]; dh = args[7]; }
+      dw = dw === undefined ? sp.w : dw; dh = dh === undefined ? sp.h : dh;
+      const x0o = Math.max(0, dx | 0), y0o = Math.max(0, dy | 0);
+      const x1o = Math.min(cv.width, (dx + dw) | 0), y1o = Math.min(cv.height, (dy + dh) | 0);
+      for (let yy = y0o; yy < y1o; yy++) {
+        for (let xx = x0o; xx < x1o; xx++) {
+          // Source coord: sx + scaled offset, clamped to the source image.
+          const fx = Math.min(sp.w - 1, sx + Math.max(0, Math.min(sw - 1, ((xx - dx) + 0.5) * sw / dw - 0.5)));
+          const fy = Math.min(sp.h - 1, sy + Math.max(0, Math.min(sh - 1, ((yy - dy) + 0.5) * sh / dh - 0.5)));
+          const px0 = fx | 0, py0 = fy | 0, px1 = px0 + 1, py1 = py0 + 1;
+          const ax = fx - px0, ay = fy - py0, bx = 1 - ax, by = 1 - ay;
+          const o00 = (py0 * sp.w + px0) * 4, o10 = (py0 * sp.w + px1) * 4;
+          const o01 = (py1 * sp.w + px0) * 4, o11 = (py1 * sp.w + px1) * 4;
+          const o = (yy * cv.width + xx) * 4;
           for (let c = 0; c < 4; c++) {
-            const top = rgba[o00 + c] * bx + rgba[o10 + c] * ax;
-            const bot = rgba[o01 + c] * bx + rgba[o11 + c] * ax;
+            const top = sp.rgba[o00 + c] * bx + sp.rgba[o10 + c] * ax;
+            const bot = sp.rgba[o01 + c] * bx + sp.rgba[o11 + c] * ax;
             buf[o + c] = top * by + bot * ay;
           }
         }
@@ -334,6 +341,9 @@ const sandbox = {
     removeItem: k => store.delete(k),
   },
   navigator: {},
+  // The real page loads spicy_data.js before app.js; the cleaner's
+  // airline/flight repair IIFE reads it at startup.
+  SPICY_DATA: require("./spicy_data.js"),
   Image: FakeImage,
   FileReader: FakeFileReader,
   OCRAD: require("./ocrad.js"),
