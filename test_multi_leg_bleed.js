@@ -3,13 +3,16 @@
 // Emirates trip into the same ORD-DXB leg printed twice.
 const E = require("./spicy_engine.js");
 
+// Distances are WGS-84 geodesic miles (ORD-DXB 7247, DXB-CAI 1503); the old
+// spherical great-circle values read 7233/1501 and no longer match what the
+// engine — or a GDS — reports for the same pair.
 const EXPECTED = [
-  "1 EK 236 31AUG ORD DXB 835P 800P\u00a51 C 77W 14.25 7233 N",
+  "1 EK 236 31AUG ORD DXB 835P 800P\u00a51 C 77W 14.25 7247 N",
   "DEP-CHICAGO O HARE INTL",
   "ARR-DUBAI INTL",
   "CABIN-BUSINESS",
   "",
-  "2 EK 927 02SEP DXB CAI 815A 1105A C 388 3.50 1501 N",
+  "2 EK 927 02SEP DXB CAI 815A 1105A C 388 3.50 1503 N",
   "DEP-DUBAI INTL",
   "ARR-CAIRO INTL",
   "CABIN-BUSINESS",

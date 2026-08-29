@@ -17,6 +17,16 @@ hallucinations, no re-rolling the dice.
 - **AI mistake detection & self-learning**: AI detects discrepancies and teaches the tool to fix them automatically on future conversions.
 - **Smart fallback**: Only falls back to AI in case an unreadable or handwritten screenshot cannot be detected offline.
 - **Reliable attachments**: `+ ATTACH`, drag-and-drop, and clipboard screenshots share one queue; image extensions are detected even when a browser supplies no MIME type, multiple images are parsed together in order, and stale work cannot overwrite a cleared request. Each screenshot has a small red `×` remove button, can be clicked to review full-size, and can also be removed from the review screen.
+- **Direction-proof routes**: every leg keeps the origin/destination it was
+  pasted with. A route is read whether it sits on a short line or on a long
+  Google-Flights card line, whether it is written `(JFK) to Dublin (DUB)`,
+  `(JFK) TO Dublin (DUB)`, bare `SZX to DMM`, or after the flight number — so an
+  outbound can no longer be printed with the return's airports.
+- **Published mileages**: distances are WGS-84 geodesic miles (Vincenty), which
+  is what airlines and GDS systems quote. A spherical great circle runs up to
+  ~0.5% short on east/west routes — JFK-DUB read 3171 instead of the published
+  3179 — and near-antipodal pairs fall back to the spherical value rather than
+  failing.
 - **Text and PDF attachments**: `.txt`, `.eml`, `.csv`, `.json`, `.html`, `.ics`, and similar text exports are read instantly; PDFs are passed to AI only when the user explicitly supplies a Gemini key.
 - **Weekly report**: One-click weekly performance and enhancement reports sent to `adhambadraan@gmail.com` to improve and enhance the tool to the max.
 - 100% offline, private — itineraries and screenshots never leave the browser.
@@ -52,7 +62,8 @@ and archives are never shipped.
 | `index_template.html` | page template |
 | `wordmark_alpha.png` | transparent-background wordmark (header + welcome) |
 | `build_web.py` | assembles `index.html` from the sources above — `python3 build_web.py` |
-| `test_engine.js` + `goldens.json` | parity tests vs the reference outputs — `node test_engine.js` |
+| `test_engine.js` + `goldens.json` | parity tests vs the reference outputs — `node test_engine.js` (distances are the WGS-84 geodesic miles described above) |
+| `test_route_direction.js` | route-direction + distance regression suite for the JFK/DUB bug report — `node test_route_direction.js` |
 | `test_big_wide.js` | wide test suite across 156 checks |
 | `test_very_wide.js` | 5,000 random online flight test suite |
 | `test_offline_images.js` | OCR cleaner + real-image OCR speed tests |

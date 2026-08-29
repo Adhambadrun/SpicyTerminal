@@ -236,6 +236,18 @@ function imgCacheSet(hash, outText){
 // keystroke / OCR pass). Build them once at startup.
 var _cleanAirlines = [];
 var _cleanAirLeadRe = null, _cleanCaseAirRe = null, _cleanAirRe = null;
+/* Carrier codes that are also ordinary English words.  The case-repair pass
+   uppercases every standalone token that matches a carrier, which silently
+   rewrites prose — "(JFK) to Dublin (DUB)" became "(JFK) TO Dublin (DUB)" and
+   the engine lost the route header.  These words are only uppercased when they
+   sit directly in front of a flight number.  Listing words that are not (yet)
+   codes costs nothing: the map is only consulted for a token that already
+   matched a carrier. */
+var _CLEAN_WORD_CODES = {};
+["to", "by", "at", "as", "be", "me", "de", "la", "ha", "oz", "is", "in", "it",
+ "of", "or", "we", "so", "no", "us", "do", "if", "on", "an"].forEach(function(w) {
+  _CLEAN_WORD_CODES[w] = 1;
+});
 function _ensureCleanAirRegexes() {
   if (_cleanAirLeadRe || !_cleanAirlines.length) return;
   var alt = _cleanAirlines.map(function(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("|");
@@ -458,7 +470,18 @@ function cleanOcrText(rawText) {
     }
     if (_cleanCaseAirRe) {
       _cleanCaseAirRe.lastIndex = 0;
-      s = s.replace(_cleanCaseAirRe, function(_, code) { return code.toUpperCase(); });
+      s = s.replace(_cleanCaseAirRe, function(_, code, offset) {
+        // Some carrier codes are ordinary English words (TO Transavia, BY TUI,
+        // AT, AS, BE, ME, DE, LA, HA, OZ).  Uppercasing them rewrote the very
+        // lines the parser reads routes from — "(JFK) to Dublin (DUB)" became
+        // "(JFK) TO Dublin (DUB)" — so only repair a lowercase word when it is
+        // actually sitting in front of a flight number.
+        if (_CLEAN_WORD_CODES[code.toLowerCase()]) {
+          var after = s.slice(offset + code.length, offset + code.length + 8);
+          if (!/^[ \t]*\d{1,4}(?![\d:.])/.test(after)) return code;
+        }
+        return code.toUpperCase();
+      });
     }
     if (_cleanAirRe) {
       _cleanAirRe.lastIndex = 0;

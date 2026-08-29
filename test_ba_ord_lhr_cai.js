@@ -33,7 +33,11 @@ CABIN-BUSINESS`,
 British Airways 396 1 Sep London Heathrow (LHR) 10:10 AM Cairo (CAI) 5:20 PM Business A321neo`
 };
 
-const PROSE_EXPECTED = EXPECTED.replace(/ R /g, " C ").replace(/ J /g, " C ")
+// Distances the engine COMPUTES are WGS-84 geodesic miles (ORD-LHR 3953,
+// LHR-CAI 2197).  The GDS-row case types its own distances, so it keeps the
+// values from the input; the repaired-OCR and prose cases compute theirs.
+const COMPUTED_EXPECTED = EXPECTED.replace(" 3942 N", " 3953 N").replace(" 2195 N", " 2197 N");
+const PROSE_EXPECTED = COMPUTED_EXPECTED.replace(/ R /g, " C ").replace(/ J /g, " C ")
   .replace("1543R", "1543C").replace("396J", "396C");
 
 let pass = 0, fail = 0;
@@ -50,7 +54,9 @@ function check(name, text, expected) {
 }
 
 for (const [name, text] of Object.entries(CASES)) {
-  check(name, text, name === "prose two legs" ? PROSE_EXPECTED : EXPECTED);
+  const want = name === "gds rows" ? EXPECTED
+    : name === "prose two legs" ? PROSE_EXPECTED : COMPUTED_EXPECTED;
+  check(name, text, want);
 }
 
 console.log("\n=== SUMMARY: " + pass + " passed, " + fail + " failed ===");

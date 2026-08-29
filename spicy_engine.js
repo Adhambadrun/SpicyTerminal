@@ -87,13 +87,60 @@ function utcOffset(code, dt){
 }
 
 /* ---------------- distances / durations ---------------- */
+/* Distances are WGS-84 geodesic miles (Vincenty inverse), not spherical great
+   circle miles.  The sphere is up to ~0.5% short on east/west mid-latitude
+   routes, and that gap is visible: JFK-DUB is 3170.87 mi on a sphere but the
+   published flight distance every traveller and GDS quotes is 3179.3 mi.  The
+   old spherical value read as a wrong number next to the itinerary it sat on,
+   so every distance this engine prints now comes from the ellipsoid.
+   Near-antipodal pairs, where Vincenty does not converge, fall back to the
+   spherical value (still within ~0.5%). */
 var _EARTH_MI = 3958.7613;
-function haversineMiles(c1,c2){
-  var a=AIRPORTS[c1], b=AIRPORTS[c2]; if(!a||!b) return null;
+var _WGS84_A = 6378137.0;                 // equatorial radius, metres
+var _WGS84_F = 1/298.257223563;           // flattening
+var _WGS84_B = (1-_WGS84_F)*_WGS84_A;     // polar radius, metres
+var _MILES_PER_M = 1/1609.344;
+function _sphereMiles(a,b){
   var r=Math.PI/180, lat1=a.lat*r, lat2=b.lat*r, dl=lat2-lat1, dn=(b.lon-a.lon)*r;
   var h=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dn/2)*Math.sin(dn/2);
   return Math.round(2*_EARTH_MI*Math.asin(Math.sqrt(h)));
 }
+function geodesicMiles(c1,c2){
+  var a=AIRPORTS[c1], b=AIRPORTS[c2]; if(!a||!b) return null;
+  var r=Math.PI/180;
+  var L=(b.lon-a.lon)*r;
+  var U1=Math.atan((1-_WGS84_F)*Math.tan(a.lat*r));
+  var U2=Math.atan((1-_WGS84_F)*Math.tan(b.lat*r));
+  var sU1=Math.sin(U1), cU1=Math.cos(U1), sU2=Math.sin(U2), cU2=Math.cos(U2);
+  var lam=L, slam=0, ssig=0, csig=0, sig=0, salp=0, c2alp=0, c2sm=0, C=0;
+  var converged=false, i;
+  for(i=0;i<200;i++){
+    slam=Math.sin(lam);
+    var clam=Math.cos(lam);
+    var t=cU1*sU2-sU1*cU2*clam;
+    ssig=Math.sqrt(cU2*slam*cU2*slam+t*t);
+    if(ssig===0) return 0;                       // coincident points
+    csig=sU1*sU2+cU1*cU2*clam;
+    sig=Math.atan2(ssig,csig);
+    salp=cU1*cU2*slam/ssig;
+    c2alp=1-salp*salp;
+    c2sm=(c2alp===0)?0:(csig-2*sU1*sU2/c2alp);   // equatorial line: cos2σm = 0
+    C=_WGS84_F/16*c2alp*(4+_WGS84_F*(4-3*c2alp));
+    var prev=lam;
+    lam=L+(1-C)*_WGS84_F*salp*(sig+C*ssig*(c2sm+C*csig*(-1+2*c2sm*c2sm)));
+    if(Math.abs(lam-prev)<1e-12){ converged=true; break; }
+  }
+  if(!converged) return _sphereMiles(a,b);
+  var u2=c2alp*(_WGS84_A*_WGS84_A-_WGS84_B*_WGS84_B)/(_WGS84_B*_WGS84_B);
+  var A2=1+u2/16384*(4096+u2*(-768+u2*(320-175*u2)));
+  var B2=u2/1024*(256+u2*(-128+u2*(74-47*u2)));
+  var dsig=B2*ssig*(c2sm+B2/4*(csig*(-1+2*c2sm*c2sm)
+           -B2/6*c2sm*(-3+4*ssig*ssig)*(-3+4*c2sm*c2sm)));
+  return Math.round(_WGS84_B*A2*(sig-dsig)*_MILES_PER_M);
+}
+/* Historical name kept for existing callers/tests — it now returns the WGS-84
+   geodesic miles above. */
+function haversineMiles(c1,c2){ return geodesicMiles(c1,c2); }
 function estimateDurationMin(mi){ if(!mi) return null; return Math.max(35, pyRound((mi/9+30)/5)*5); }
 function formatHMM(totalMin){ var t=Math.round(totalMin), h=Math.floor(t/60), m=t%60;
   return h+"."+(m<10?"0":"")+m; }
@@ -273,7 +320,13 @@ var ALL_CABIN_RE = /\ball\s+(premium economy|first|business|economy)\b/i;
 var GLOBAL_CLASS_RE = /\b(?:booking\s+class|bkg\s+class|booking\s+code|cabin\s+class|rbd|fare\s+class|fare\s+basis)\s*[:\-]?\s*\"?'?\b([A-Z])\b/i;
 var WORD_SEP_RE = /\bto\b|\binto\b/g;
 var PAREN_CODE_RE = /(?<=[A-Za-z]\s)\(([A-Z]{3})\)/g;
-var PAREN_ROUTE_HDR_RE = /\(([A-Z]{3})\)\s+(?:to|into)\s+[A-Za-z ,.'-]{2,40}?\(([A-Z]{3})\)/;
+/* The connector is spelled out in every casing on purpose: app.js's OCR cleaner
+   uppercases any standalone word that is also a carrier code, so a pasted
+   "New York (JFK) to Dublin (DUB)" reaches the engine as "(JFK) TO Dublin (DUB)"
+   — with a case-sensitive "to" the route stops being a header and the leg ends
+   up wearing the NEXT leg's origin/destination.  Codes stay strictly uppercase. */
+var ROUTE_TO_SRC = "(?:[Tt][Oo]|[Ii][Nn][Tt][Oo])";
+var PAREN_ROUTE_HDR_RE = new RegExp("\\(([A-Z]{3})\\)\\s+"+ROUTE_TO_SRC+"\\s+[A-Za-z ,.'-]{2,40}?\\(([A-Z]{3})\\)");
 var BARE_CODE_RE = /\b([A-Z]{3})\b/g;
 var AIRLINE_TOK = "(?:[A-Z][A-Z0-9]|[0-9][A-Z])";
 var _aliasAlt = Object.keys(AIRLINE_ALIASES).sort(function(a,b){return b.length-a.length;})
@@ -393,11 +446,42 @@ function _airportMentions(region){
   return clean;
 }
 
+var PAREN_ROUTE_HDR_RE_G = new RegExp("\\(([A-Z]{3})\\)\\s+"+ROUTE_TO_SRC+"\\s+[A-Za-z ,.'-]{2,40}?\\(([A-Z]{3})\\)","g");
+/* "AAA to BBB" with both codes spelled out — a route in bare-code form. */
+var BARE_ROUTE_RE_G = /\b([A-Z]{3})\s+(?:[Tt][Oo]|[Ii][Nn][Tt][Oo])\s+([A-Z]{3})\b/g;
 function findSideHeaders(text){
   var out=[], lines=text.split("\n"), pos=0;
   for(var li=0;li<lines.length;li++){
     var line=lines[li], ls=pos; pos+=line.length+1;
-    if(!line.trim()||line.length>90) continue;
+    if(!line.trim()) continue;
+    /* An explicit "(JFK) to Dublin (DUB)" route is unambiguous, so it stays a
+       header even on a LONG line.  Google Flights / confirmation cards append
+       the stop count, duration, carrier and cabin to the route line, which
+       pushes it past any length cap — and a leg whose own header is invisible
+       borrows the NEXT leg's route, printing the outbound with the return's
+       origin/destination.  Long lines may carry more than one such route (a
+       whole itinerary pasted as one line), so keep every match with its own
+       offset.  Short lines keep the historical first-match-only behaviour. */
+    if(line.length>90){
+      var found=[], pm;
+      PAREN_ROUTE_HDR_RE_G.lastIndex=0;
+      while((pm=PAREN_ROUTE_HDR_RE_G.exec(line))){
+        if(pm[1]!==pm[2]) found.push([ls+pm.index,pm[1],pm[2]]);
+        if(pm.index===PAREN_ROUTE_HDR_RE_G.lastIndex) PAREN_ROUTE_HDR_RE_G.lastIndex++;
+      }
+      /* Bare "SZX to DMM" is just as unambiguous as the parenthesised form — it
+         is how airline websites write a route — so a long line must not lose it
+         either.  Without it, every leg on such a line inherits whichever short
+         line happened to publish a header, and they all print the same route. */
+      BARE_ROUTE_RE_G.lastIndex=0;
+      while((pm=BARE_ROUTE_RE_G.exec(line))){
+        if(pm[1]!==pm[2] && AIRPORTS[pm[1]] && AIRPORTS[pm[2]]) found.push([ls+pm.index,pm[1],pm[2]]);
+        if(pm.index===BARE_ROUTE_RE_G.lastIndex) BARE_ROUTE_RE_G.lastIndex++;
+      }
+      found.sort(function(x,y){return x[0]-y[0];});
+      for(var fi=0;fi<found.length;fi++) out.push(found[fi]);
+      continue;   // the fuzzy two-mention heuristic stays capped at 90 chars
+    }
     var pq=PAREN_ROUTE_HDR_RE.exec(line);
     if(pq && pq[1]!==pq[2]){ out.push([ls,pq[1],pq[2]]); continue; }
     var mentions=_airportMentions(line), uniq={}, cnt=0;
@@ -408,6 +492,34 @@ function findSideHeaders(text){
       out.push([ls,mentions[0][1],mentions[1][1]]);
   }
   return out;
+}
+
+/* The last explicit "A to B" route phrase inside [from,to), or null.  A leg can
+   carry its own route in a shape findSideHeaders will not publish (bare codes
+   on a long line, a route buried in a sentence).  Knowing that route matters:
+   without it the leg falls back to a neighbouring header and can be printed
+   with the wrong direction. */
+function _lastOwnRoute(text, from, to){
+  if(!(to>from)) return null;
+  var slice=text.slice(from,to), best=null, m;
+  PAREN_ROUTE_HDR_RE_G.lastIndex=0;
+  while((m=PAREN_ROUTE_HDR_RE_G.exec(slice))){
+    if(m[1]!==m[2]) best=[from+m.index,m[1],m[2]];
+    if(m.index===PAREN_ROUTE_HDR_RE_G.lastIndex) PAREN_ROUTE_HDR_RE_G.lastIndex++;
+  }
+  if(best) return best;
+  // No parenthesised route: take the last two different codes this leg names and
+  // require a "to"/"into" between them, so a leg that only lists airports with
+  // times ("EK 236 31AUG ORD 835P DXB 800P+1") is never mistaken for a route.
+  var men=_airportMentions(slice);
+  for(var i=men.length-1;i>=1;i--){
+    var j=i-1;
+    while(j>=0 && men[j][1]===men[i][1]) j--;
+    if(j<0) continue;
+    if(/\b(?:to|into)\b/i.test(slice.slice(men[j][0]+men[j][2], men[i][0])))
+      return [from+men[j][0],men[j][1],men[i][1]];
+  }
+  return null;
 }
 
 /* ---------------- anchors ---------------- */
@@ -928,6 +1040,24 @@ function parseProse(text){
         else afterInPara.push(h);
       }
     }
+    /* A route written on the SAME line as the flight number belongs to that
+       flight — before it ("... (JFK) to Dublin (DUB) ... American 8330") or
+       after it ("Flight RJ 5979, 10 JUL, SZX to DMM, 9:01 PM - ...").  Line-local
+       beats paragraph-local: with one flight per line and no blank lines, the
+       nearest header in the paragraph belongs to a neighbouring leg, and every
+       leg ends up printed with the same route. */
+    var lineS = text.lastIndexOf("\n", a.start-1)+1;
+    var lineE = text.indexOf("\n", a.end);
+    if(lineE<0) lineE=text.length;
+    var onLineBefore=null, onLineAfter=null, oi;
+    for(oi=0;oi<headers.length;oi++){
+      var hp=headers[oi][0];
+      if(hp<lineS || hp>=lineE) continue;
+      if(hp<=a.start){ if(!onLineBefore || hp>onLineBefore[0]) onLineBefore=headers[oi]; }
+      else if(hp<nextAnchorStart){ if(!onLineAfter || hp<onLineAfter[0]) onLineAfter=headers[oi]; }
+    }
+    if(onLineBefore) return onLineBefore;
+    if(onLineAfter) return onLineAfter;
     // If we have headers inside paragraph, prefer the closest before, else closest after
     if(beforeInPara.length){
       var best=beforeInPara[0], bestDist=a.start - best[0];
@@ -949,6 +1079,20 @@ function parseProse(text){
       }
       return best;
     }
+    /* Nothing published before this flight, but the leg may still state its OWN
+       route in front of the flight number in a shape findSideHeaders will not
+       publish (bare codes on a long line, a route inside a sentence).  That
+       beats borrowing a neighbouring leg's header, which is what printed an
+       outbound with the return's origin/destination.  The scan starts on the
+       first line after the previous flight's line, never further back: without
+       that bound a leg picks up the route of the leg printed above it. */
+    var ownFrom = paraStart;
+    if(aIdx>0){
+      var nlPrev = text.indexOf("\n", prevAnchorEnd);
+      ownFrom = Math.max(ownFrom, (nlPrev<0) ? a.start : nlPrev+1);
+    }
+    var ownRoute = _lastOwnRoute(text, ownFrom, a.start);
+    if(ownRoute) return ownRoute;
     if(afterInPara.length){
       var bestA=afterInPara[0], bestADist=bestA[0]-a.start;
       for(var k=1;k<afterInPara.length;k++){
@@ -1227,8 +1371,10 @@ function parse(text){
 
 var SpicyEngine={
   parse:parse, renderItinerary:renderItinerary, renderSegment:renderSegment,
-  inferAircraft:inferAircraft, haversineMiles:haversineMiles, scanAircraft:scanAircraft,
-  MASTER_PROMPT:D.masterPrompt, _tryGdsLines:tryGdsLines, _findAnchors:findAnchors
+  inferAircraft:inferAircraft, haversineMiles:haversineMiles, geodesicMiles:geodesicMiles,
+  scanAircraft:scanAircraft,
+  MASTER_PROMPT:D.masterPrompt, _tryGdsLines:tryGdsLines, _findAnchors:findAnchors,
+  _findSideHeaders:findSideHeaders, _lastOwnRoute:_lastOwnRoute
 };
 if(typeof module!=="undefined") module.exports=SpicyEngine;
 if(typeof window!=="undefined") window.SpicyEngine=SpicyEngine;
