@@ -1144,7 +1144,17 @@ function parseProse(text){
       }
       winEnd = nextHeaderAfter(hdr[0]);
     } else {
-      winStart = text.lastIndexOf("\n\n",a.start); if(winStart<0) winStart=0;
+      /* No route header found.  Start the window at the start of the line
+         containing this anchor (each flight in "XX nnn DDMMM AAA ..." form
+         sits on its own line).  Using the previous anchor's end alone
+         leaves the date/airports/times of the prior flight visible (e.g.
+         " 31AUG ORD 835P DXB ..." after "EK 236") and that data bleeds
+         into the next segment. */
+      winStart = text.lastIndexOf("\n", a.start) + 1;
+      /* If there's a paragraph break between flights, start at that break
+         so we can see header/cabin text above the line. */
+      var pb = text.lastIndexOf("\n\n",a.start);
+      if(pb >= 0 && pb+2 >= winStart) winStart = pb+2;
       winEnd = text.length;
     }
     // but never past the next anchor's header start
@@ -1190,17 +1200,25 @@ function parseProse(text){
       }
     }
     // ...and it must not start before the previous flight ends, or this
-    // segment inherits the earlier leg's date, route and times.
+    // segment inherits the earlier leg's date, route and times.  Even when
+    // there IS a distinct header (hdr), if that header is actually the same
+    // one the previous anchor used — or if our window starts INSIDE the
+    // previous anchor's text (the GDS-ish case "EK 236 31AUG ORD ...\nEK 927
+    // 02SEP DXB ..." with no "A to B" headers, where hdr falls back to
+    // headerFor() returning null but winStart was initialised to 0) — bump
+    // winStart up to prevEnd so we don't see the previous leg's date/times.
     if(ai>0){
-      var hPrev=headerFor(anchors[ai-1].start);
-      if(!hdr || hPrev===hdr){
-        var prevEnd=anchors[ai-1].end;
+      var prevEnd2=anchors[ai-1].end;
+      var prevHdr=chosenHeaders[ai-1];
+      var sameHdrAsPrev=hdr && prevHdr && hdr[0]===prevHdr[0];
+      if(!hdr || sameHdrAsPrev || winStart<prevEnd2){
         var para2=text.lastIndexOf("\n\n",a.start);
-        var lower=(para2>prevEnd)?para2:prevEnd;
-        if(lower>winStart && lower<a.start) winStart=lower;
+        var lower=(para2>prevEnd2)?para2:prevEnd2;
+        if(lower>=winStart && lower<=a.start) winStart=lower;
       }
     }
-    var region=text.slice(winStart,winEnd);    var sel=text.slice(a.end,winEnd);
+    var region=text.slice(winStart,winEnd);
+    var sel=text.slice(a.end,winEnd);
     var oth=text.slice(winStart,a.start);
     var seg=Seg();
     seg.seg=segs.length+1;
@@ -1209,15 +1227,85 @@ function parseProse(text){
     // date: own region, header-first.  When a block holds more than one date
     // (two flights on consecutive lines), the one nearest this flight number
     // wins — the first date in the window may belong to the previous leg.
+    //
+    // CRITICAL: a date AFTER the flight-number anchor is very often an ARRIVAL
+    // date ("10:50 PM to 4:30 AM on Sat, Oct 3" sits between the flight anchor
+    // and the next header).  Departure dates always appear AT or BEFORE the
+    // flight anchor (in the route header "AAA to BBB on Thu, Oct 1").  So
+    // prefer dates at or before the anchor over any date after it, even when
+    // the after-date is closer in characters — picking it made SFO->SGN leave
+    // "03OCT" (arrival day) instead of "01OCT" (departure).
     var aRelS=a.start-winStart, aRelE=a.end-winStart;
     function _distTo(pos){ return pos<aRelS ? aRelS-pos : (pos>aRelE ? pos-aRelE : 0); }
     var dates=findDates(region), d=null;
     if(dates.length){
-      d=dates[0];
-      var bestD=_distTo(dates[0].pos);
-      for(var di=1;di<dates.length;di++){
-        var dd=_distTo(dates[di].pos);
-        if(dd<bestD){ bestD=dd; d=dates[di]; }
+      // Split into before/at anchor (departure candidates) and after anchor
+      // (arrival-date candidates).  Take the best of the before set first.
+      var beforeDates=[], afterDates=[];
+      for(var di=0;di<dates.length;di++){
+        /* A date that starts inside the flight-anchor text ("... Airlines 99"
+           ends at aRelE) or later is on the ARRIVAL side of the anchor — the
+           route header with the departure date always appears BEFORE the
+           flight-number anchor.  Using "< aRelS" (strictly before the anchor
+           starts) keeps us from grabbing "Oct 3" that sits on the same line
+           right after the arrival clock, when the flight anchor ("Vietnam
+           Airlines 99") is on the next line. */
+        if(dates[di].pos < aRelS) beforeDates.push(dates[di]);
+        else afterDates.push(dates[di]);
+      }
+      var pool = beforeDates.length ? beforeDates : afterDates;
+      /* Even among dates before the anchor, "nearest in characters" can pick
+         an ARRIVAL date that sits on the same line as the arrival clock
+         ("10:50 PM to 4:30 AM on Sat, Oct 3"), when the departure date sits
+         further away on the route header ("on Thu, Oct 1").  Detect arrival
+         dates by checking whether a "to <clock>" arrival marker sits between
+         the candidate date and the anchor.  Dates that appear AFTER an
+         arrival indicator in the slice are deprioritised. */
+      function _isAfterArrivalClock(datePos){
+        /* A date is on the ARRIVAL side if it appears in the trailing
+           "on <Wday>, <Mon> <day>" fragment immediately after the ARRIVAL
+           clock (e.g. "10:50 PM to 4:30 AM on Sat, Oct 3").  A date in the
+           route header (e.g. "... to Ho Chi Minh City (SGN) on Thu, Oct 1")
+           is on the DEPARTURE side, even though the dep-arr pair "10:50 PM
+           to 4:30 AM" appears between it and the anchor.  The tell: between
+           a departure-side date and the anchor there are TWO clocks
+           (departure AND arrival); between an arrival-side date and the
+           anchor there is ONE clock (the arrival only) or none. */
+        if(datePos >= aRelS) return true;     // after anchor starts = always arrival side
+        var gap = oth.slice(datePos, aRelS);
+        var clockRe = /\b\d{1,2}[:.]?\d{2}\s*[APap]\.?\s*[Mm]\.?/g;
+        var clockCount=0, cm;
+        while((cm=clockRe.exec(gap))!==null) clockCount++;
+        /* Two+ clocks in the gap: the date sits in the route header, ahead
+           of BOTH departure and arrival times — it's the departure date.
+           One or zero clocks: anything after the date is post-departure,
+           which includes the arrival-date fragment. */
+        return clockCount <= 1;
+      }
+      var arrivalDateIdx=-1;
+      for(var di5=0;di5<pool.length;di5++){
+        if(_isAfterArrivalClock(pool[di5].pos)){ arrivalDateIdx=di5; break; }
+      }
+      var depPool = arrivalDateIdx>=0 ? pool.slice(0,arrivalDateIdx) : pool;
+      if(!depPool.length) depPool=pool;     // fallback (shouldn't happen for well-formed prose)
+      /* When the window begins at our own route header AND that header is
+         on the departure-leg side (before any arrival clock in the window),
+         the first date in the departure-pool is the header's own date.  If
+         the window instead starts at the previous flight's anchor (multi-
+         leg, no blank line), fall back to nearest-to-anchor. */
+      var hasOwnHeader = hdr && hdr[0] === winStart;
+      if(hasOwnHeader && depPool.length >= 1 && !_isAfterArrivalClock(0)){
+        d=depPool[0];
+        for(var di6=1;di6<depPool.length;di6++){
+          if(depPool[di6].pos < d.pos) d=depPool[di6];
+        }
+      } else {
+        d=depPool[0];
+        var bestD4=_distTo(depPool[0].pos);
+        for(var di7=1;di7<depPool.length;di7++){
+          var dd4=_distTo(depPool[di7].pos);
+          if(dd4<bestD4){ bestD4=dd4; d=depPool[di7]; }
+        }
       }
     }
     var seg_day=null, seg_mon=null;
@@ -1268,7 +1356,22 @@ function parseProse(text){
       var lineEnd=text.indexOf("\n",arr.pos);
       if(lineEnd===-1) lineEnd=text.length;
       var tds=findDates(text.slice(arr.pos,lineEnd));
-      if(tds.length && (tds[0].mon*100+tds[0].day)>(seg_mon*100+seg_day)) explicitShift=1;
+      if(tds.length){
+        /* Compute actual calendar-day difference between departure date and
+           the date printed after the arrival clock.  The old code hard-coded
+           shift=1 which broke multi-day/date-line arrivals ("10:50 PM to
+           4:30 AM on Sat, Oct 3" departs Thu Oct 1 — arrival is +2 days,
+           not +1).  Handle month wrap (Dec->Jan) by advancing month. */
+        var depOrd=seg_mon*100+seg_day, arrOrd=tds[0].mon*100+tds[0].day;
+        var dayDiff=tds[0].day-seg_day;
+        if(tds[0].mon===seg_mon){ dayDiff=tds[0].day-seg_day; }
+        else if(tds[0].mon>seg_mon){
+          var dim=new Date(Date.UTC(_TODAY.y,seg_mon,0)).getUTCDate();
+          dayDiff=(dim-seg_day)+tds[0].day;
+          for(var mi=seg_mon+1;mi<tds[0].mon;mi++) dayDiff+=new Date(Date.UTC(_TODAY.y,mi,0)).getUTCDate();
+        } else { dayDiff=1; } // wrapped year (rare for single-trip prose)
+        if(dayDiff>=1 && dayDiff<=3) explicitShift=dayDiff;
+      }
     }
     var distMiles=findDistance(sel)||findDistance(oth);
     if(distMiles===null&&AIRPORTS[seg.orig]&&AIRPORTS[seg.dest])
@@ -1282,13 +1385,44 @@ function parseProse(text){
       if(offO!==null&&offD!==null) raw=(arrMin-offD*60)-(depMin-offO*60);
       if(durToken){
         duration=durToken;
-        if(explicitShift!==null) shift=explicitShift;
-        else if((raw!==null&&raw<=-60)||(raw===null&&arrMin<depMin)) shift=1;
+        if(explicitShift!==null){
+          shift=explicitShift;
+        } else if(raw!==null){
+          // Pick the non-negative day shift that, combined with raw UTC
+          // offset, produces a duration closest to the explicit one. The
+          // old "raw<=0 -> shift=1" assumption fails on long-hauls that
+          // cross the international date line (e.g. SFO 22:50 -> SGN 04:30
+          // is 15h40m, raw=-1940 min, shift=2 gives 940 min; shift=1 gives
+          // -500 min which is wrong).
+          var bestShift=0, bestDiff=Infinity;
+          for(var si=0;si<=3;si++){
+            var cand=raw+1440*si;
+            if(cand<=0) continue;
+            var diff=Math.abs(cand-durToken);
+            if(diff<bestDiff){bestDiff=diff;bestShift=si;}
+          }
+          shift=bestShift;
+        } else if(arrMin<depMin){
+          shift=1;
+        }
       } else if(explicitShift!==null){
         shift=explicitShift;
         if(raw!==null) duration=raw+1440*shift;
       } else if(raw!==null){
-        if(raw<=0){shift=1;duration=raw+1440;} else duration=raw;
+        // No explicit duration and no explicit shift marker.  Choose the
+        // smallest non-negative shift that yields a plausible duration
+        // (30 minutes to 24 hours).  This keeps simple red-eyes (shift=1)
+        // correct and handles multi-day +date-line crossings the same way.
+        shift=0;
+        for(var si2=0;si2<=3;si2++){
+          var cand2=raw+1440*si2;
+          if(cand2>30 && cand2<=1440){ shift=si2; duration=cand2; break; }
+        }
+        if(duration===null){
+          // Fallback: the shortest positive duration across 0..3, then estimate.
+          shift=1; duration=raw+1440;
+          if(duration<=0) duration=null;
+        }
       } else if(arrMin<depMin){shift=1;warn.push("overnight marker assumed (+1)");}
     }
     seg.arr_day_shift=Math.min(Math.max(shift,0),3);
