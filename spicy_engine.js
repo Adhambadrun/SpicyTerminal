@@ -319,14 +319,24 @@ var CABIN_CLASS_RE = /\b(premium economy|first|business|economy|coach)\s*(?:clas
 var ALL_CABIN_RE = /\ball\s+(premium economy|first|business|economy)\b/i;
 var GLOBAL_CLASS_RE = /\b(?:booking\s+class|bkg\s+class|booking\s+code|cabin\s+class|rbd|fare\s+class|fare\s+basis)\s*[:\-]?\s*\"?'?\b([A-Z])\b/i;
 var WORD_SEP_RE = /\bto\b|\binto\b/g;
-var PAREN_CODE_RE = /(?<=[A-Za-z]\s)\(([A-Z]{3})\)/g;
+/* Latin letters INCLUDING the accented ones.  City names are not ASCII: a
+   Google-Flights paste says "Bogotá", "Zürich", "São Paulo", "Malmö".  Every
+   route pattern here used to be spelled [A-Za-z], so one accented letter made
+   the whole route header invisible and the leg silently inherited a
+   NEIGHBOURING leg's origin/destination — printing an outbound with the
+   return's airports and the return's date.  The range covers Latin-1
+   Supplement + Latin Extended-A/B and deliberately skips U+00D7 (×) and
+   U+00F7 (÷), which are math symbols rather than letters. */
+var LATIN = "A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F";
+var PAREN_CODE_RE = new RegExp("(?<=["+LATIN+"]\\s)\\(([A-Z]{3})\\)","g");
 /* The connector is spelled out in every casing on purpose: app.js's OCR cleaner
    uppercases any standalone word that is also a carrier code, so a pasted
    "New York (JFK) to Dublin (DUB)" reaches the engine as "(JFK) TO Dublin (DUB)"
    — with a case-sensitive "to" the route stops being a header and the leg ends
    up wearing the NEXT leg's origin/destination.  Codes stay strictly uppercase. */
 var ROUTE_TO_SRC = "(?:[Tt][Oo]|[Ii][Nn][Tt][Oo])";
-var PAREN_ROUTE_HDR_RE = new RegExp("\\(([A-Z]{3})\\)\\s+"+ROUTE_TO_SRC+"\\s+[A-Za-z ,.'-]{2,40}?\\(([A-Z]{3})\\)");
+var CITY_CHARS = "["+LATIN+" ,.'\\-]";
+var PAREN_ROUTE_HDR_RE = new RegExp("\\(([A-Z]{3})\\)\\s+"+ROUTE_TO_SRC+"\\s+"+CITY_CHARS+"{2,40}?\\(([A-Z]{3})\\)");
 var BARE_CODE_RE = /\b([A-Z]{3})\b/g;
 var AIRLINE_TOK = "(?:[A-Z][A-Z0-9]|[0-9][A-Z])";
 var _aliasAlt = Object.keys(AIRLINE_ALIASES).sort(function(a,b){return b.length-a.length;})
@@ -339,7 +349,12 @@ var TIME_UNIT_AFTER = /\s*(?::\d{2}|hrs?\b|hours?\b|mins?\b|minutes?\b|m\b|h\b)/
 function _stripFltZeros(n){var v=parseInt(n,10);return v>0?String(v):n;}   // "AF 0003" -> "AF 3"
 /* Google Flights collapsed "next flight" summary card — junk times/dates/ghost flight:
    AF / Air France / 12:30 PM / Sep 16, 2026 / 6:45 PM / Sep 16, 2026 / 12h 15m / FCO to JFK / CDG */
-var SUMMARY_STRIP_RE = /\n[ \t]*[A-Z0-9]{2}[ \t]*\n[ \t]*[A-Za-z][A-Za-z .&'-]{1,30}[ \t]*\n+[ \t]*\d{1,2}:\d{2}\s*[AP]M[ \t]*\n+[ \t]*[A-Z][a-z]{2} \d{1,2}, \d{4}[ \t]*\n+[ \t]*\d{1,2}:\d{2}\s*[AP]M[ \t]*\n+[ \t]*[A-Z][a-z]{2} \d{1,2}, \d{4}[ \t]*\n+[ \t]*\d{1,2}h(?: \d{1,2}m)?[ \t]*\n+[ \t]*[A-Z]{3} to [A-Z]{3}[ \t]*(?:\n+[ \t]*[A-Z]{3}[ \t]*)?(?=\n|$)/g;
+var SUMMARY_STRIP_RE = new RegExp(
+  "\\n[ \\t]*[A-Z0-9]{2}[ \\t]*\\n[ \\t]*["+LATIN+"]["+LATIN+" .&'-]{1,30}[ \\t]*"+
+  "\\n+[ \\t]*\\d{1,2}:\\d{2}\\s*[AP]M[ \\t]*\\n+[ \\t]*[A-Z][a-z]{2} \\d{1,2}, \\d{4}[ \\t]*"+
+  "\\n+[ \\t]*\\d{1,2}:\\d{2}\\s*[AP]M[ \\t]*\\n+[ \\t]*[A-Z][a-z]{2} \\d{1,2}, \\d{4}[ \\t]*"+
+  "\\n+[ \\t]*\\d{1,2}h(?: \\d{1,2}m)?[ \\t]*\\n+[ \\t]*[A-Z]{3} to [A-Z]{3}[ \\t]*"+
+  "(?:\\n+[ \\t]*[A-Z]{3}[ \\t]*)?(?=\\n|$)","g");
 var _cityAlts = Object.keys(CITY_ALIASES).sort(function(a,b){return b.length-a.length;})
   .map(function(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}).join("|");
 var CITY_ALT_RE = new RegExp("\\b("+_cityAlts+")\\b","g");
@@ -425,9 +440,45 @@ function findDistance(region){
   return null;
 }
 
+/* Strip diacritics for city-alias matching: "bogotá"->"bogota", "zürich"->
+   "zurich", "malmö"->"malmo".  The alias table is spelled in ASCII, so without
+   this a city written the way its country writes it never resolves to an
+   airport at all.  The mapping is STRICTLY one character in, one character out
+   — _airportMentions reports offsets into the original string, and a fold that
+   changed the length would slide every mention to the wrong position.  That is
+   also why ligatures (ß, æ, œ) are deliberately left alone: expanding them
+   would shift the indices. */
+var _FOLD_MAP={};
+(function(){
+  /* Derive the accent->base mapping from Unicode itself rather than typing a
+     parallel pair of strings by hand: a hand-aligned table silently rots the
+     moment one character is inserted in the wrong column (an early draft of
+     this fold mapped "ù" to "i" that way). */
+  for(var cp=0x00C0; cp<=0x024F; cp++){
+    var ch=String.fromCharCode(cp);
+    var base=ch.normalize("NFD").replace(/[\u0300-\u036F]/g,"");
+    if(base.length===1 && base!==ch && /^[A-Za-z]$/.test(base)) _FOLD_MAP[ch]=base;
+  }
+  /* Stroke/bar letters have no canonical decomposition, so Unicode cannot
+     supply their base form — these are the ones that appear in place names
+     (Ø in Nordic, Đ in Balkan, Ł in Polish, ı in Turkish). */
+  var extra={"\u00D8":"O","\u00F8":"o","\u0110":"D","\u0111":"d","\u0126":"H",
+             "\u0127":"h","\u0130":"I","\u0131":"i","\u0141":"L","\u0142":"l",
+             "\u0166":"T","\u0167":"t"};
+  for(var k in extra) _FOLD_MAP[k]=extra[k];
+})();
+/* Every entry is exactly one character wide, so folding can never move an
+   offset.  Multi-character expansions (ß->ss, æ->ae) are intentionally absent. */
+var _FOLD_RE=new RegExp("["+Object.keys(_FOLD_MAP).join("")+"]","g");
+function foldDiacritics(s){
+  if(!s||!_FOLD_RE.test(s)){ _FOLD_RE.lastIndex=0; return s; }
+  _FOLD_RE.lastIndex=0;
+  return s.replace(_FOLD_RE,function(ch){return _FOLD_MAP[ch]||ch;});
+}
+
 /* ---------------- airport mentions / headers ---------------- */
 function _airportMentions(region){
-  var rl=region.toLowerCase(), raw=[], m;
+  var rl=foldDiacritics(region.toLowerCase()), raw=[], m;
   BARE_CODE_RE.lastIndex=0;
   while((m=BARE_CODE_RE.exec(region))) if(AIRPORTS[m[1]]) raw.push([m.index,m[1],3]);
   PAREN_CODE_RE.lastIndex=0;
@@ -446,7 +497,7 @@ function _airportMentions(region){
   return clean;
 }
 
-var PAREN_ROUTE_HDR_RE_G = new RegExp("\\(([A-Z]{3})\\)\\s+"+ROUTE_TO_SRC+"\\s+[A-Za-z ,.'-]{2,40}?\\(([A-Z]{3})\\)","g");
+var PAREN_ROUTE_HDR_RE_G = new RegExp("\\(([A-Z]{3})\\)\\s+"+ROUTE_TO_SRC+"\\s+"+CITY_CHARS+"{2,40}?\\(([A-Z]{3})\\)","g");
 /* "AAA to BBB" with both codes spelled out — a route in bare-code form. */
 var BARE_ROUTE_RE_G = /\b([A-Z]{3})\s+(?:[Tt][Oo]|[Ii][Nn][Tt][Oo])\s+([A-Z]{3})\b/g;
 function findSideHeaders(text){
@@ -1460,6 +1511,12 @@ var LOST_ROW_RE = new RegExp(
   "(?:[A-Z]\\s+)?\\d{1,2}\\s*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\b","i");
 
 function parse(text){
+  /* Compose accents first.  macOS pasteboards and several airline exports emit
+     decomposed text, where "Bogotá" is "Bogota" + U+0301.  The combining mark
+     is not a letter, so a decomposed city split the route header exactly like
+     an unknown symbol would and the leg lost its origin/destination.  NFC is a
+     no-op for the already-composed text everyone else sends. */
+  if(typeof text==="string" && text.normalize) text=text.normalize("NFC");
   text=text.replace(SUMMARY_STRIP_RE,"\n");   // kill Google-Flights summary cards before anything sees them
   var used=[], gds=tryGdsLines(text, used), segs, warns=[];
   if(gds.length){

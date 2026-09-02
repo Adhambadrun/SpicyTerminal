@@ -5,7 +5,7 @@
   "main": "spicy_engine.js",
   "scripts": {
     "build": "python3 build_web.py",
-    "test": "node test_engine.js && node test_route_direction.js && node test_multi_leg_bleed.js && node test_ba_ord_lhr_cai.js && node test_big_wide.js && node test_very_wide.js && node test_offline_images.js && node test_attachment_pipeline.js && node test_gds_screenshot.js && node test_lamar_sgn.js",
+    "test": "node test_engine.js && node test_route_direction.js && node test_accent_routes.js && node test_multi_leg_bleed.js && node test_ba_ord_lhr_cai.js && node test_big_wide.js && node test_very_wide.js && node test_offline_images.js && node test_attachment_pipeline.js && node test_gds_screenshot.js && node test_lamar_sgn.js",
     "test:10k": "node test_10k_pic_convert.js",
     "test:protocol": "node test_autonomous_protocol.js"
   },
