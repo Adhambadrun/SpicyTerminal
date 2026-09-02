@@ -22,6 +22,11 @@ hallucinations, no re-rolling the dice.
   Google-Flights card line, whether it is written `(JFK) to Dublin (DUB)`,
   `(JFK) TO Dublin (DUB)`, bare `SZX to DMM`, or after the flight number — so an
   outbound can no longer be printed with the return's airports.
+- **Accent-proof cities**: cities are read the way their country spells them —
+  `Bogotá`, `Zürich`, `São Paulo`, `Malmö`, `Kraków` — composed or decomposed
+  (macOS pastes the latter). An accented letter used to hide a leg's route
+  header, so the outbound silently borrowed the return's airports *and* the
+  return's date; it no longer can.
 - **Published mileages**: distances are WGS-84 geodesic miles (Vincenty), which
   is what airlines and GDS systems quote. A spherical great circle runs up to
   ~0.5% short on east/west routes — JFK-DUB read 3171 instead of the published
@@ -64,6 +69,7 @@ and archives are never shipped.
 | `build_web.py` | assembles `index.html` from the sources above — `python3 build_web.py` |
 | `test_engine.js` + `goldens.json` | parity tests vs the reference outputs — `node test_engine.js` (distances are the WGS-84 geodesic miles described above) |
 | `test_route_direction.js` | route-direction + distance regression suite for the JFK/DUB bug report — `node test_route_direction.js` |
+| `test_accent_routes.js` | accented-city regression suite for the MIA/BOG bug report (Bogotá, Zürich, São Paulo…) — `node test_accent_routes.js` |
 | `test_big_wide.js` | wide test suite across 156 checks |
 | `test_very_wide.js` | 5,000 random online flight test suite |
 | `test_offline_images.js` | OCR cleaner + real-image OCR speed tests |
