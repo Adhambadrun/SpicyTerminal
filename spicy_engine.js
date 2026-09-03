@@ -488,7 +488,15 @@ function _airportMentions(region){
     if(!dup) raw.push([m.index,m[1],5]);
   }
   CITY_ALT_RE.lastIndex=0;
-  while((m=CITY_ALT_RE.exec(rl))) raw.push([m.index,CITY_ALIASES[m[1]],m[1].length]);
+  while((m=CITY_ALT_RE.exec(rl))){
+    /* "Manchester (MAN)" is MAN, not Manchester-Boston (MHT) plus MAN.
+       A city-name mention that is immediately followed by an explicit
+       "(XXX)" code yields to the code — the alias is only for names
+       written without one. */
+    var after=region.slice(m.index+m[1].length, m.index+m[1].length+8);
+    if(/^\s*\([A-Za-z]{3}\)/.test(after)) continue;
+    raw.push([m.index,CITY_ALIASES[m[1]],m[1].length]);
+  }
   raw.sort(function(a,b){return a[0]-b[0]||b[2]-a[2];});
   var clean=[];
   raw.forEach(function(t){
