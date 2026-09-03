@@ -17,6 +17,9 @@ hallucinations, no re-rolling the dice.
 - **AI mistake detection & self-learning**: AI detects discrepancies and teaches the tool to fix them automatically on future conversions.
 - **Smart fallback**: Only falls back to AI in case an unreadable or handwritten screenshot cannot be detected offline.
 - **Reliable attachments**: `+ ATTACH`, drag-and-drop, and clipboard screenshots share one queue; image extensions are detected even when a browser supplies no MIME type, multiple images are parsed together in order, and stale work cannot overwrite a cleared request. Each screenshot has a small red `×` remove button, can be clicked to review full-size, and can also be removed from the review screen.
+- **Word-proof carriers**: English words that are also IATA codes (`to`, `by`,
+  `at`…) stay words. `to London` / `to Los Angeles` is no longer rewritten as
+  a phantom Transavia `TO 105`, and bare `Manchester` is MAN (UK), not MHT.
 - **Direction-proof routes**: every leg keeps the origin/destination it was
   pasted with. A route is read whether it sits on a short line or on a long
   Google-Flights card line, whether it is written `(JFK) to Dublin (DUB)`,
@@ -74,6 +77,7 @@ and archives are never shipped.
 | `test_very_wide.js` | 5,000 random online flight test suite |
 | `test_offline_images.js` | OCR cleaner + real-image OCR speed tests |
 | `test_attachment_pipeline.js` | end-to-end attachment pipeline tests (drop / paste / picker / PDF / HEIC / cache) |
+| `test_lax_man.js` | LAX–MAN round-trip regression (no phantom TO 105, Manchester is MAN not MHT) — `node test_lax_man.js` |
 
 ## Privacy
 

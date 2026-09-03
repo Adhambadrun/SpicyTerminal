@@ -461,10 +461,19 @@ function cleanOcrText(rawText) {
     // (qR _os9). Repair only the token immediately after a known carrier.
     if (_cleanAirLeadRe) {
       _cleanAirLeadRe.lastIndex = 0;
-      s = s.replace(_cleanAirLeadRe, function(_, code, num) {
+      s = s.replace(_cleanAirLeadRe, function(match, code, num) {
+        // English words that are also carrier codes (TO Transavia, BY TUI…)
+        // must not eat the next word.  The `i` flag makes [_|Il] match a
+        // capital L, so "to London" / "to Los Angeles" became "TO 10nd0n" /
+        // "TO 105" — phantom Transavia flights on every Google-Flights paste
+        // whose city starts with L.
+        if (_CLEAN_WORD_CODES[code.toLowerCase()]) return match;
         var repaired = num.replace(/[oO]/g, "0").replace(/[sS]/g, "5")
           .replace(/[lIi|]/g, "1").replace(/[zZ]/g, "2").replace(/[gq]/g, "9");
         if (!/^1/.test(repaired)) repaired = "1" + repaired;
+        // A city/word (ondon, os) is not a flight number.  The OCR repair is
+        // for tokens that become digits ("_os9" -> 1059).
+        if (!/^\d{2,5}$/.test(repaired)) return match;
         return code.toUpperCase() + " " + repaired;
       });
     }
@@ -490,6 +499,9 @@ function cleanOcrText(rawText) {
         var before = s.slice(Math.max(0, offset - 8), offset);
         if (/\d\s*$/i.test(before)) return match;
       }
+      // Same word-code guard as the lead pass: "TO Los" is a route, not
+      // Transavia flight 105 (L->1, o->0, s->5).
+      if (_CLEAN_WORD_CODES[code.toLowerCase()] && !/\d/.test(num)) return match;
       if (!/[0-9]/.test(num) && !/^[loszbBtT]+$/i.test(num)) return match;
       var cnum = num.replace(/[oO]/g, "0")
                     .replace(/[lIi]/g, "1")
