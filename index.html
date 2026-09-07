@@ -100,14 +100,11 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 .about-card{position:relative;width:min(880px,100%);max-height:calc(100dvh - 32px);overflow:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(180deg,#0d141a,#080c11);border:1px solid #1e2b34;border-radius:16px;padding:26px 26px 20px;box-shadow:0 30px 90px rgba(0,0,0,.72);animation:aboutIn .2s ease-out}
 .about-card::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:16px 16px 0 0;background:linear-gradient(90deg,transparent,rgba(83,217,119,.55) 30%,#e2574b 72%,transparent);opacity:.6;pointer-events:none}
 @keyframes aboutIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
-@keyframes aboutPulse{0%,100%{opacity:.45}50%{opacity:1}}
 .about-close{position:absolute;top:14px;right:14px;z-index:2;display:flex;align-items:center;justify-content:center;width:30px;height:30px;min-height:30px;padding:0;border:1px solid #354750;border-radius:5px;background:#18222b;color:#b9c9d0;font-family:Arial,sans-serif;font-size:21px;font-weight:400;line-height:1}
 .about-close:hover{color:#fff;border-color:#53d977;background:#15231c;filter:none}
 .about-close:focus-visible,.about-links a:focus-visible{outline:2px solid #53d977;outline-offset:2px}
 .about-head{display:flex;align-items:center;gap:14px;padding-right:36px;margin-bottom:14px}
 .about-head img{height:34px;width:auto;max-width:56vw;object-fit:contain;display:block;flex:none}
-.about-live{margin-left:auto;display:inline-flex;align-items:center;gap:6px;color:#6b8194;font-size:10px;letter-spacing:1.1px;white-space:nowrap}
-.about-live i{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px rgba(83,217,119,.9);animation:aboutPulse 2.6s ease-in-out infinite}
 /* `.modal p` (0,1,1) would out-rank a bare class, so the dialog's own type
    scales are declared against `.modal` to actually win the cascade. */
 .modal .about-tag{color:#9db3c0;font-size:12.5px;line-height:1.7;margin:0 0 16px;max-width:70ch}
@@ -138,12 +135,12 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 @media (min-width:760px){.about-cols{grid-template-columns:1.32fr .92fr}}
 /* A breathing dot and a sliding card are decoration; they must not be a
    vestibular trigger. */
-@media (prefers-reduced-motion:reduce){.about-card{animation:none}.about-live i{animation:none}.about-links a,.about-links button{transition:none}}
+@media (prefers-reduced-motion:reduce){.about-card{animation:none}.about-links a,.about-links button{transition:none}}
 @media (max-width:840px){main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
 /* Narrow phones: the masthead has one job, so the credit text yields to the
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
    wordmark looked worse than a quiet header. */
-@media (max-width:560px){.status{gap:6px 10px}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}.about-live{margin-left:0}}
+@media (max-width:560px){.status{gap:6px 10px}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}}
 </style>
 </head>
 <body>
@@ -232,17 +229,14 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 
     <div class="about-head" id="aboutTitle" role="heading" aria-level="3">
       <img id="wordmarkAbout" src="" alt="SpicyTerminal">
-      <span class="about-live"><i aria-hidden="true"></i>OFFLINE ENGINE · NO BACKEND</span>
     </div>
 
-    <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS black-window itinerary.</b>
-      Paste a Google Flights card, an airline email or a photo of a terminal screen and it converts the moment it lands — no button to remember — returning ticket-ready rows in milliseconds from a deterministic engine that runs entirely inside this tab. When a first read genuinely cannot see the flights, <code>AI FIX</code> re-reads it and repairs the result.</p>
+    <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS ready to copy format to paste into Backoffice.</b>
+      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab.</p>
 
     <ul class="about-stats">
-      <li><b>OFFLINE</b> 1 static file</li>
       <li><b>0</b> accounts · cookies · trackers</li>
       <li><b>1,600+</b> airport / airline / aircraft entries</li>
-      <li><b>10K</b>-iteration screenshot fuzz suite</li>
     </ul>
 
     <div class="about-cols">
@@ -250,17 +244,13 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
         <h4>WHAT IT DOES</h4>
         <ul class="about-feats">
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
-            <span><b>Copy-ready GDS output.</b> 12-hour clocks, overnight <code>+1</code> markers, real IATA aircraft codes, sell status and hidden-stop merging — one chronological ticket order, byte-identical every time.</span></li>
+            <span><b>Copy-ready GDS output.</b> Ticket order, 12-hour clocks, overnight <code>+1</code> markers, real IATA codes — byte-identical every time.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3.4 15.2l4.6-4.2 3 2.6 4-4.2 5.6 5.4"/></svg></span>
-            <span><b>Screenshots that cannot hang.</b> OCR is lazy-loaded, worker-backed, caps oversized frames and runs on a short deadline — a stalled scanner never leaves the app spinning.</span></li>
+            <span><b>Text or screenshots.</b> Paste a Google Flights card, an airline email or a photo — it converts the moment it lands.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3.2l1.7 4.7 4.7 1.7-4.7 1.7L11 16l-1.7-4.7L4.6 9.6l4.7-1.7z"/><path d="M18.4 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></svg></span>
-            <span><b><code>AI FIX</code> — the repair pass, not the default path.</b> Pasting already converts on its own; when that first read comes up short, <code>AI FIX</code> re-reads the same image with Gemini and repairs the output, racing it against the local engine so the deterministic result still wins. Your key, your call.</span></li>
+            <span><b><code>AI FIX</code>.</b> When a first read cannot see the flights, it re-reads and repairs the output. Your key, your call.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
-            <span><b>Proof over guess.</b> Every leg keeps its own route, direction, accents and clocks: <code>to London</code> is not phantom Transavia <code>TO</code>, <code>Manchester</code> is MAN not MHT, <code>15SEP</code> is never re-split.</span></li>
-          <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20.2 3.4v3.7h-3.7"/><path d="M9.4 12.3l1.9 1.9 3.5-3.8"/></svg></span>
-            <span><b>It refuses to learn nonsense.</b> AI answers are compared leg by leg, a rule is stored only for a genuine glyph confusion (<code>O/0</code>, <code>I/1</code>, <code>S/5</code>…), and a reversing rule cancels both instead of making the tool oscillate.</span></li>
-          <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4.5" y="10.4" width="15" height="9.6" rx="2"/><path d="M8 10.4V8a4 4 0 0 1 8 0v2.4"/><path d="M12 14v2.5"/></svg></span>
-            <span><b>Private by construction.</b> No accounts, no telemetry, no server: itineraries and screenshots stay in this browser unless you press AI FIX.</span></li>
+            <span><b>Private.</b> No accounts, no trackers — itineraries stay in this tab.</span></li>
         </ul>
       </section>
 
@@ -270,11 +260,11 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
           <span class="about-avatar" aria-hidden="true">AB</span>
           <div>
             <div class="about-name">Adham Badran</div>
-            <div class="about-role">Solo developer · airline ticketing &amp; GDS tooling</div>
+            <div class="about-role">Solo developer</div>
           </div>
         </div>
         <p class="about-why">Every layer here — the parser, the aviation dictionary, the OCR cleaner, the self-learning guardrails and this UI — is hand-written by one person, with no backend behind it.
-          SpicyTerminal exists because re-typing a booking page into a black window is tedious, error-prone work that a deterministic tool should simply get right.</p>
+          SpicyTerminal exists because re-typing it — and bug reports and weekly reports — should not be manual work.</p>
         <div class="about-links">
           <a href="https://github.com/Adhambadrun/SpicyTerminal" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true" style="width:13px;height:13px;fill:currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.24-.48-.94-.78-1.13-.26-.14-.63-.48-.01-.49.58-.01.99.53 1.13.75.66 1.11 1.71.79 2.13.6.06-.48.26-.79.47-.97-1.66-.19-3.4-.83-3.4-3.68 0-.81.29-1.48.76-2-.08-.19-.34-.95.07-1.98 0 0 .62-.2 2.03.76a7 7 0 0 1 3.7 0c1.41-.96 2.03-.76 2.03-.76.41 1.03.15 1.79.08 1.98.48.52.76 1.19.76 2 0 2.86-1.74 3.49-3.4 3.68.27.24.51.71.51 1.44 0 1.04-.01 1.88-.01 2.14 0 .21.15.46.55.38A7.99 7.99 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>Source on GitHub</a>
           <a href="mailto:adhambadraan@gmail.com?subject=SpicyTerminal%20feedback"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7.2l8.5 5.9 8.5-5.9"/></svg>Email Adham</a>

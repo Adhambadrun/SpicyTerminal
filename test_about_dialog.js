@@ -78,9 +78,10 @@ assert(/class="modal hidden about-modal"/.test(TPL), "dialog starts hidden via .
 assert(/role="dialog"/.test(DLG) && /aria-modal="true"/.test(DLG), "role=dialog + aria-modal");
 assert(/aria-labelledby="aboutTitle"/.test(DLG) && /aria-describedby="aboutTagline"/.test(DLG),
        "dialog is labelled and described for screen readers");
-assert(DLG.includes("GDS black-window itinerary"), "dialog opens with a one-line summary of what the app does");
-for (const topic of [/OFFLINE/, /Screenshots that cannot hang/i, /the repair pass/i,
-                     /refuses to learn nonsense/i, /Private by construction/i, /Copy-ready GDS output/i]) {
+assert(DLG.includes("to paste into Backoffice"), "dialog opens with a one-line summary of what the app does");
+assert(!/offline/i.test(DLG), "the About dialog never says 'offline'");
+assert(!/about-live/.test(TPL), "the OFFLINE ENGINE pill — and its CSS — is gone from the template");
+for (const topic of [/Copy-ready GDS output/i, /Text or screenshots/i, /AI FIX/, /Private/i]) {
   assert(topic.test(DLG), "feature blurb covers " + topic);
 }
 assert(/Adham Badran/.test(DLG) && /Solo developer/.test(DLG), "dialog names Adham Badran with his role");
@@ -93,10 +94,10 @@ assert(!/lorem|placeholder text|TODO/i.test(DLG), "no filler text in the dialog 
 assert(DLG.length < 12000, "feature list stays short (" + DLG.length + " bytes of markup)");
 
 section("2b. Pasting converts by itself; AI FIX repairs a failed first read")
-assert(/converts the moment it lands/.test(DLG) && /re-reads it and repairs the result/.test(DLG),
+assert(/converts the moment it lands/.test(DLG) && /re-reads and repairs the output/.test(DLG),
        "About says conversion is automatic on paste and what AI FIX is for")
-assert(/comes up short/.test(DLG) && /deterministic result still wins/.test(DLG),
-       "About is honest that AI only races the local engine and does not replace it")
+assert(/When a first read cannot see the flights/.test(DLG) && /Your key, your call/.test(DLG),
+       "About frames AI FIX as a repair pass behind your own key, not the default path")
 const WELCOME = TPL.slice(TPL.indexOf('class="welcome'), TPL.indexOf('<div class="modal hidden" id="setModal"'))
 assert(/converts on its own/.test(WELCOME) && /AI FIX/.test(WELCOME),
        "the welcome card says the same thing before the first paste")
@@ -120,8 +121,12 @@ const claimed = [...DLG.matchAll(/<b>([\d,]{3,7})\+?<\/b>/g)]
   .filter(n => !isNaN(n) && n > 100);
 assert(claimed.length > 0 && claimed.every(n => n <= ENTRIES),
        "claimed dictionary size (" + claimed.join("/") + ") is within the real " + ENTRIES + " entries");
-assert(/10K/.test(DLG) && fs.readFileSync(path.join(REPO, "test_10k_pic_convert.js"), "utf8").includes("10000"),
-       "the 10K fuzz claim points at a suite that actually runs 10,000 iterations");
+/* the stats row is exactly the two chips the author wants, nothing more */
+const STATS_UL = (DLG.match(/<ul class="about-stats">[\s\S]*?<\/ul>/) || [""])[0];
+assert((STATS_UL.match(/<li>/g) || []).length === 2, "stats row keeps exactly two chips");
+assert(/<b>0<\/b> accounts · cookies · trackers/.test(STATS_UL) && /1,600\+/.test(STATS_UL),
+       "stats row claims 0 accounts and the 1,600+ dictionary size");
+assert(!/static file|fuzz/i.test(DLG), "no '1 static file' or fuzz-suite chip remains in the dialog");
 
 /* motion is decoration here, so it must be switch-offable */
 const CSS = TPL.slice(TPL.indexOf("<style>"), TPL.indexOf("</style>"));
