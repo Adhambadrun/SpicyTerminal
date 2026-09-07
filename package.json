@@ -10,6 +10,7 @@
     "test:protocol": "node test_autonomous_protocol.js && node test_fuzz.js && node test_mistake_learner.js && node test_weekly_report.js"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "ocrad.js": "^0.0.1"
   }
 }
