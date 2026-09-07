@@ -705,13 +705,13 @@ let makeSandboxGlobal;
     assert(/KEY SAVED/.test(s.status()), `7b: confirmed (status: "${s.status()}")`);
   }
 
-  // 7c. Offline escape hatch -> app stays usable without a key.
+  // 7c. Keyless escape hatch -> app stays usable without a key.
   {
     const s = makeSandbox({});
     s.el("enterOffline").fire("click");
-    assert(s.el("welcome")._classes.has("hidden"), "7c: welcome closed via offline link");
+    assert(s.el("welcome")._classes.has("hidden"), "7c: welcome closed via the keyless link");
     assert(!s._store.has("spicy_gem_key"), "7c: no key stored");
-    assert(/OFFLINE MODE/.test(s.status()), `7c: offline status (status: "${s.status()}")`);
+    assert(/AUTO MODE/.test(s.status()), `7c: auto-mode status (status: "${s.status()}")`);
   }
 
   // 7d. Built artifact carries the new welcome markup (key input + made-with-love).
@@ -719,7 +719,7 @@ let makeSandboxGlobal;
     const built = fs.readFileSync(path.join(REPO, "index.html"), "utf8");
     assert(built.includes("gemKeyWelcome"), "7d: built index.html has the welcome key input");
     assert(/SAVE KEY &amp; START|SAVE KEY & START/.test(built), "7d: built index.html has SAVE KEY & START");
-    assert(built.includes("enterOffline"), "7d: built index.html has the offline link");
+    assert(built.includes("enterOffline"), "7d: built index.html has the keyless link");
     assert(/Made with .*love.* by Adham Badran/.test(built), "7d: built index.html mentions made with love");
     assert(built.includes("♥"), "7d: built index.html has the heart");
   }
