@@ -3,7 +3,8 @@
    - Bounded screenshot OCR: lazy-loaded worker path plus a no-hang fallback
    - Native TextDetector API + bundled pure JS OCRAD fallback
    - Aviation-aware OCR cleaner (repairs glyph confusions in flight numbers, times, airports, dates)
-   - Fallback to AI ONLY in case direct parsing cannot detect flights
+   - `AI FIX`: the repair pass — auto-raced when the direct read finds nothing, and re-pressable by hand
+   - AI is never the primary path: text and legible screenshots convert offline first
    - Continuous AI mistake detection & self-healing engine ("teaches the tool to fix it")
    - Weekly performance & enhancement report generator sent to adhambadraan@gmail.com
    - Text cache (fingerprint -> output) & Image cache (hash -> output) for instant repeat
@@ -1963,7 +1964,7 @@ function renderAttachmentResults(results, token, batch, started) {
       convertAi(true, "duplicated segment guard");
       return;
     }
-    warns.push("segments repeat the same route/date — verify legs 2+ (add a Gemini key and press ✦ AI for a re-read)");
+    warns.push("segments repeat the same route/date — verify legs 2+ (add a Gemini key and press AI FIX for a re-read)");
   }
 
   if (allSegs.length) {
@@ -1984,7 +1985,7 @@ function renderAttachmentResults(results, token, batch, started) {
     var ms = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - started);
     // An attached PDF cannot be read offline; say so instead of letting the
     // user assume it was part of this result.
-    var pdfNote = (readyDocuments().length && !gemKey()) ? "  ·  PDF needs Gemini (AI AUTO)" : "";
+    var pdfNote = (readyDocuments().length && !gemKey()) ? "  ·  PDF needs Gemini (AI FIX)" : "";
     setStatus("IMAGE PARSED — " + allSegs.length + " seg(s) (" + ms + "ms)" + (warns.length ? "  ·  " + warns.join(" · ") : "") + pdfNote, warns.length > 0);
     var imgs = readyImages();
     if (imgs.length === 1 && imgs[0]._hash) imgCacheSet(imgs[0]._hash, outText);
@@ -2010,8 +2011,8 @@ function renderAttachmentResults(results, token, batch, started) {
     setStatus("Image parse did not detect flights — trying AI…");
     convertAi(true, "undetected attachment");
   } else {
-    out.textContent = "Could not detect flights in the attachment.\n\nSupported images are converted offline. For a difficult image or PDF, save a Gemini key and press AI AUTO.";
-    setStatus("ATTACHMENT NOT READ — AI AUTO can retry", true);
+    out.textContent = "Could not detect flights in the attachment.\n\nSupported images are converted offline, and this one came back empty-handed. Save a Gemini key and press AI FIX — it re-reads the same attachment with a vision model and repairs the result.";
+    setStatus("ATTACHMENT NOT READ — AI FIX can re-read it", true);
   }
 }
 function convertImageAttachments(batch) {
@@ -2041,7 +2042,7 @@ function convertImageAttachments(batch) {
     renderAttachmentResults(results, token, batch, started);
   }, function() {
     if (token === attachmentVersion && batch === latestAttachmentBatch) {
-      setStatus("ATTACHMENT PARSE FAILED — AI AUTO can retry", true);
+      setStatus("ATTACHMENT PARSE FAILED — AI FIX can re-read it", true);
       if (gemKey()) convertAi(true, "attachment parse error");
     }
   }).then(function() {
@@ -2134,7 +2135,7 @@ function finishAttachmentConversion(token) {
   }
   if (docs.length) {
     if (gemKey()) convertAi(true, "PDF attachment");
-    else setStatus("PDF ATTACHED — AI AUTO needs a Gemini key", true);
+    else setStatus("PDF ATTACHED — AI FIX needs a Gemini key", true);
     return;
   }
   // This is reachable when an image is removed while it was still decoding.
@@ -2246,7 +2247,7 @@ function convert(auto) {
   // also pasted readable text.
   if (docs.length) {
     if (gemKey()) convertAi(auto, "PDF attachment");
-    else setStatus("PDF ATTACHED — AI AUTO needs a Gemini key", true);
+    else setStatus("PDF ATTACHED — AI FIX needs a Gemini key", true);
     return;
   }
 
@@ -2260,10 +2261,10 @@ function convert(auto) {
       if (!lack) { lastTextFp = fp(text); return; }
       if (gemKey()) { convertAi(auto, lack); return; }
       if (!r.segs.length) {
-        out.textContent = "Couldn't read this paste.\n" + (r.warns[0] || "") + "\n\nPress AI AUTO (add a Gemini key first if asked).";
+        out.textContent = "Couldn't read this paste.\n" + (r.warns[0] || "") + "\n\nThe offline engine could not make sense of it — press AI FIX to re-read it with Gemini (add a key first if asked).";
         setStatus("INCOMPLETE — needs AI", true);
       } else {
-        setStatus(st.textContent + "  ·  partial — AI AUTO can finish", true);
+        setStatus(st.textContent + "  ·  partial — AI FIX can finish", true);
       }
     } catch (e) { setStatus("CONVERT ERROR", true); }
     return;
@@ -2327,7 +2328,7 @@ function fetchJson(url, opts, ms){
     return r.json().catch(function(){ throw new Error("AI sent an unreadable reply (HTTP "+r.status+")"); });
   }, function(err){
     clearTimeout(timer);
-    if(timedOut) throw new Error("AI timed out after "+Math.round((ms||60000)/1000)+"s — press ✦ AI again");
+    if(timedOut) throw new Error("AI timed out after "+Math.round((ms||60000)/1000)+"s — press AI FIX again");
     throw new Error("network error reaching Gemini — check the connection");
   });
 }
@@ -2408,7 +2409,7 @@ function convertAi(fromAuto, reason, specBatch){
     return;
   }
   var key=gemKey();
-  if(!key){ $("setModal").classList.remove("hidden"); setStatus("AI needs a Gemini key", true); return; }
+  if(!key){ $("setModal").classList.remove("hidden"); setStatus("AI FIX needs a Gemini key", true); return; }
   var text=(inp.value||"").replace(/\[screenshot attached[^\n]*\]\n?/g,"");
   var fallback=lastOut;
   var requestAttachmentVersion=attachmentVersion;
@@ -2435,7 +2436,7 @@ function convertAi(fromAuto, reason, specBatch){
     if(requestId!==aiRequestId) return;
     converting=false; window._aiStartedAt=0;
     if(requestAttachmentVersion!==attachmentVersion || requestAttachmentBatch!==latestAttachmentBatch){
-      setStatus("AI REPLY IGNORED — attachment changed, press ✦ AI again", true);
+      setStatus("AI REPLY IGNORED — attachment changed, press AI FIX again", true);
       return;
     }
     // The direct engine answered first while this speculative call was in
@@ -2467,7 +2468,7 @@ function convertAi(fromAuto, reason, specBatch){
     // An AI reply that still contains unknown airports is not a finished
     // itinerary — show it, but never dress it up as a clean result.
     if(/(DEP|ARR)-\??\?{2,}/.test(t)){
-      setStatus("AI REPLY INCOMPLETE — unknown airport(s); crop the screenshot tighter and press ✦ AI again", true);
+      setStatus("AI REPLY INCOMPLETE — unknown airport(s); crop the screenshot tighter and press AI FIX again", true);
     } else {
       setStatus("AI CONVERTED"+(reason?" ("+reason+")":""));
     }
@@ -2658,6 +2659,89 @@ function openWeeklyReport() {
                    "POP-UP BLOCKED — press EMAIL ADHAM again, or COPY REPORT and paste it");
 }
 
+/* ABOUT:BEGIN */
+/* About is a real modal, so it carries the three things modals usually forget:
+   focus returns to the trigger on close, TAB cannot walk into the app behind the
+   dialog, and ESC closes it. Opening it must never disturb conversion state — no
+   attachment batch is invalidated and no AI request is cancelled, so reading the
+   blurb while a screenshot is still parsing is safe. */
+var APP_VERSION = "4.0.0";
+var aboutReturnFocus = null;
+function openAbout() {
+  var m = $("aboutModal");
+  if (!m || !m.classList.contains("hidden")) return;
+  aboutReturnFocus = document.activeElement;
+  var ver = $("aboutFootVer");
+  if (ver) ver.textContent = "SpicyTerminal v" + APP_VERSION;
+  m.classList.remove("hidden");
+  var card = $("aboutCard");
+  if (card) card.scrollTop = 0;
+  var f = aboutFocusables();
+  if (f.length) { try { f[0].focus({ preventScroll: true }); } catch (e) { f[0].focus(); } }
+}
+function closeAbout() {
+  var m = $("aboutModal");
+  if (!m || m.classList.contains("hidden")) return;
+  m.classList.add("hidden");
+  // Back to `About` — a dialog that dumps focus on <body> leaves the keyboard
+  // user re-tabbing through the whole page to get where they were.
+  if (aboutReturnFocus && aboutReturnFocus.focus) {
+    try { aboutReturnFocus.focus({ preventScroll: true }); } catch (e) { aboutReturnFocus.focus(); }
+  }
+  aboutReturnFocus = null;
+}
+function aboutFocusables() {
+  var card = $("aboutCard");
+  if (!card) return [];
+  var sel = "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])";
+  // Anything inside a display:none subtree reports no box, so a control that
+  // is not actually painted is skipped instead of trapping TAB on it.
+  return Array.prototype.slice.call(card.querySelectorAll(sel)).filter(function (el) {
+    if (el.offsetWidth || el.offsetHeight) return true;
+    return el.getClientRects ? el.getClientRects().length > 0 : true;
+  });
+}
+document.addEventListener("keydown", function (event) {
+  var m = $("aboutModal");
+  if (!event || !m || m.classList.contains("hidden")) return;
+  var key = event.key || "";
+  if (key === "Escape") { event.preventDefault(); closeAbout(); return; }
+  if (key !== "Tab") return;
+  var f = aboutFocusables();
+  if (!f.length) return;
+  var first = f[0], last = f[f.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
+function copyAuthorEmail(btn) {
+  // Only the label is rewritten: an innerHTML/textContent write on the button
+  // itself would erase its own icon and make the control jump on click.
+  var lbl = (btn && btn.querySelector) ? btn.querySelector(".about-copy-lbl") : null;
+  function label(txt) { if (lbl) lbl.textContent = txt; else if (btn) btn.textContent = txt; }
+  function done() {
+    label("COPIED \u2713");
+    setStatus("AUTHOR EMAIL COPIED \u2014 " + AUTHOR_EMAIL);
+    setTimeout(function () { label("COPY EMAIL"); }, 1700);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(AUTHOR_EMAIL).then(done, done);
+  } else {
+    var ta = document.createElement("textarea");
+    ta.value = AUTHOR_EMAIL;
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    ta.remove(); done();
+  }
+}
+if ($("btnAbout")) $("btnAbout").addEventListener("click", openAbout);
+if ($("aboutClose")) $("aboutClose").addEventListener("click", closeAbout);
+if ($("aboutGo")) $("aboutGo").addEventListener("click", function () { closeAbout(); inp.focus(); });
+if ($("aboutCopyMail")) $("aboutCopyMail").addEventListener("click", function () { copyAuthorEmail(this); });
+if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) {
+  if (event && event.target === this) closeAbout();   // click the dimmed page, not the card
+});
+/* ABOUT:END */
+
 /* ---------- UI events ---------- */
 $("btnAttach").addEventListener("click", function() { $("filePick").click(); });
 $("filePick").addEventListener("change", function() {
@@ -2826,7 +2910,7 @@ $("enterBtn").addEventListener("click", function(){
 });
 $("enterOffline").addEventListener("click", function(){
   closeWelcome();
-  setStatus("OFFLINE MODE — add a key anytime with GENERATE API", true);
+  setStatus("OFFLINE MODE — pastes still convert; add a key to unlock AI FIX", true);
 });
 $("setClose").addEventListener("click", function(){ $("setModal").classList.add("hidden"); });
 $("setSave").addEventListener("click", function(){
@@ -2881,10 +2965,11 @@ try {
 // Share the single inlined wordmark with the welcome card instead of embedding
 // the same ~300KB base64 twice in the static page.
 try {
-  var _wmH = $("wordmarkHeader"), _wmW = $("wordmarkWelcome");
-  if (_wmH && _wmW && !_wmW.getAttribute("src")) {
-    _wmW.setAttribute("src", _wmH.getAttribute("src") || _wmH.src);
-  }
+  var _wmH = $("wordmarkHeader"), _wmW = $("wordmarkWelcome"), _wmA = $("wordmarkAbout");
+  var _wmSrc = _wmH ? (_wmH.getAttribute("src") || _wmH.src) : "";
+  if (_wmW && !_wmW.getAttribute("src")) _wmW.setAttribute("src", _wmSrc);
+  // Same trick for the About dialog: the wordmark is one base64 blob, shared.
+  if (_wmA && !_wmA.getAttribute("src")) _wmA.setAttribute("src", _wmSrc);
 } catch (e) {}
 
 })();
