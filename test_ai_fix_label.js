@@ -54,6 +54,22 @@ for (const [name, src] of [["app.js", APP], ["index_template.html", TPL], ["READ
 assert(BUILT.length > UI.length + 100000, "the inlined prompt/engine region is still present and deliberately unscanned");
 assert(!/AI AUTO|AI auto|✦ AI/.test(APP + TPL), "no user-facing string still points at a button that does not exist");
 
+section("2b. the app speaks auto, not offline");
+/* 'offline' is a build fact, not a story the UI needs to tell: the user-visible
+   wording is that conversion is automatic (auto mode). The `enterOffline` id is
+   machine wiring the suites fire directly — it is never rendered as text, so it
+   is stripped before the markup is scanned. The legacy `text_offline` /
+   `img_offline` stats keys are internal event types, never shown either. */
+const UI_NO_IDS = UI.replace(/\sid="[^"]*"/g, "");
+assert(UI_NO_IDS.length > 4000 && !/offline/i.test(UI_NO_IDS),
+       "the rendered markup never says 'offline' — it says auto mode");
+const LITERALS = APP.match(/"(?:[^"\\\n]|\\.)*"/g) || [];
+const SAYS_OFFLINE = LITERALS.filter(l => /offline/i.test(l) && !/^"(text|img)_offline|enterOffline"$/.test(l));
+assert(SAYS_OFFLINE.length === 0,
+       "no app.js string literal says 'offline' (found: " + SAYS_OFFLINE.join(" | ") + ")");
+assert(/AUTO MODE/.test(APP) && /or continue in auto mode/.test(APP),
+       "the keyless path is worded as auto mode");
+
 section("3. every hint points at the real label");
 const hints = APP.match(/"(?:[^"\\]|\\.)*AI FIX[^"]*"/g) || [];
 assert(hints.length >= 10, hints.length + " runtime strings tell the user to press AI FIX");

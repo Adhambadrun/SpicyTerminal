@@ -2011,7 +2011,7 @@ function renderAttachmentResults(results, token, batch, started) {
     setStatus("Image parse did not detect flights — trying AI…");
     convertAi(true, "undetected attachment");
   } else {
-    out.textContent = "Could not detect flights in the attachment.\n\nSupported images are converted offline, and this one came back empty-handed. Save a Gemini key and press AI FIX — it re-reads the same attachment with a vision model and repairs the result.";
+    out.textContent = "Could not detect flights in the attachment.\n\nSupported images are converted automatically, and this one came back empty-handed. Save a Gemini key and press AI FIX — it re-reads the same attachment with a vision model and repairs the result.";
     setStatus("ATTACHMENT NOT READ — AI FIX can re-read it", true);
   }
 }
@@ -2261,7 +2261,7 @@ function convert(auto) {
       if (!lack) { lastTextFp = fp(text); return; }
       if (gemKey()) { convertAi(auto, lack); return; }
       if (!r.segs.length) {
-        out.textContent = "Couldn't read this paste.\n" + (r.warns[0] || "") + "\n\nThe offline engine could not make sense of it — press AI FIX to re-read it with Gemini (add a key first if asked).";
+        out.textContent = "Couldn't read this paste.\n" + (r.warns[0] || "") + "\n\nThe auto engine could not make sense of it — press AI FIX to re-read it with Gemini (add a key first if asked).";
         setStatus("INCOMPLETE — needs AI", true);
       } else {
         setStatus(st.textContent + "  ·  partial — AI FIX can finish", true);
@@ -2600,8 +2600,8 @@ function generateWeeklyReportText() {
   // fixed list — a report that says the same thing every week cannot be acted on.
   var recs = [];
   var imgDirect = (period.imgDirect || 0);
-  recs.push(imgDirect ? "Direct Image Engine handled " + imgDirect + " screenshot(s) offline; keep OCR bounded and worker-backed."
-                      : "No screenshots converted this period; the offline OCR path is untested on this device.");
+  recs.push(imgDirect ? "Direct Image Engine handled " + imgDirect + " screenshot(s) on auto; keep OCR bounded and worker-backed."
+                      : "No screenshots converted this period; the auto OCR path is untested on this device.");
   var aiCalls = period.aiCalls || 0, aiResolved = period.aiResolved || 0;
   if (aiCalls > aiResolved) {
     recs.push((aiCalls - aiResolved) + " of " + aiCalls + " AI call(s) never produced a result the user saw (beaten by the direct read, or failed) — that is spare latency/cost, not lost output.");
@@ -2894,7 +2894,7 @@ function welcomeKeyNudge(msg){
   if (warn) { warn.textContent = msg; warn.classList.remove("hidden"); }
   var keyInput = $("gemKeyWelcome");
   if (keyInput) { keyInput.classList.add("keywarn"); keyInput.focus(); }
-  setStatus("ADD YOUR API KEY FIRST — or continue offline", true);
+  setStatus("ADD YOUR API KEY FIRST — or continue in auto mode", true);
 }
 $("enterBtn").addEventListener("click", function(){
   var entered = ($("gemKeyWelcome").value || "").trim();
@@ -2910,7 +2910,7 @@ $("enterBtn").addEventListener("click", function(){
 });
 $("enterOffline").addEventListener("click", function(){
   closeWelcome();
-  setStatus("OFFLINE MODE — pastes still convert; add a key to unlock AI FIX", true);
+  setStatus("AUTO MODE — pastes still convert; add a key to unlock AI FIX", true);
 });
 $("setClose").addEventListener("click", function(){ $("setModal").classList.add("hidden"); });
 $("setSave").addEventListener("click", function(){

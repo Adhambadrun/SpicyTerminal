@@ -106,7 +106,7 @@ assert(/if a first pass ever cannot read it|first pass ever cannot read it/i.tes
 assert(/only what|only powers|only runs on/i.test(WELCOME) && /free, takes 20 seconds/.test(WELCOME),
        "the welcome card says the key is only for AI FIX, and that it is free")
 const KEYMODAL = TPL.slice(TPL.indexOf('id="setModal"'), TPL.indexOf('id="reportModal"'))
-assert(/AI FIX is the button you press when the automatic offline read cannot/.test(KEYMODAL),
+assert(/AI FIX is the button you press when the auto read cannot/.test(KEYMODAL),
        "the key dialog defines AI FIX rather than assuming it is understood")
 const BTN_AI = (TPL.match(/<button[^>]*id="btnAi"[\s\S]*?<\/button>/) || [""])[0]
 assert(/title="[^"]*misses a leg[^"]*"/.test(BTN_AI), "AI FIX carries a hover hint describing the repair job")
