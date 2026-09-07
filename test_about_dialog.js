@@ -87,6 +87,14 @@ assert(claimed.length > 0 && claimed.every(n => n <= ENTRIES),
 assert(/10K/.test(DLG) && fs.readFileSync(path.join(REPO, "test_10k_pic_convert.js"), "utf8").includes("10000"),
        "the 10K fuzz claim points at a suite that actually runs 10,000 iterations");
 
+/* motion is decoration here, so it must be switch-offable */
+const CSS = TPL.slice(TPL.indexOf("<style>"), TPL.indexOf("</style>"));
+assert(/\.about-card\{[^}]*animation:aboutIn/.test(CSS) && /prefers-reduced-motion:reduce\)\{\.about-card\{animation:none/.test(CSS),
+       "the dialog entrance is disabled under prefers-reduced-motion");
+assert(/\.about-btn:hover,\.about-btn:focus-visible\{[^}]*filter:none/.test(CSS),
+       "the header pill has its own hover state instead of a global brightness bump");
+assert(/\.hdr-right\{[^}]*flex:none/.test(CSS), "the header right group cannot be squeezed out by a wide wordmark");
+
 /* unique ids across the whole page (an id collision would silently break focus) */
 const ids = (TPL.match(/\sid="[^"]+"/g) || []).map(s => s.slice(5, -1));
 const dupes = ids.filter((v, i) => ids.indexOf(v) !== i);
