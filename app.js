@@ -2658,6 +2658,89 @@ function openWeeklyReport() {
                    "POP-UP BLOCKED — press EMAIL ADHAM again, or COPY REPORT and paste it");
 }
 
+/* ABOUT:BEGIN */
+/* About is a real modal, so it carries the three things modals usually forget:
+   focus returns to the trigger on close, TAB cannot walk into the app behind the
+   dialog, and ESC closes it. Opening it must never disturb conversion state — no
+   attachment batch is invalidated and no AI request is cancelled, so reading the
+   blurb while a screenshot is still parsing is safe. */
+var APP_VERSION = "4.0.0";
+var aboutReturnFocus = null;
+function openAbout() {
+  var m = $("aboutModal");
+  if (!m || !m.classList.contains("hidden")) return;
+  aboutReturnFocus = document.activeElement;
+  var ver = $("aboutFootVer");
+  if (ver) ver.textContent = "SpicyTerminal v" + APP_VERSION;
+  m.classList.remove("hidden");
+  var card = $("aboutCard");
+  if (card) card.scrollTop = 0;
+  var f = aboutFocusables();
+  if (f.length) { try { f[0].focus({ preventScroll: true }); } catch (e) { f[0].focus(); } }
+}
+function closeAbout() {
+  var m = $("aboutModal");
+  if (!m || m.classList.contains("hidden")) return;
+  m.classList.add("hidden");
+  // Back to `About` — a dialog that dumps focus on <body> leaves the keyboard
+  // user re-tabbing through the whole page to get where they were.
+  if (aboutReturnFocus && aboutReturnFocus.focus) {
+    try { aboutReturnFocus.focus({ preventScroll: true }); } catch (e) { aboutReturnFocus.focus(); }
+  }
+  aboutReturnFocus = null;
+}
+function aboutFocusables() {
+  var card = $("aboutCard");
+  if (!card) return [];
+  var sel = "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])";
+  // Anything inside a display:none subtree reports no box, so a control that
+  // is not actually painted is skipped instead of trapping TAB on it.
+  return Array.prototype.slice.call(card.querySelectorAll(sel)).filter(function (el) {
+    if (el.offsetWidth || el.offsetHeight) return true;
+    return el.getClientRects ? el.getClientRects().length > 0 : true;
+  });
+}
+document.addEventListener("keydown", function (event) {
+  var m = $("aboutModal");
+  if (!event || !m || m.classList.contains("hidden")) return;
+  var key = event.key || "";
+  if (key === "Escape") { event.preventDefault(); closeAbout(); return; }
+  if (key !== "Tab") return;
+  var f = aboutFocusables();
+  if (!f.length) return;
+  var first = f[0], last = f[f.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
+function copyAuthorEmail(btn) {
+  // Only the label is rewritten: an innerHTML/textContent write on the button
+  // itself would erase its own icon and make the control jump on click.
+  var lbl = (btn && btn.querySelector) ? btn.querySelector(".about-copy-lbl") : null;
+  function label(txt) { if (lbl) lbl.textContent = txt; else if (btn) btn.textContent = txt; }
+  function done() {
+    label("COPIED \u2713");
+    setStatus("AUTHOR EMAIL COPIED \u2014 " + AUTHOR_EMAIL);
+    setTimeout(function () { label("COPY EMAIL"); }, 1700);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(AUTHOR_EMAIL).then(done, done);
+  } else {
+    var ta = document.createElement("textarea");
+    ta.value = AUTHOR_EMAIL;
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    ta.remove(); done();
+  }
+}
+if ($("btnAbout")) $("btnAbout").addEventListener("click", openAbout);
+if ($("aboutClose")) $("aboutClose").addEventListener("click", closeAbout);
+if ($("aboutGo")) $("aboutGo").addEventListener("click", function () { closeAbout(); inp.focus(); });
+if ($("aboutCopyMail")) $("aboutCopyMail").addEventListener("click", function () { copyAuthorEmail(this); });
+if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) {
+  if (event && event.target === this) closeAbout();   // click the dimmed page, not the card
+});
+/* ABOUT:END */
+
 /* ---------- UI events ---------- */
 $("btnAttach").addEventListener("click", function() { $("filePick").click(); });
 $("filePick").addEventListener("change", function() {
@@ -2881,10 +2964,11 @@ try {
 // Share the single inlined wordmark with the welcome card instead of embedding
 // the same ~300KB base64 twice in the static page.
 try {
-  var _wmH = $("wordmarkHeader"), _wmW = $("wordmarkWelcome");
-  if (_wmH && _wmW && !_wmW.getAttribute("src")) {
-    _wmW.setAttribute("src", _wmH.getAttribute("src") || _wmH.src);
-  }
+  var _wmH = $("wordmarkHeader"), _wmW = $("wordmarkWelcome"), _wmA = $("wordmarkAbout");
+  var _wmSrc = _wmH ? (_wmH.getAttribute("src") || _wmH.src) : "";
+  if (_wmW && !_wmW.getAttribute("src")) _wmW.setAttribute("src", _wmSrc);
+  // Same trick for the About dialog: the wordmark is one base64 blob, shared.
+  if (_wmA && !_wmA.getAttribute("src")) _wmA.setAttribute("src", _wmSrc);
 } catch (e) {}
 
 })();
