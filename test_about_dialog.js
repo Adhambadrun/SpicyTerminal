@@ -2,7 +2,8 @@
 /* test_about_dialog.js — the About dialog must be a real, safe modal.
  *
  * A pretty dialog is easy to ship and easy to break. What this pins down:
- *   - the trigger is labelled exactly `About` and lives in the header, once;
+ *   - the trigger is labelled exactly `About`, sits at the head of the status row
+ *     (About / Generate Api / Weekly Report / Report a bug) and appears once;
  *   - opening it closes nothing else and must not disturb conversion state
  *     (no attachment batch invalidation, no AI request cancelled);
  *   - ESC, the × button and a click on the dimmed backdrop all close it, while
@@ -36,19 +37,36 @@ function assert(cond, msg) {
 function section(t) { console.log("\n=== " + t + " ==="); }
 
 /* ---------- 1. the trigger in the header ---------- */
-section("1. About trigger in the header");
-assert(/<div class="credit">made by Adham Badran<\/div>/.test(TPL), "credit line 'made by Adham Badran' is kept");
-assert(/<header>[\s\S]*?class="hdr-right"[\s\S]*?id="btnAbout"[\s\S]*?<\/header>/.test(TPL),
-       "About button sits in the header, beside the credit");
-const btnTag = (TPL.match(/<button[^>]*id="btnAbout"[\s\S]*?<\/button>/) || [""])[0];
-assert(/<span class="dot" aria-hidden="true"><\/span>About\s*<\/button>/.test(TPL), "the button label is exactly 'About'");
-assert((TPL.match(/class="about-btn"/g) || []).length === 1, "the About trigger is declared exactly once");
+section("1. About trigger: first control of the status row group");
+const HEADER = (TPL.match(/<header>[\s\S]*?<\/header>/) || [""])[0];
+assert(/<div class="credit">made by Adham Badran<\/div>/.test(HEADER), "the header keeps the 'made by Adham Badran' credit");
+assert(!/btnAbout/.test(HEADER), "About is no longer in the header (it moved to the status row)");
+
 const SB_START = TPL.indexOf('<div class="status">');
-const statusBlock = TPL.slice(SB_START, TPL.indexOf('</div>', SB_START));
-assert(/About/.test(statusBlock) === false, "the status bar is left alone (no second About control)");
-assert((BUILT.match(/id="btnAbout"/g) || []).length === 1, "exactly one About button in the built page");
+const SB = TPL.slice(SB_START, TPL.indexOf('</div>', SB_START));
+const ORDER_IDS = ["btnAbout", "genKey", "btnWeeklyReport", "report"];
+const AT = ORDER_IDS.map(id => SB.indexOf('id="' + id + '"'));
+assert(AT.every(i => i >= 0), "all four status controls are present");
+assert(String(AT) === String(AT.slice().sort((a, b) => a - b)),
+       "order is About / Generate Api / Weekly Report / Report a bug (found: " +
+       ORDER_IDS.slice().sort((a, b) => AT[ORDER_IDS.indexOf(a)] - AT[ORDER_IDS.indexOf(b)]).join(" / ") + ")");
+const btnTag = (SB.match(/<button[^>]*id="btnAbout"[\s\S]*?<\/button>/) || [""])[0];
+assert(/>About<\/button>/.test(btnTag), "the button label is exactly 'About'");
+assert(/class="linkbtn"/.test(btnTag), "About is a .linkbtn like its three neighbours, not a competing button");
+assert((SB.match(/>About</g) || []).length === 1, "About appears once in the row");
+assert((TPL.match(/id="btnAbout"/g) || []).length === 1, "About is declared exactly once in the whole page");
 assert(/aria-haspopup="dialog"/.test(btnTag) && /aria-controls="aboutModal"/.test(btnTag),
        "trigger announces a dialog it controls (aria-haspopup/aria-controls)");
+assert(/title="[^"]{20,}"/.test(btnTag), "the trigger explains itself on hover, since the word 'About' alone does not");
+
+const CSS0 = TPL.slice(TPL.indexOf("<style>"), TPL.indexOf("</style>"));
+assert(/#btnAbout\{margin-left:auto\}/.test(CSS0) && !/#genKey\{[^}]*margin-left:auto/.test(CSS0),
+       "the right-alignment moved with the group: About owns margin-left:auto, Generate Api no longer does");
+assert(/#genKey\{margin-right:12px\}/.test(CSS0) && /#btnWeeklyReport\{margin-right:12px\}/.test(CSS0),
+       "the row keeps its 12px separators between the links");
+assert(/#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnAbout:hover\{/.test(CSS0),
+       "About shares the row's single hover rule instead of inventing a bespoke one");
+assert(!/\.about-btn/.test(CSS0), "no leftover header-pill styling behind");
 
 /* ---------- 2. the dialog markup ---------- */
 section("2. About dialog markup");
@@ -61,7 +79,7 @@ assert(/role="dialog"/.test(DLG) && /aria-modal="true"/.test(DLG), "role=dialog 
 assert(/aria-labelledby="aboutTitle"/.test(DLG) && /aria-describedby="aboutTagline"/.test(DLG),
        "dialog is labelled and described for screen readers");
 assert(DLG.includes("GDS black-window itinerary"), "dialog opens with a one-line summary of what the app does");
-for (const topic of [/OFFLINE/, /Screenshots that cannot hang/i, /AI only as a fallback/i,
+for (const topic of [/OFFLINE/, /Screenshots that cannot hang/i, /the repair pass/i,
                      /refuses to learn nonsense/i, /Private by construction/i, /Copy-ready GDS output/i]) {
   assert(topic.test(DLG), "feature blurb covers " + topic);
 }
@@ -73,6 +91,24 @@ assert((DLG.match(/aria-hidden="true"/g) || []).length >= (DLG.match(/<svg/g) ||
        "every decorative icon/ornament is aria-hidden");
 assert(!/lorem|placeholder text|TODO/i.test(DLG), "no filler text in the dialog copy");
 assert(DLG.length < 12000, "feature list stays short (" + DLG.length + " bytes of markup)");
+
+section("2b. Pasting converts by itself; AI FIX repairs a failed first read")
+assert(/converts the moment it lands/.test(DLG) && /re-reads it and repairs the result/.test(DLG),
+       "About says conversion is automatic on paste and what AI FIX is for")
+assert(/comes up short/.test(DLG) && /deterministic result still wins/.test(DLG),
+       "About is honest that AI only races the local engine and does not replace it")
+const WELCOME = TPL.slice(TPL.indexOf('class="welcome'), TPL.indexOf('<div class="modal hidden" id="setModal"'))
+assert(/converts on its own/.test(WELCOME) && /AI FIX/.test(WELCOME),
+       "the welcome card says the same thing before the first paste")
+assert(/if a first pass ever cannot read it|first pass ever cannot read it/i.test(WELCOME),
+       "the welcome card names the failure case people hit: nothing read the first time")
+assert(/only what|only powers|only runs on/i.test(WELCOME) && /free, takes 20 seconds/.test(WELCOME),
+       "the welcome card says the key is only for AI FIX, and that it is free")
+const KEYMODAL = TPL.slice(TPL.indexOf('id="setModal"'), TPL.indexOf('id="reportModal"'))
+assert(/AI FIX is the button you press when the automatic offline read cannot/.test(KEYMODAL),
+       "the key dialog defines AI FIX rather than assuming it is understood")
+const BTN_AI = (TPL.match(/<button[^>]*id="btnAi"[\s\S]*?<\/button>/) || [""])[0]
+assert(/title="[^"]*misses a leg[^"]*"/.test(BTN_AI), "AI FIX carries a hover hint describing the repair job")
 
 /* no inflated numbers: every count chip must be backed by the shipped data file */
 const DATA = require(path.join(REPO, "spicy_data.js"));
@@ -91,9 +127,8 @@ assert(/10K/.test(DLG) && fs.readFileSync(path.join(REPO, "test_10k_pic_convert.
 const CSS = TPL.slice(TPL.indexOf("<style>"), TPL.indexOf("</style>"));
 assert(/\.about-card\{[^}]*animation:aboutIn/.test(CSS) && /prefers-reduced-motion:reduce\)\{\.about-card\{animation:none/.test(CSS),
        "the dialog entrance is disabled under prefers-reduced-motion");
-assert(/\.about-btn:hover,\.about-btn:focus-visible\{[^}]*filter:none/.test(CSS),
-       "the header pill has its own hover state instead of a global brightness bump");
-assert(/\.hdr-right\{[^}]*flex:none/.test(CSS), "the header right group cannot be squeezed out by a wide wordmark");
+assert(/#btnAbout:focus-visible|\.linkbtn\{[^}]*cursor:pointer/.test(CSS),
+       "the trigger stays keyboard-visible in the row");
 
 /* unique ids across the whole page (an id collision would silently break focus) */
 const ids = (TPL.match(/\sid="[^"]+"/g) || []).map(s => s.slice(5, -1));
@@ -247,12 +282,15 @@ assert(!/fetch\(|XMLHttpRequest|\.post\(/.test(ABOUT_SRC), "About sends nothing 
 section("5. Built artifact in sync");
 const publicBuilt = path.join(REPO, "public", "index.html");
 assert(BUILT.includes("function openAbout("), "built index.html contains the About logic");
-assert(BUILT.includes("about-btn") && BUILT.includes("--bg:#05080b"), "built index.html carries the About styles");
+assert(/\.about-card\{[^}]*border-radius:16px/.test(BUILT) && /#btnAbout\{margin-left:auto\}/.test(BUILT) && BUILT.includes("--bg:#05080b"),
+       "built index.html carries the About styles and the row alignment rule");
+assert(!/about-btn/.test(BUILT), "the superseded header-pill class is gone from the artifact");
 if (fs.existsSync(publicBuilt)) {
   assert(fs.readFileSync(publicBuilt, "utf8") === BUILT, "public/index.html matches index.html (deploy copy rebuilt)");
 }
-assert(BUILT.includes(">About\n    </button>") || /id="btnAbout"[\s\S]{0,160}>About\s*<\/button>/.test(BUILT),
-       "the built page renders the label 'About'");
+assert(/>About<\/button>/.test(BUILT.slice(BUILT.indexOf('<div class="status">'), BUILT.indexOf('</div>', BUILT.indexOf('<div class="status">')))),
+       "the built page renders the label 'About' in the status row");
+assert(/>AI FIX<\/button>/.test(BUILT), "the built page renames the repair button to AI FIX");
 
 console.log(`\n=== SUMMARY: ${PASS} passed, ${FAIL} failed ===`);
 if (FAIL > 0) process.exit(1);

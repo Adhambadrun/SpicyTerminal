@@ -31,7 +31,11 @@ hallucinations, no re-rolling the dice.
   sell-status column `HK2`/`TK2` no longer becomes a phantom Turkish leg, a glued
   `MIAVVI` is unrolled into its two airports, and a carrier the data file does
   not know yet (IberoJet `OB`) is still read instead of dropped.
-- **Smart fallback**: Only falls back to AI in case an unreadable or handwritten screenshot cannot be detected offline.
+- **`AI FIX` — the repair button, not the default path**: pasting converts on its own, no click needed.
+  When that automatic offline pass cannot read an image (handwritten, cropped, garbage-scanned) or only
+  half-reads it, `AI FIX` re-reads the same input with Gemini and repairs the result; the deterministic
+  answer still wins whenever both succeed. (The previous label read like a mode switch, which made
+  people wait for an "auto" that had already run and come back empty.)
 - **Reliable attachments**: `+ ATTACH`, drag-and-drop, and clipboard screenshots share one queue; image extensions are detected even when a browser supplies no MIME type, multiple images are parsed together in order, and stale work cannot overwrite a cleared request. Each screenshot has a small red `×` remove button, can be clicked to review full-size, and can also be removed from the review screen.
 - **Word-proof carriers**: English words that are also IATA codes (`to`, `by`,
   `at`…) stay words. `to London` / `to Los Angeles` is no longer rewritten as
@@ -58,9 +62,10 @@ hallucinations, no re-rolling the dice.
   failing.
 - **Text and PDF attachments**: `.txt`, `.eml`, `.csv`, `.json`, `.html`, `.ics`, and similar text exports are read instantly; PDFs are passed to AI only when the user explicitly supplies a Gemini key.
 - **Weekly report**: One-click weekly performance and enhancement reports sent to `adhambadraan@gmail.com` to improve and enhance the tool to the max. Each report covers one week (Monday 00:00 UTC → now), compares it with the previous week, and keeps a separate lifetime total — a closed week is archived, never mixed into the current one. A *conversion* is a result shown to the user: live re-renders while typing and AI replies the direct read beat are counted as neither.
-- **About, in one click**: the header `About` button opens a dialog that says what the engine
-does, what it deliberately refuses to do, and who built it — no marketing, no
-fluff, `Esc` closes it and focus goes back where it was.
+- **About, in one click**: the `About` link leads the status row (`About / Generate Api /
+  Weekly Report / Report a bug`) and opens a dialog that says what the engine does, what it
+  deliberately refuses to do, and who built it — no marketing, no fluff, `Esc` closes it and
+  focus goes back where it was.
 - 100% offline, private — itineraries and screenshots never leave the browser.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.
@@ -105,6 +110,7 @@ and archives are never shipped.
 | `test_lax_man.js` | LAX–MAN round-trip regression (no phantom TO 105, Manchester is MAN not MHT) — `node test_lax_man.js` |
 | `test_mistake_learner.js` | self-learning safety + GDS re-paste regression for the 2026-09-07 weekly report — `node test_mistake_learner.js` |
 | `test_about_dialog.js` | About dialog: exact `About` label, focus trap, ESC/backdrop close, and that opening it cannot disturb a conversion — `node test_about_dialog.js` |
+| `test_ai_fix_label.js` | the AI FIX label is on the button and in every user-facing hint, with no legacy name left in the chrome, and the id stays `btnAi` — `node test_ai_fix_label.js` |
 | `test_weekly_report.js` | weekly-report counters: week rollover, what counts as a conversion, blocked pop-up — `node test_weekly_report.js` |
 
 ## Privacy

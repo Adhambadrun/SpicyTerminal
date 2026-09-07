@@ -46,9 +46,8 @@ button:hover{filter:brightness(1.14)}
 .status{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:4px var(--pad-x) 10px;font-size:11px;flex:none}
 #st{color:var(--green);letter-spacing:.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #st.warn{color:#f0a35c}
-#report:hover,#genKey:hover,#btnWeeklyReport:hover{color:#8fa6b2}
+#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnAbout:hover{color:#8fa6b2}
 .linkbtn{color:#3e4f59;font-size:11px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono);font-weight:400;flex:none;white-space:nowrap;min-height:auto}
-#genKey{margin-left:auto;margin-right:12px}
 #btnWeeklyReport{margin-right:12px}
 /* welcome — small card, app visible behind (translucent backdrop) */
 .welcome{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
@@ -91,11 +90,12 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 /* The header button inherits the global `button` chrome (40px tall, chunky),
    which would dominate a 28px wordmark, so it is rebalanced into a quiet
    status pill: it reads as part of the masthead, not as a second CONVERT. */
-.hdr-right{display:flex;align-items:center;gap:10px;flex:none}
-.about-btn{display:inline-flex;align-items:center;gap:7px;min-height:0;padding:5px 11px;border:1px solid #22313c;border-radius:999px;background:#0e151b;color:#8fa6b2;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.6px}
-.about-btn .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 7px rgba(83,217,119,.85);flex:none}
-.about-btn:hover,.about-btn:focus-visible{color:#eaf6ee;border-color:rgba(83,217,119,.55);background:#12201a;filter:none}
-.about-btn:focus-visible{outline:0;box-shadow:0 0 0 3px rgba(83,217,119,.16)}
+/* About is the first control of the status row group, so it carries the
+   `margin-left:auto` that used to sit on Generate Api — the group stays
+   right-aligned and keeps the order About / Generate Api / Weekly Report /
+   Report a bug at every width, with one shared hover language. */
+#btnAbout{margin-left:auto}
+#genKey{margin-right:12px}
 .about-modal{z-index:56;padding:16px;align-items:flex-start}
 .about-card{position:relative;width:min(880px,100%);max-height:calc(100dvh - 32px);overflow:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(180deg,#0d141a,#080c11);border:1px solid #1e2b34;border-radius:16px;padding:26px 26px 20px;box-shadow:0 30px 90px rgba(0,0,0,.72);animation:aboutIn .2s ease-out}
 .about-card::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:16px 16px 0 0;background:linear-gradient(90deg,transparent,rgba(83,217,119,.55) 30%,#e2574b 72%,transparent);opacity:.6;pointer-events:none}
@@ -138,23 +138,18 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 @media (min-width:760px){.about-cols{grid-template-columns:1.32fr .92fr}}
 /* A breathing dot and a sliding card are decoration; they must not be a
    vestibular trigger. */
-@media (prefers-reduced-motion:reduce){.about-card{animation:none}.about-live i{animation:none}.about-btn,.about-links a,.about-links button{transition:none}}
+@media (prefers-reduced-motion:reduce){.about-card{animation:none}.about-live i{animation:none}.about-links a,.about-links button{transition:none}}
 @media (max-width:840px){main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
 /* Narrow phones: the masthead has one job, so the credit text yields to the
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
    wordmark looked worse than a quiet header. */
-@media (max-width:560px){header .credit{display:none}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}.about-live{margin-left:0}}
+@media (max-width:560px){.status{gap:6px 10px}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}.about-live{margin-left:0}}
 </style>
 </head>
 <body>
 <header>
   <img id="wordmarkHeader" src="data:image/png;base64,__LOGO_FULL_B64__" alt="SpicyTerminal">
-  <div class="hdr-right">
-    <div class="credit">made by Adham Badran</div>
-    <button class="about-btn" id="btnAbout" type="button" aria-haspopup="dialog" aria-controls="aboutModal" title="What SpicyTerminal does, and who built it">
-      <span class="dot" aria-hidden="true"></span>About
-    </button>
-  </div>
+  <div class="credit">made by Adham Badran</div>
 </header>
 <main>
   <section class="pane"><h2>INPUT</h2>
@@ -166,7 +161,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 </main>
 <div class="bar">
   <button class="convert" id="btnConvert">CONVERT</button>
-  <button class="ai" id="btnAi">AI AUTO</button>
+  <button class="ai" id="btnAi" title="Re-read the last paste or screenshot with Gemini and repair the result — use it when the automatic offline pass misses a leg">AI FIX</button>
   <button class="attach" id="btnAttach" type="button">+ ATTACH</button>
   <button class="clear" id="btnClear" type="button" aria-label="Clear input and attachments">×</button>
   <span id="thumbs" aria-live="polite"></span>
@@ -175,6 +170,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 </div>
 <div class="status">
   <span id="st">READY</span>
+  <button id="btnAbout" class="linkbtn" type="button" aria-haspopup="dialog" aria-controls="aboutModal" title="What SpicyTerminal does, what it refuses to do, and who built it">About</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
   <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
   <button id="report" class="linkbtn">Report a bug</button>
@@ -186,12 +182,14 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
          base64 isn't duplicated in the single-file artifact. -->
     <img id="wordmarkWelcome" src="" alt="SpicyTerminal">
     <div class="made">Made with <span class="heart">♥</span> love by Adham Badran</div>
-    <div class="sub">Fast text &amp; screenshot conversion — no stuck scans.</div>
+    <div class="sub">Paste or drop a screenshot and it converts on its own — no stuck scans.
+      If a first pass ever cannot read it, <b style="color:#53d977">AI FIX</b> re-reads it and repairs the result.</div>
     <div class="keybox">
-      <p class="how">Before you start, add your API key —
-        <a id="genKey3" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Generate Api</a>
-        (free, takes 20 seconds), then paste it below.</p>
-      <input id="gemKeyWelcome" placeholder="Paste your Gemini API key" autocomplete="off" spellcheck="false">
+      <p class="how">Everything below converts offline with no key. The key is only what
+        <b style="color:#c9d8ce">AI FIX</b> runs on — the fallback re-read for an unreadable screenshot or paste.
+        Get one — <a id="genKey3" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Generate Api</a>
+        (free, takes 20 seconds) — and paste it here.</p>
+      <input id="gemKeyWelcome" placeholder="Paste your Gemini API key (powers AI FIX)" autocomplete="off" spellcheck="false">
       <div class="keywarnmsg hidden" id="welcomeKeyWarn"></div>
     </div>
     <button id="enterBtn">SAVE KEY &amp; START</button>
@@ -201,8 +199,8 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 
 <div class="modal hidden" id="setModal">
   <div class="card">
-    <h3>AI (GEMINI) KEY</h3>
-    <p>Only needed if an unreadable screenshot or very messy text requires AI assistance. Normal text and screenshots convert instantly without an API key.
+    <h3>AI FIX (GEMINI) KEY</h3>
+    <p>AI FIX is the button you press when the automatic offline read cannot make sense of a screenshot or a very messy paste. Typed and legible screenshot input converts instantly without any API key.
     No key yet? <a id="genKey2" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:#53d977">Generate Api</a> (free, takes 20 seconds), then paste it here.</p>
     <input id="gemKey" placeholder="Gemini API key" autocomplete="off">
     <div class="row">
@@ -238,7 +236,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
     </div>
 
     <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS black-window itinerary.</b>
-      Paste a Google Flights card, an airline email, or a photo of a terminal screen — you get ticket-ready rows back in milliseconds, computed by a deterministic engine that runs entirely inside this tab.</p>
+      Paste a Google Flights card, an airline email or a photo of a terminal screen and it converts the moment it lands — no button to remember — returning ticket-ready rows in milliseconds from a deterministic engine that runs entirely inside this tab. When a first read genuinely cannot see the flights, <code>AI FIX</code> re-reads it and repairs the result.</p>
 
     <ul class="about-stats">
       <li><b>OFFLINE</b> 1 static file</li>
@@ -256,13 +254,13 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3.4 15.2l4.6-4.2 3 2.6 4-4.2 5.6 5.4"/></svg></span>
             <span><b>Screenshots that cannot hang.</b> OCR is lazy-loaded, worker-backed, caps oversized frames and runs on a short deadline — a stalled scanner never leaves the app spinning.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3.2l1.7 4.7 4.7 1.7-4.7 1.7L11 16l-1.7-4.7L4.6 9.6l4.7-1.7z"/><path d="M18.4 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></svg></span>
-            <span><b>AI only as a fallback.</b> Text and legible shots convert locally first; Gemini is raced in only when the offline read finds no flights, and only with your own key.</span></li>
+            <span><b><code>AI FIX</code> — the repair pass, not the default path.</b> Pasting already converts on its own; when that first read comes up short, <code>AI FIX</code> re-reads the same image with Gemini and repairs the output, racing it against the local engine so the deterministic result still wins. Your key, your call.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
             <span><b>Proof over guess.</b> Every leg keeps its own route, direction, accents and clocks: <code>to London</code> is not phantom Transavia <code>TO</code>, <code>Manchester</code> is MAN not MHT, <code>15SEP</code> is never re-split.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20.2 3.4v3.7h-3.7"/><path d="M9.4 12.3l1.9 1.9 3.5-3.8"/></svg></span>
             <span><b>It refuses to learn nonsense.</b> AI answers are compared leg by leg, a rule is stored only for a genuine glyph confusion (<code>O/0</code>, <code>I/1</code>, <code>S/5</code>…), and a reversing rule cancels both instead of making the tool oscillate.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4.5" y="10.4" width="15" height="9.6" rx="2"/><path d="M8 10.4V8a4 4 0 0 1 8 0v2.4"/><path d="M12 14v2.5"/></svg></span>
-            <span><b>Private by construction.</b> No accounts, no telemetry, no server: itineraries and screenshots stay in this browser unless you explicitly press AI.</span></li>
+            <span><b>Private by construction.</b> No accounts, no telemetry, no server: itineraries and screenshots stay in this browser unless you press AI FIX.</span></li>
         </ul>
       </section>
 
