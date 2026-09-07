@@ -15,6 +15,19 @@ var AIRPORTS = D.airports, AIRLINES = D.airlines,
     ROUTE_EQUIPMENT = D.routeEquipment, AIRLINE_EQUIPMENT = D.airlineEquipment,
     GENERIC_EQUIPMENT = D.genericEquipment, FLIGHT_EQUIPMENT = D.flightEquipment;
 
+/* Supplemental reference data learned from bug reports.  Keep these overlays in
+   the engine so old baked spicy_data.js bundles can still parse newly-seen
+   airports without requiring a data-regeneration step. */
+var _EXTRA_AIRPORTS = {
+  XMN: {name:"XIAMEN GAOQI INTL", lat:24.5440, lon:118.1277, off:8.0, dst:"NONE"}
+};
+Object.keys(_EXTRA_AIRPORTS).forEach(function(k){ if(!AIRPORTS[k]) AIRPORTS[k]=_EXTRA_AIRPORTS[k]; });
+var _EXTRA_CITY_ALIASES = {
+  "xiamen":"XMN", "xiamen gaoqi":"XMN", "xiamen gaoqi intl":"XMN",
+  "xiamen gaoqi international":"XMN"
+};
+Object.keys(_EXTRA_CITY_ALIASES).forEach(function(k){ if(!CITY_ALIASES[k]) CITY_ALIASES[k]=_EXTRA_CITY_ALIASES[k]; });
+
 var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 var MONTH_MAP = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12,
   JANUARY:1,FEBRUARY:2,MARCH:3,APRIL:4,JUNE:6,JULY:7,AUGUST:8,SEPTEMBER:9,
@@ -165,7 +178,8 @@ var _EXTRA_AC = {
   "737-MAX8": "7M8", "737-MAX-8": "7M8", "737MAX-8": "7M8", "737-8MAX": "7M8",
   "737-MAX9": "7M9", "737-MAX-9": "7M9", "737MAX-9": "7M9", "737-9MAX": "7M9",
   "737-MAX7": "7M7", "737-MAX-7": "7M7", "737MAX-7": "7M7", "737-7MAX": "7M7",
-  "737-MAX10": "7MJ", "737-MAX-10": "7MJ", "737MAX-10": "7MJ", "737-10MAX": "7MJ"
+  "737-MAX10": "7MJ", "737-MAX-10": "7MJ", "737MAX-10": "7MJ", "737-10MAX": "7MJ",
+  "787-8DREAMLINER": "788", "787-9DREAMLINER": "789", "787-10DREAMLINER": "781"
 };
 Object.keys(_EXTRA_AC).forEach(function(k){ if(!AIRCRAFT[k]) AIRCRAFT[k]=_EXTRA_AC[k]; });
 var IATA_ACFT_CODES={}; Object.keys(AIRCRAFT).forEach(function(k){IATA_ACFT_CODES[AIRCRAFT[k]]=1;});
@@ -1047,6 +1061,32 @@ function sortChronologically(segs){
 }
 
 /* ---------------- prose / Google-Flights path ---------------- */
+function _addDaysParts(parts, days){
+  if(!parts) return null;
+  var dt=new Date(Date.UTC(_TODAY.y, parts[1]-1, parts[0]+days));
+  return [dt.getUTCDate(), dt.getUTCMonth()+1];
+}
+function inferConnectionDates(segs){
+  for(var i=1;i<segs.length;i++){
+    var cur=segs[i], prev=segs[i-1];
+    if(cur._date_parts || cur.date_ddmmm || !prev || !prev._date_parts) continue;
+    // In Google Flights vertical cards, only the first leg may repeat the
+    // trip date.  Connected onward legs inherit the date on which the previous
+    // flight arrived at the connection point.  If the onward departure clock is
+    // earlier than the previous arrival clock, roll one more day for an
+    // overnight connection.
+    if(prev.dest && cur.orig && prev.dest!==cur.orig) continue;
+    var add=prev.arr_day_shift||0;
+    var arr=_clockMin(prev.arr_time), dep=_clockMin(cur.dep_time);
+    if(arr!==null && dep!==null && dep<arr) add+=1;
+    var np=_addDaysParts(prev._date_parts, add);
+    if(np){
+      cur._date_parts=np;
+      cur.date_ddmmm=makeDate(np[0],np[1]);
+    }
+  }
+}
+
 function pickTimes(wTimes,pTimes){
   wTimes.forEach(function(t){t.region="w";});
   pTimes.forEach(function(t){t.region="p";});
@@ -1210,10 +1250,20 @@ function parseProse(text){
          " 31AUG ORD 835P DXB ..." after "EK 236") and that data bleeds
          into the next segment. */
       winStart = text.lastIndexOf("\n", a.start) + 1;
+      /* If this is the first no-header Google Flights card, the departure date
+         often lives at the top of the card ("Depart • Tue, Nov 17") several
+         lines BEFORE the flight-number anchor.  Starting at the anchor line made
+         the leg see only the arrival date ("Arrives Thu, Nov 19") and print
+         19NOV instead of 17NOV.  For the first anchor only, include the whole
+         paragraph/card; later anchors keep the line-local start to avoid bleed. */
+      if(ai===0){
+        var p0 = text.lastIndexOf("\n\n", a.start);
+        winStart = p0>=0 ? p0+2 : 0;
+      }
       /* If there's a paragraph break between flights, start at that break
          so we can see header/cabin text above the line. */
       var pb = text.lastIndexOf("\n\n",a.start);
-      if(pb >= 0 && pb+2 >= winStart) winStart = pb+2;
+      if(ai!==0 && pb >= 0 && pb+2 >= winStart) winStart = pb+2;
       winEnd = text.length;
     }
     // but never past the next anchor's header start
@@ -1509,6 +1559,7 @@ function parseProse(text){
     chosenHeaders[ai]=hdr;
     segs.push(seg);
   }
+  inferConnectionDates(segs);
   fillAircraft(segs);
   return [segs,false];
 }
