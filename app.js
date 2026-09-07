@@ -69,6 +69,7 @@ function fp(text) {
 }
 
 /* ---------- telemetry & weekly stats ---------- */
+/* LEARNER:STATS */
 var STATS_KEY = "spicy_weekly_stats_v1";
 function loadStats() {
   try {
@@ -101,9 +102,11 @@ function recordStat(type, durationMs) {
   } catch (e) {}
 }
 
+/* LEARNER:BEGIN */
 /* ---------- AI mistake detection & self-learning log ---------- */
 var MISTAKES_KEY = "spicy_mistakes_log_v1";
 var RULES_KEY = "spicy_learned_rules_v1";
+var RULES_PRUNED_KEY = "spicy_learned_rules_pruned_v2";
 
 function loadMistakes() {
   try { return JSON.parse(localStorage.getItem(MISTAKES_KEY) || "[]"); } catch (e) { return []; }
@@ -117,56 +120,242 @@ function recordMistake(entry) {
 }
 
 function loadLearnedRules() {
-  try { return JSON.parse(localStorage.getItem(RULES_KEY) || "[]"); } catch (e) { return []; }
+  try {
+    var rules = JSON.parse(localStorage.getItem(RULES_KEY) || "[]");
+    if (!Array.isArray(rules)) return [];
+    if (localStorage.getItem(RULES_PRUNED_KEY) === null) {
+      // v1 rule stores were built by the position-based learner and are full of
+      // self-cancelling, non-glyph "corrections" (AA 137 -> AA 7037S next to
+      // AA 7037S -> AA 137). Those rewrite correct flight numbers, so a store
+      // written before the identity-paired learner is swept once, on load, and
+      // never touched again after that.
+      var kept = pruneLearnedRules(rules);
+      try {
+        if (kept.length !== rules.length) localStorage.setItem(RULES_KEY, JSON.stringify(kept));
+        localStorage.setItem(RULES_PRUNED_KEY, String(kept.length));
+      } catch (e) {}
+      return kept;
+    }
+    return rules;
+  } catch (e) { return []; }
+}
+function pruneLearnedRules(rules) {
+  var kept = [];
+  for (var i = 0; i < rules.length; i++) {
+    var r = rules[i];
+    if (!r || !r.pattern || r.pattern === r.replacement) continue;
+    // Drop anything the current learner would never have taught: a rule that is
+    // not a look-alike substitution, or one whose reverse is also stored.
+    if (!isPlausibleGlyphConfusion(r.pattern, r.replacement)) continue;
+    var reversed = false;
+    for (var j = 0; j < kept.length; j++)
+      if (kept[j].pattern === r.replacement && kept[j].replacement === r.pattern) { reversed = true; break; }
+    if (reversed) { kept.splice(j, 1); }   // the pair cancels: keep neither side
+    else kept.push(r);
+  }
+  return kept;
 }
 function teachRule(rule) {
+  /* A learned rule rewrites future OCR text, so a bad rule is worse than no
+     rule: it silently changes real flights. Three gates, all derived from the
+     self-inflicted rule loop in the 2026-09-07 weekly report:
+       * the two sides must be a genuine glyph confusion, not a different
+         flight (AA 6935Q -> AA 6618O is not `1`-for-`I`, it is another leg);
+       * `A -> B` and `B -> A` may never coexist (they cancel each other and
+         the tool oscillates between two answers);
+       * an equal-length rule replaces its own output, so re-adding a
+         *different* pair would silently delete the original. */
   try {
-    var rules = loadLearnedRules();
-    // Avoid duplicate rules
-    var exists = rules.some(function(r){ return r.pattern === rule.pattern && r.replacement === rule.replacement; });
-    if (!exists) {
-      rules.unshift(rule);
-      localStorage.setItem(RULES_KEY, JSON.stringify(rules.slice(0, 60)));
+    if (!rule || !rule.pattern || !rule.replacement) return null;
+    if (rule.pattern === rule.replacement) return null;
+    if (!isPlausibleGlyphConfusion(rule.pattern, rule.replacement)) {
+      return "rejected: not a glyph confusion";
     }
-  } catch (e) {}
+    var rules = loadLearnedRules();
+    for (var i = 0; i < rules.length; i++) {
+      var r = rules[i];
+      if (r.pattern === rule.pattern && r.replacement === rule.replacement) {
+        r.evidence = (r.evidence || 1) + 1;      // seen again: strengthen it
+        r.why = rule.why || r.why;
+        try { localStorage.setItem(RULES_KEY, JSON.stringify(rules.slice(0, 60))); } catch (e) {}
+        return "strengthened";
+      }
+      if (r.pattern === rule.replacement && r.replacement === rule.pattern) {
+        // The two corrections cancel out — the "mistake" was a comparison
+        // artefact (mis-paired rows), not a misread. Forget both.
+        rules.splice(i, 1);
+        try { localStorage.setItem(RULES_KEY, JSON.stringify(rules)); } catch (e) {}
+        return "rejected: reversed pair";
+      }
+    }
+    rules.unshift(rule);
+    localStorage.setItem(RULES_KEY, JSON.stringify(rules.slice(0, 60)));
+    return "taught";
+  } catch (e) { return null; }
+}
+
+/* Two tokens are a glyph confusion when every differing character is a
+   look-alike for a scanner (O/0, I/1, S/5, Z/2, B/8, G/6, Q/0, T/7) and
+   nothing else changed.  Different length, or a digit that has nothing to do
+   with the letter it "confuses" into, means the two rows are simply two
+   different flights and there is nothing to learn. */
+/* Every differing character must be a look-alike *for a scanner*: 0/O (and Q,
+   which OCRAD reads as either), 1/I/L, 5/S, 2/Z, 8/B, 6/G, 7/T, 9/G and C/G.  Built
+   from one symmetric list so a pair cannot be added in only one direction.
+   Anything else — different length, or `7` becoming `S` — means the two rows are
+   simply two different flights, and there is nothing to learn from that. */
+var _GLYPH_GROUPS = ["0OCQ", "1IL", "5S", "2Z", "8B", "6G", "9G", "7T", "CG"];
+var _GLYPH_EQUIV = {};
+(function () {
+  for (var g = 0; g < _GLYPH_GROUPS.length; g++) {
+    var grp = _GLYPH_GROUPS[g];
+    if (grp.length < 2) continue;
+    for (var i = 0; i < grp.length; i++) {
+      var bucket = _GLYPH_EQUIV[grp[i]] || (_GLYPH_EQUIV[grp[i]] = "");
+      for (var j = 0; j < grp.length; j++) if (i !== j) bucket += grp[j];
+      _GLYPH_EQUIV[grp[i]] = bucket;
+    }
+  }
+})();
+function isPlausibleGlyphConfusion(from, to) {
+  var a = String(from).toUpperCase(), b = String(to).toUpperCase();
+  if (a.length !== b.length || !a.length) return false;
+  var diffs = 0;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] === b[i]) continue;
+    var look = _GLYPH_EQUIV[a[i]];
+    if (!look || look.indexOf(b[i]) < 0) return false;
+    diffs++;
+  }
+  return diffs > 0 && diffs <= 3;
+}
+
+/* Only flight rows of a GDS itinerary — and only of the *itinerary* part.
+   renderItinerary() ends with a `<--additional-->` block echoing
+   `1 AA 6935Q 12OCT`; that block is a booking-command suggestion, not a leg.
+   Reading it as one is what produced "direct found 12, AI found 8" for a
+   four-leg trip, and every comparison under that count was mis-paired. */
+function flightRowsOf(text) {
+  var lines = String(text || "").split("\n");
+  var rows = [];
+  for (var i = 0; i < lines.length; i++) {
+    var l = lines[i];
+    if (l.indexOf("-->") >= 0 || l.indexOf("additional") >= 0) break;  // echo block ends the itinerary
+    if (/^(DEP|ARR|CABIN|STOP|OSI|SSR|RMK|END|TKT|FCNV|PATA)/i.test(l)) continue;
+    var p = l.trim().split(/\s+/);
+    if (!/^\d{1,3}$/.test(p[0] || "")) continue;
+    if (!/^[A-Z0-9]{2}$/.test((p[1] || "").toUpperCase())) continue;
+    if (!(p[2] || "")) continue;
+    rows.push({
+      idx: i, carrier: p[1].toUpperCase(), flt: (p[2] || "").toUpperCase(),
+      date: (p[3] || "").toUpperCase(), orig: (p[4] || "").toUpperCase(),
+      dest: (p[5] || "").toUpperCase(),
+      dep: (p[6] || ""), arr: (p[7] || ""), raw: l.trim()
+    });
+  }
+  return rows;
+}
+/* A GDS clock may carry its overnight marker (`810P¥1`, `810P+1`, `810P-1`).
+   The marker belongs to the *day*, so a comparison that leaves it attached
+   reports "810P¥1 vs 810P" as a mistake. Strip before comparing. */
+function clockCore(t) {
+  return String(t || "").replace(/[¥+‡-]\d+$/, "").toUpperCase();
+}
+/* Flight numbers are quoted with leading zeros in some sources and not in
+   others (06935 / 6935), and a scanner reads their digits as look-alike
+   letters (501 -> 50I, 505 -> SO5). Identity for pairing is therefore the
+   *digit* core with every look-alike folded back to the digit it stands for:
+   that is exactly the property that makes two rows "the same flight read
+   twice", which is the only case a correction may be learned from. */
+var _GLYPH_TO_DIGIT = { O: "0", Q: "0", D: "0", I: "1", L: "1", S: "5",
+  Z: "2", B: "8", G: "6", T: "7" };
+function flightCore(f) {
+  var out = "";
+  var s = String(f || "").toUpperCase();
+  for (var i = 0; i < s.length; i++) {
+    var c = s[i];
+    if (c >= "0" && c <= "9") out += c;
+    else if (_GLYPH_TO_DIGIT[c]) out += _GLYPH_TO_DIGIT[c];
+  }
+  return out.replace(/^0+/, "");
+}
+function dayOfMonth(d) {
+  var m = /^(\d{1,2})[A-Z]{3}$/.exec(String(d || "").toUpperCase());
+  return m ? parseInt(m[1], 10) : null;
 }
 
 /* Analyze discrepancy between direct engine and AI result to detect mistakes & teach tool */
 function detectMistakesAndLearn(inputText, directText, aiText, reason) {
   if (!aiText || !aiText.trim()) return;
-  var dirLines = (directText || "").trim().split("\n").filter(Boolean);
-  var aiLines = (aiText || "").trim().split("\n").filter(Boolean);
-
-  var dirFltLines = dirLines.filter(function(l){ return /^\d+\s+[A-Z0-9]{2}\s+/i.test(l); });
-  var aiFltLines = aiLines.filter(function(l){ return /^\d+\s+[A-Z0-9]{2}\s+/i.test(l); });
-
+  var dirRows = flightRowsOf(directText);
+  var aiRows = flightRowsOf(aiText);
   var diffNotes = [];
+  var taught = 0, skipped = 0;
 
-  // Check count difference
-  if (dirFltLines.length !== aiFltLines.length) {
-    diffNotes.push("Segment count discrepancy: direct found " + dirFltLines.length + ", AI found " + aiFltLines.length);
+  if (dirRows.length !== aiRows.length) {
+    diffNotes.push("Segment count discrepancy: direct found " + dirRows.length +
+                   ", AI found " + aiRows.length +
+                   " (rows paired by flight identity, not by position)");
   }
 
-  // Compare flight lines
-  for (var i = 0; i < Math.min(dirFltLines.length, aiFltLines.length); i++) {
-    var oP = dirFltLines[i].split(/\s+/);
-    var aP = aiFltLines[i].split(/\s+/);
-    // [seg#, carrier, flt#, date, orig, dest, dep, arr, cls, ac, dur, dist, stat]
-    if (oP[1] !== aP[1] || oP[2] !== aP[2]) {
-      diffNotes.push("Flight " + (i+1) + " mismatch: direct has " + oP[1] + " " + oP[2] + " vs AI " + aP[1] + " " + aP[2]);
-      // If carrier matched but flight number had glyph error: teach rule!
-      if (oP[1] === aP[1] && oP[2] && aP[2]) {
-        teachRule({
-          type: "flight_num",
-          pattern: oP[1] + " " + oP[2],
-          replacement: aP[1] + " " + aP[2],
-          why: "AI corrected flight number glyph error"
-        });
-      }
+  // Pair by identity. A row of one itinerary and the row at the same index of
+  // the other are the same flight only by accident, and every "correction"
+  // derived from an accidental pair is a rule that rewrites correct data.
+  var used = {};
+  for (var i = 0; i < dirRows.length; i++) {
+    var d = dirRows[i];
+    var cands = [];
+    for (var j = 0; j < aiRows.length; j++) {
+      if (used[j]) continue;
+      var a = aiRows[j];
+      if (a.carrier !== d.carrier) continue;
+      if (flightCore(a.flt) !== flightCore(d.flt)) continue;
+      var dd = dayOfMonth(d.date), ad = dayOfMonth(a.date);
+      if (dd !== null && ad !== null && Math.abs(dd - ad) > 1) continue;  // a different day is a different flight
+      if ((d.orig && a.orig && d.orig !== a.orig) || (d.dest && a.dest && d.dest !== a.dest)) continue;
+      cands.push(j);
     }
-    if (oP[3] !== aP[3]) diffNotes.push("Flight " + (i+1) + " date: " + oP[3] + " vs " + aP[3]);
-    if (oP[4] !== aP[4] || oP[5] !== aP[5]) diffNotes.push("Flight " + (i+1) + " route: " + oP[4] + "-" + oP[5] + " vs " + aP[4] + "-" + aP[5]);
-    if (oP[6] !== aP[6] || oP[7] !== aP[7]) diffNotes.push("Flight " + (i+1) + " times: " + oP[6] + "/" + oP[7] + " vs " + aP[6] + "/" + aP[7]);
+    if (cands.length !== 1) {
+      if (cands.length > 1) {
+        diffNotes.push("Flight " + (i + 1) + " " + d.carrier + " " + d.flt +
+                       ": ambiguous AI match (" + cands.length + " candidates) — not learned");
+      } else {
+        diffNotes.push("Flight " + (i + 1) + " " + d.carrier + " " + d.flt +
+                       " " + d.date + " " + d.orig + "-" + d.dest + ": no matching AI leg");
+      }
+      skipped++;
+      continue;
+    }
+    var aIdx = cands[0], aiRow = aiRows[aIdx];
+    used[aIdx] = 1;
+    if (d.flt !== aiRow.flt) {
+      diffNotes.push("Flight " + (i + 1) + " flight no: direct " + d.carrier + " " + d.flt +
+                     " vs AI " + aiRow.carrier + " " + aiRow.flt);
+      // Teach only what a scanner really does: the pattern must be present in
+      // the text we were actually given, and the fix must be a look-alike
+      // substitution. Both are checked; see teachRule/isPlausibleGlyphConfusion.
+      var pat = d.carrier + " " + d.flt, rep = aiRow.carrier + " " + aiRow.flt;
+      // A rule can only repair text that actually contains the pattern. If the
+      // misread is not in the text the engine read (OCR output) nor in what the
+      // user gave us, the two rows are not two readings of the same line — they
+      // are different flights, and "learning" from them rewrites real data.
+      var hay = String(directText || "").toUpperCase() + " " +
+                String(inputText || "").toUpperCase().replace(/\s+/g, " ");
+      if (hay.indexOf(pat) < 0) {
+        diffNotes.push("  (not learned: " + pat + " is not in the source text, so it is a parse artefact)");
+        continue;
+      }
+      if (teachRule({ type: "flight_num", pattern: pat, replacement: rep,
+                      why: "AI corrected flight number glyph error",
+                      evidence: 1, seen: new Date().toISOString().slice(0, 10) }) === "taught") taught++;
+    }
+    if (d.date !== aiRow.date) diffNotes.push("Flight " + (i + 1) + " date: " + d.date + " vs " + aiRow.date);
+    if (d.orig !== aiRow.orig || d.dest !== aiRow.dest) {
+      diffNotes.push("Flight " + (i + 1) + " route: " + d.orig + "-" + d.dest + " vs " + aiRow.orig + "-" + aiRow.dest);
+    }
+    if (clockCore(d.dep) !== clockCore(aiRow.dep) || clockCore(d.arr) !== clockCore(aiRow.arr)) {
+      diffNotes.push("Flight " + (i + 1) + " times: " + d.dep + "/" + d.arr + " vs " + aiRow.dep + "/" + aiRow.arr);
+    }
   }
 
   if (diffNotes.length > 0 || !directText.trim()) {
@@ -174,7 +363,8 @@ function detectMistakesAndLearn(inputText, directText, aiText, reason) {
       id: "mstk_" + Date.now(),
       when: new Date().toISOString().slice(0, 19).replace("T", " "),
       reason: reason || "AI correction",
-      summary: diffNotes.join("; ") || "Direct parse missed flight data",
+      summary: diffNotes.slice(0, 14).join("; ") || "Direct parse missed flight data",
+      rules: (taught ? "taught " + taught : "") + (skipped ? (taught ? ", " : "") + skipped + " comparison(s) refused (unpaired/ambiguous)" : ""),
       input: (inputText || "").slice(0, 180),
       direct: (directText || "").slice(0, 200),
       ai: (aiText || "").slice(0, 200)
@@ -183,6 +373,7 @@ function detectMistakesAndLearn(inputText, directText, aiText, reason) {
   }
 }
 
+/* LEARNER:END */
 /* ---------- caches ---------- */
 var LKEY = "spicy_learn_v1";
 function learnAll() { try { return JSON.parse(localStorage.getItem(LKEY) || "[]"); } catch (e) { return []; } }
@@ -236,6 +427,10 @@ function imgCacheSet(hash, outText){
 // keystroke / OCR pass). Build them once at startup.
 var _cleanAirlines = [];
 var _cleanAirLeadRe = null, _cleanCaseAirRe = null, _cleanAirRe = null;
+/* All known airport codes, packed into one "|AAA|BBB|" haystack.  A digits +
+   three-letters token is only worth un-gluing when the letters are a real
+   airport: `114JFK` is a flight and its airport, `15SEP` is a date. */
+var _cleanAirportCodes = "";
 /* Carrier codes that are also ordinary English words.  The case-repair pass
    uppercases every standalone token that matches a carrier, which silently
    rewrites prose — "(JFK) to Dublin (DUB)" became "(JFK) TO Dublin (DUB)" and
@@ -260,6 +455,10 @@ function _ensureCleanAirRegexes() {
   try {
     var d = window.SPICY_DATA || SPICY_DATA;
     if (d && d.airlines) _cleanAirlines = Object.keys(d.airlines);
+    if (d && d.airports) {
+      var codes = Object.keys(d.airports);
+      _cleanAirportCodes = "|" + codes.join("|") + "|";
+    }
   } catch (e) {}
   _ensureCleanAirRegexes();
 })();
@@ -267,23 +466,40 @@ var _cleanMonthRes = [];
 (function() {
   var months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
   months.forEach(function(m) {
-    _cleanMonthRes.push([new RegExp("(\\d{1,2})\\s*" + m, "gi"), "$1 " + m]);
+    // `15 SEP` / `15Sep2026` -> `15 SEP`.  A glued `15SEP` is already exactly
+    // the form the GDS row parser wants, so only split when digits follow.
+    _cleanMonthRes.push([new RegExp("(\\d{1,2})\\s*([A-Za-z]{3})(\\d*)", "gi"), function(_, d, mon, tail) {
+      if (mon.toUpperCase() !== m) return _;
+      return tail ? d + " " + m + " " + tail : d + m;
+    }]);
     _cleanMonthRes.push([new RegExp(m + "\\s*(\\d{1,2})", "gi"), m + " $1"]);
   });
 })();
 
-function cleanOcrText(rawText) {
+var _GDS_MONTHS = { JAN:1, FEB:1, MAR:1, APR:1, MAY:1, JUN:1, JUL:1, AUG:1,
+  SEP:1, OCT:1, NOV:1, DEC:1 };
+
+function cleanOcrText(rawText, opts) {
   if (!rawText) return "";
   var s = String(rawText);
+  var applyLearned = !(opts && opts.learned === false);
 
-  // 1. Apply user-learned rules first (self-healing)
-  var rules = loadLearnedRules();
-  if (rules && rules.length) {
-    rules.forEach(function(r) {
-      if (r.pattern && r.replacement !== undefined) {
-        s = s.split(r.pattern).join(r.replacement);
-      }
-    });
+  // 1. Apply self-healed rules first.
+  //
+  // Rules are learned from screenshots (the AI only ever corrects an OCR
+  // misread), so they are applied to OCR text only.  A typed or pasted itinerary
+  // is ground truth: rewriting `AV 126` -> `AV 127` there would replace a real
+  // flight with a different one, and a learned rule has no business doing that
+  // to text the user handed us by hand.
+  if (applyLearned) {
+    var rules = loadLearnedRules();
+    if (rules && rules.length) {
+      rules.forEach(function(r) {
+        if (r.pattern && r.replacement !== undefined) {
+          s = s.split(r.pattern).join(r.replacement);
+        }
+      });
+    }
   }
 
   // 2. Line breaks and separators
@@ -413,7 +629,10 @@ function cleanOcrText(rawText) {
   dictWords.forEach(function(pair) { s = s.replace(pair[0], pair[1]); });
 
   // 6. Times with colons (both 12h with AM/PM and 24h clocks): e.g. 7:ss PM, ll:39, T:SS PM, 12:4s PM
-  s = s.replace(/\b([0-9A-Za-z]{1,2})[:\.](\w{2})(?:\s*([AP]M?|[ap]m?))?\b/g, function(match, h, m, ap) {
+  // The `(?!\s*\d)` tail keeps a GDS flight-time column (`77W  6.10  2699`) out
+  // of the clock repair: a duration is not a time, and rewriting 6.10 as 6:10
+  // made the engine re-derive the leg's duration from the clocks instead.
+  s = s.replace(/\b([0-9A-Za-z]{1,2})[:\.](\w{2})(?:\s*([AP]M?|[ap]m?))?\b(?!\s*\d)/g, function(match, h, m, ap) {
     var ch = h.replace(/[lIi]/g, "1").replace(/[oO]/g, "0").replace(/[Tt]/g, "7").replace(/[zZ]/g, "2").replace(/[sS]/g, "5");
     var cm = m.replace(/ss/gi, "55")
               .replace(/zs/gi, "25")
@@ -449,8 +668,18 @@ function cleanOcrText(rawText) {
   }
 
   // 8. Glued flight numbers + airport: e.g. 114lFK -> 114 JFK, ZO4lFK -> 204 JFK
+  //
+  // Two guards, both from real misparses in the weekly report: a trailing
+  // letters group is only an airport when the data file knows it (so the date
+  // `15SEP` keeps its glue), and `155P TK2` must not be re-flowed into a
+  // phantom `TK 2` leg by the same split — the engine reads sell-status tokens
+  // itself.
   s = s.replace(/\b([0-9A-Za-z]{1,4})[lI1]FK\b/gi, "$1 JFK");
-  s = s.replace(/\b([0-9]{1,4})([A-Z]{3})\b/g, "$1 $2");
+  s = s.replace(/\b([0-9]{1,4})([A-Z]{3})\b/g, function(match, num, letters) {
+    if (_GDS_MONTHS[letters]) return match;
+    if (_cleanAirportCodes.length && _cleanAirportCodes.indexOf("|" + letters + "|") < 0) return match;
+    return num + " " + letters;
+  });
 
   // 9. Airline code + Flight number:
   // e.g. "IB 4z37", "QR los9", "BA ll4", "LH 4OO", "DL 001"
@@ -461,7 +690,7 @@ function cleanOcrText(rawText) {
     // (qR _os9). Repair only the token immediately after a known carrier.
     if (_cleanAirLeadRe) {
       _cleanAirLeadRe.lastIndex = 0;
-      s = s.replace(_cleanAirLeadRe, function(match, code, num) {
+      s = s.replace(_cleanAirLeadRe, function(match, code, num, offset) {
         // English words that are also carrier codes (TO Transavia, BY TUI…)
         // must not eat the next word.  The `i` flag makes [_|Il] match a
         // capital L, so "to London" / "to Los Angeles" became "TO 10nd0n" /
@@ -470,7 +699,10 @@ function cleanOcrText(rawText) {
         if (_CLEAN_WORD_CODES[code.toLowerCase()]) return match;
         var repaired = num.replace(/[oO]/g, "0").replace(/[sS]/g, "5")
           .replace(/[lIi|]/g, "1").replace(/[zZ]/g, "2").replace(/[gq]/g, "9");
-        if (!/^1/.test(repaired)) repaired = "1" + repaired;
+        // A purely numeric token is a complete flight number: `AC 918` is not
+        // "AC 1918".  The leading-1 restore only applies when the token had
+        // letters in it, i.e. an OCR'd `l05` for `105`.
+        if (!/^\d+$/.test(num) && !/^1/.test(repaired)) repaired = "1" + repaired;
         // A city/word (ondon, os) is not a flight number.  The OCR repair is
         // for tokens that become digits ("_os9" -> 1059).
         if (!/^\d{2,5}$/.test(repaired)) return match;
@@ -1860,8 +2092,9 @@ function directIncomplete(warns, segs) {
 }
 
 function renderDirectSync(text){
-  // Apply learned rules first
-  var cleaned = cleanOcrText(text);
+  // A typed/pasted itinerary is ground truth: read it as-is, never rewritten by
+  // rules learned from somebody else's blurry screenshot.
+  var cleaned = cleanOcrText(text, { learned: false });
   var res = window.SpicyEngine.parse(cleaned);
   var segs = res[0], warns = res[1];
   if(!segs.length) { lastOut=""; out.textContent=""; return {segs:segs,warns:warns,out:""}; }
@@ -2063,6 +2296,17 @@ var AI_SEGMENT_RULES =
   "one segment per flight, and count them before you answer — the number of "+
   "segments must equal the number of flights shown in the source.";
 
+/* The `<--additional-->` tail of a Black-Window itinerary is a booking-command
+   echo, not a set of flights. When a user re-pastes our own output for the AI
+   to repair, an LLM that reads it as leg data invents segments — and those
+   invented segments are what the mistake learner used to "learn" from. */
+var AI_ECHO_RULE =
+  " If the input contains a line reading `<--additional-->`, treat everything from that line on as a "+
+  "booking-command echo: IGNORE it completely, do not convert it, do not count it as segments, and do "+
+  "not renumber or reorder the legs above it because of it. Never output a segment for a flight that is "+
+  "not shown in the input; if a field is unreadable, copy the value from the same leg's own row instead "+
+  "of inventing one.";
+
 function convertAi(fromAuto, reason, specBatch){
   // specBatch: this call is the speculative fallback fired while direct OCR
   // was still re-reading that attachment batch. Its reply must lose to a
@@ -2089,8 +2333,13 @@ function convertAi(fromAuto, reason, specBatch){
   converting=true;
   window._aiStartedAt=Date.now();
   setStatus((aiImages.length||aiDocuments.length)?"AI CONVERTING (attachment)…":"AI CONVERTING…");
-  var task=text.trim() ? "Convert the following flight data into GDS Black Window format. If anything is missing or ambiguous, fill it from aviation knowledge — never leave fields blank or ???."+AI_SEGMENT_RULES+"\n\n"+text
-    : "Convert the attached image(s) and document(s) into GDS Black Window format. Convert ALL options shown. Fill any missing field from aviation knowledge — never blank, never ???."+AI_SEGMENT_RULES;
+  // Re-pastes of this tool's own output carry a `<--additional-->` echo block
+  // (segment number + carrier + flight + class + date). Read as input it looks
+  // like extra legs — that is where "AI found 8 segments" for a 4-leg trip came
+  // from, and every bad self-learned rule in the weekly reports was taught from
+  // the mis-pairing it caused. Say so explicitly.
+  var task=text.trim() ? "Convert the following flight data into GDS Black Window format. If anything is missing or ambiguous, fill it from aviation knowledge — never leave fields blank or ???."+AI_SEGMENT_RULES+AI_ECHO_RULE+"\n\n"+text
+    : "Convert the attached image(s) and document(s) into GDS Black Window format. Convert ALL options shown. Fill any missing field from aviation knowledge — never blank, never ???."+AI_SEGMENT_RULES+AI_ECHO_RULE;
   var parts=[{text: task}];
   aiImages.forEach(function(im){ parts.push({inline_data:{mime_type:im.mime,data:ensureImageDataUrl(im)}}); });
   aiDocuments.forEach(function(doc){ parts.push({inline_data:{mime_type:doc.mime,data:doc.b64}}); });
@@ -2151,6 +2400,7 @@ function convertAi(fromAuto, reason, specBatch){
 }
 
 /* ---------- Weekly Report Generator ---------- */
+/* REPORT:BEGIN */
 function generateWeeklyReportText() {
   var stats = loadStats();
   var mistakes = loadMistakes();
@@ -2199,15 +2449,51 @@ function generateWeeklyReportText() {
     lines.push("Standard aviation dictionary rules active (0 custom override rules).");
   } else {
     rules.slice(0, 10).forEach(function(r, idx) {
-      lines.push("#" + (idx+1) + " [" + (r.type || "rule") + "] '" + r.pattern + "' -> '" + r.replacement + "' (" + (r.why || "") + ")");
+      // A rule rewrites future OCR text, so the report states what each one
+      // costs if it is wrong: how often it was seen, and how confidently it
+      // was accepted (glyph-confusion checks live in teachRule).
+      var bits = [];
+      if (r.evidence) bits.push("seen " + r.evidence + "x");
+      if (r.seen) bits.push("since " + r.seen);
+      if (r.why) bits.push(r.why);
+      lines.push("#" + (idx+1) + " [" + (r.type || "rule") + "] '" + r.pattern + "' -> '" + r.replacement +
+                 "' (OCR text only; " + (bits.join(", ") || "manual") + ")");
+    });
+    lines.push("Rules are applied to screenshot OCR only — a typed or pasted itinerary is never rewritten.");
+  }
+
+  /* What the learner refused to learn this period: the honest signal that a
+     discrepancy was a comparison artefact rather than a misread. */
+  var refused = mistakes.filter(function(m) {
+    return /not learned|refused|ambiguous|no matching AI leg/i.test((m.summary || "") + " " + (m.rules || ""));
+  });
+  if (refused.length) {
+    lines.push("");
+    lines.push("--- 3b. CORRECTIONS THE LEARNER REFUSED (" + refused.length + ") ---");
+    refused.slice(0, 3).forEach(function(m, idx) {
+      lines.push("#" + (idx+1) + " [" + m.when + "] " + (m.rules || "no rule taught"));
+      lines.push("  Why: " + String(m.summary || "").slice(0, 240));
     });
   }
   lines.push("");
   lines.push("--- 4. RECOMMENDATIONS TO ENHANCE THE TOOL TO THE MAX ---");
-  lines.push("1. Direct Image Engine is operational with bounded, worker-backed offline parsing.");
-  lines.push("2. Maintain continuous tracking of OCR confusions in flight numbers & day shifts.");
-  lines.push("3. Keep AI strictly as fallback only for illegible or handwritten images.");
-  lines.push("4. Expand local airport / airline alias mappings for emerging routes.");
+  // Recommendations are derived from what this period actually showed, not a
+  // fixed list — a report that says the same thing every week cannot be acted on.
+  var recs = [];
+  var imgDirect = (stats.imgDirect || stats.imgOffline || 0);
+  recs.push(imgDirect ? "Direct Image Engine handled " + imgDirect + " screenshot(s) offline; keep OCR bounded and worker-backed."
+                      : "No screenshots converted this period; the offline OCR path is untested on this device.");
+  var unknownRows = mistakes.filter(function(m) { return /\?\?\?|NOT read|undetected/i.test((m.summary || "") + " " + (m.direct || "")); });
+  if (unknownRows.length) {
+    recs.push(unknownRows.length + " conversion(s) still produced placeholder rows (???? / DEP-???) — these are parse-shape gaps in the GDS row reader, not model quality; feed them to test_gds_screenshot.js.");
+  } else {
+    recs.push("No placeholder rows (???? / DEP-???) this period — the GDS row reader held its shape.");
+  }
+  if (rules.length) recs.push(rules.length + " self-learned rule(s) active, applied to screenshot OCR only; review them before the next release and prune any that never fired.");
+  else recs.push("No custom override rules active — the aviation dictionary alone is carrying the load.");
+  if (refused.length) recs.push(refused.length + " AI correction(s) were refused by the learner as comparison artefacts (mis-paired legs), not real misreads — that is the safety net working.");
+  recs.push("Keep AI strictly as fallback for illegible or handwritten images; expand local airport / airline alias mappings for emerging routes.");
+  recs.forEach(function(r, i) { lines.push((i + 1) + ". " + r); });
   lines.push("");
   lines.push("--- TELEMETRY ENVIRONMENT ---");
   lines.push("• UserAgent: " + (navigator.userAgent || "Unknown"));
@@ -2218,6 +2504,7 @@ function generateWeeklyReportText() {
   return lines.join("\n");
 }
 
+/* REPORT:END */
 function openWeeklyReport() {
   var reportText = generateWeeklyReportText();
   $("reportContent").value = reportText;

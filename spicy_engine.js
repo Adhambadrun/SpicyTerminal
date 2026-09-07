@@ -750,6 +750,22 @@ function fullRe(reStr,tok){
   return re.exec(tok);
 }
 
+/* Carriers that live in the real world but not in the 194-airline data file
+   (IberoJet `OB`, and every new entrant between data regenerations) used to
+   make the whole row unparseable — and the screenshot of them then degraded to
+   `DEP-???` rows for whatever token *happened* to look airline-shaped (a
+   sell-status `TK2` in the next row became a phantom Turkish leg).  Inside a
+   GDS *table* a leading segment number guarantees the columns, so an unknown
+   two-letter code there is the carrier.  Accepted only in that shape, never
+   for a word-shaped or airport-shaped token. */
+function _isTableCarrier(tok){
+  return /^[A-Z]{2}$/.test(tok) && !AIRLINES[tok] && !AIRPORTS[tok] &&
+         !/^(AM|PM|OK|NO|ON|AT|TO|BY|OF|IN|IT|IS|US|AS|BE|ME|DE|LA|HA|WE|SO|DO|IF)$/.test(tok);
+}
+function _gluedAirportPair(tok){
+  if(!/^[A-Z]{6}$/.test(tok)) return false;
+  return !!AIRPORTS[tok.slice(0,3)] && !!AIRPORTS[tok.slice(3)];
+}
 function tryGdsLines(text, used){
   var lines=text.replace(/\u00a0/g," ").replace(/\u2007/g," ").replace(/\u202f/g," ").split("\n");
   var segs=[];
@@ -761,7 +777,11 @@ function tryGdsLines(text, used){
     // into a letter ("1 UA" read as "l UA"). Only skip it when the next
     // token is really a carrier (or a glued carrier+flight).
     if(i+1<toks.length && (/^\d{1,3}$/.test(toks[i]) || /^[A-Za-z_|]$/.test(toks[i])) &&
-       fullRe(AIRLINE_TOK+"\\d{0,4}[A-Z]?", (toks[i+1]||"").toUpperCase().replace(/\*/g,""))) i++;
+       fullRe(AIRLINE_TOK+"\\d{0,4}[A-Z]?(?:\\s+\\d{1,4}[A-Z]?)?", (toks[i+1]||"").toUpperCase().replace(/\*/g,""))) i++;
+    // A row that opens with a segment number is a GDS *table* row: its columns
+    // are guaranteed, which is what lets an unknown carrier code below be read
+    // as a carrier instead of being dropped.
+    var rowTable = /^\d{1,3}$/.test(toks[0]||"");
     var al=null,flt=null,flt_cls=null,g;
     g=new RegExp("^("+AIRLINE_TOK+")(\\d{1,4})([A-Z])?$").exec((toks[i]||"").toUpperCase().replace(/\*/g,""));
     if(g && AIRLINES[g[1]]){ al=g[1];flt=_stripFltZeros(g[2]);flt_cls=g[3]||""; i++; }
@@ -770,6 +790,11 @@ function tryGdsLines(text, used){
       var m2=/^(\d{1,4})([A-Z])?$/.exec(toks[i+1].toUpperCase());
       if(!m2) continue;
       al=toks[i].toUpperCase(); flt=_stripFltZeros(m2[1]); flt_cls=m2[2]||""; i+=2;
+    } else if(rowTable && i+1<toks.length && _isTableCarrier(toks[i].toUpperCase())
+              && /^(\d{1,4})([A-Z])?$/.test(toks[i+1])){
+      var m3=/^(\d{1,4})([A-Z])?$/.exec(toks[i+1]);
+      al=toks[i].toUpperCase(); flt=_stripFltZeros(m3[1]); flt_cls=m3[2]||"";
+      i+=2;
     } else continue;
     if(i<toks.length && /^[A-Za-z]$/.test(toks[i])){ flt_cls=toks[i].toUpperCase(); i++; }
     var day=null,mon=null,dm,tm,mr,df,mrf;
@@ -786,7 +811,14 @@ function tryGdsLines(text, used){
     if(!day) continue;
     if(!(day>=1&&day<=31)) continue;
     if(i<toks.length && /^[A-Za-z]$/.test(toks[i])){   // stray cabin letter between date and airports ("06FEB J JFKLHR")
-      if(!flt_cls) flt_cls=toks[i].toUpperCase(); i++;
+      // When the letters that follow are one glued airport pair, that single
+      // letter is a column of its own ("15SEP T MIAVVI" — action code, not
+      // cabin).  It still has to be skipped to reach the pair: skipping it *as
+      // a letter* while refusing to adopt it as the booking class is what keeps
+      // the row readable.  Adopting it (or not moving past it at all) dropped
+      // the leg, and the next row's columns were printed as a phantom flight.
+      if(_gluedAirportPair((toks[i+1]||"").toUpperCase())) i++;
+      else { if(!flt_cls) flt_cls=toks[i].toUpperCase(); i++; }
     }
     if(i+1>=toks.length) continue;
     var apA=toks[i].toUpperCase(), apB=toks[i+1].toUpperCase();
@@ -1324,6 +1356,32 @@ function parseProse(text){
         var para2=text.lastIndexOf("\n\n",a.start);
         var lower=(para2>prevEnd2)?para2:prevEnd2;
         if(lower>=winStart && lower<=a.start) winStart=lower;
+      }
+    }
+    /* A *whole line* of the form "3:45 PM to 10:15 AM" above a flight number is
+       that flight's clock pair — Google Flights and airline cards print it on
+       its own line, below the previous leg. The "never start before the previous
+       flight ends" rule above cuts it out of this leg's reach, which is why a
+       card list read leg 1 with correct times and printed `????`/the previous
+       leg's times for legs 2..n. Borrow only a genuine standalone line: not the
+       tail of the previous anchor's line, not a line carrying a date, airport or
+       flight number of its own. */
+    if(ai>0){
+      var _prevEnd=anchors[ai-1].end;
+      var _lineStart=text.lastIndexOf("\n", a.start)+1;      // the anchor's own line begins here
+      var _lt="", _ls=-1;
+      if(_lineStart>0){
+        var _prevStart=text.lastIndexOf("\n", _lineStart-2)+1;
+        if(_prevStart<_lineStart-1 && _prevStart>=_prevEnd && _prevStart<winStart){
+          _lt=text.slice(_prevStart, _lineStart-1); _ls=_prevStart;
+        }
+      }
+      if(_lt.trim() && _ls>=0 && _ls<winStart &&
+         /\b\d{1,2}[:.]\d{2}\s*[AP]M?\b[\s\S]*\b\d{1,2}[:.]\d{2}\s*[AP]M?\b/i.test(_lt) &&
+         !/\b\d{1,2}\s*(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)|\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{1,2}\b/i.test(_lt) &&
+         !/\(\s*[A-Z]{3}\s*\)|\b[A-Z]{3}\s+to\s+[A-Z]{3}\b/i.test(_lt) &&
+         !new RegExp("\\b"+a.code+"\\s*0*"+a.num+"\\b","i").test(_lt)){
+        winStart=_ls;
       }
     }
     var region=text.slice(winStart,winEnd);
