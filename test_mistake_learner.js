@@ -61,7 +61,10 @@ function loadLearner(store) {
     Array,
     document: { createElement: () => ({ textContent: "", innerHTML: "" }) },
     localStorage: { getItem: store.getItem, setItem: store.setItem },
-    loadStats: () => ({ startDate: "2026-09-01", total: 65, textDirect: 0, imgDirect: 1, aiFallback: 7, durations: [347] }),
+    loadStats: () => ({ week: new Date().toISOString().slice(0, 10),
+                        period: { total: 65, textDirect: 64, imgDirect: 1, aiResolved: 0, aiCalls: 7, durations: [347] },
+                        lifetime: { total: 65, textDirect: 64, imgDirect: 1, aiResolved: 0, aiCalls: 7 },
+                        history: [] }),
     window: {}
   };
   sandbox.window = sandbox;
@@ -272,7 +275,18 @@ section("9. weekly report explains itself");
     window: {}
   };
   sandbox.window = sandbox;
-  sandbox.loadStats = () => ({ startDate: "2026-09-01", total: 65, textDirect: 64, imgDirect: 1, aiFallback: 7, durations: [347] });
+  // The real loadStats returns a week window, not flat lifetime counters; the
+  // stub mirrors that shape so the report under test sees what production sees.
+  const _d = new Date(), _shift = (_d.getUTCDay() + 6) % 7;
+  const weekStart = new Date(Date.UTC(_d.getUTCFullYear(), _d.getUTCMonth(), _d.getUTCDate() - _shift))
+    .toISOString().slice(0, 10);
+  const counters = { total: 65, textDirect: 64, imgDirect: 1, aiResolved: 3, aiCalls: 7, durations: [347] };
+  sandbox.loadStats = () => ({
+    week: weekStart,
+    period: Object.assign({}, counters),
+    lifetime: Object.assign({}, counters),
+    history: [{ week: "2026-08-31", total: 12, textDirect: 11, imgDirect: 0, aiResolved: 1, aiCalls: 2 }]
+  });
   sandbox.aiModelGet = () => "gemini-3.7-flash";
   vm.createContext(sandbox);
   vm.runInContext("var navigator = { userAgent: 'ArenaTestAgent' };", sandbox);

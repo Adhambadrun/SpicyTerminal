@@ -57,7 +57,7 @@ hallucinations, no re-rolling the dice.
   3179 — and near-antipodal pairs fall back to the spherical value rather than
   failing.
 - **Text and PDF attachments**: `.txt`, `.eml`, `.csv`, `.json`, `.html`, `.ics`, and similar text exports are read instantly; PDFs are passed to AI only when the user explicitly supplies a Gemini key.
-- **Weekly report**: One-click weekly performance and enhancement reports sent to `adhambadraan@gmail.com` to improve and enhance the tool to the max.
+- **Weekly report**: One-click weekly performance and enhancement reports sent to `adhambadraan@gmail.com` to improve and enhance the tool to the max. Each report covers one week (Monday 00:00 UTC → now), compares it with the previous week, and keeps a separate lifetime total — a closed week is archived, never mixed into the current one. A *conversion* is a result shown to the user: live re-renders while typing and AI replies the direct read beat are counted as neither.
 - 100% offline, private — itineraries and screenshots never leave the browser.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.
@@ -101,6 +101,7 @@ and archives are never shipped.
 | `test_attachment_pipeline.js` | end-to-end attachment pipeline tests (drop / paste / picker / PDF / HEIC / cache) |
 | `test_lax_man.js` | LAX–MAN round-trip regression (no phantom TO 105, Manchester is MAN not MHT) — `node test_lax_man.js` |
 | `test_mistake_learner.js` | self-learning safety + GDS re-paste regression for the 2026-09-07 weekly report — `node test_mistake_learner.js` |
+| `test_weekly_report.js` | weekly-report counters: week rollover, what counts as a conversion, blocked pop-up — `node test_weekly_report.js` |
 
 ## Privacy
 

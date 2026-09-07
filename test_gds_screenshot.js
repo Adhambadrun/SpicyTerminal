@@ -623,8 +623,13 @@ let makeSandboxGlobal;
     await new Promise(r => setTimeout(r, 2500)); // direct pipeline fully settles
     assert(genCallsOf(s).length === 1, `6a: still exactly one AI call after direct settled (got ${genCallsOf(s).length})`);
     assert(s.out().includes("UA 5918"), "6a: AI itinerary not overwritten by the failed direct re-read");
-    const st = statsOf(s);
-    assert((st.aiFallback || 0) === 1, `6a: ai_fallback stat recorded once (got ${st.aiFallback})`);
+    // The weekly counters are a week window now, and an AI request is logged
+    // separately from a conversion: the request started, the reply painted, so
+    // this attachment is exactly one conversion — not two.
+    const st = statsOf(s).period || {};
+    assert((st.aiCalls || 0) === 1, `6a: ai_call stat recorded once (got ${st.aiCalls})`);
+    assert((st.aiResolved || 0) === 1 && (st.total || 0) === 1,
+      `6a: the reply that painted is the one conversion (total ${st.total}, by AI ${st.aiResolved})`);
     assert(!(st.imgDirect > 0), "6a: no img_direct stat (direct never produced segments)");
   }
 

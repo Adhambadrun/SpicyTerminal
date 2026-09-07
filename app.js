@@ -70,35 +70,111 @@ function fp(text) {
 
 /* ---------- telemetry & weekly stats ---------- */
 /* LEARNER:STATS */
+/* The report these counters feed is a WEEKLY report, so the counters are a
+   week (Monday 00:00 UTC) and a closed week is archived, not carried forward:
+   a lifetime total printed under a "WEEKLY" heading is a number nobody can act
+   on, and it never reset. `lifetime` is kept alongside so "since install" is
+   still one read away.
+
+   Two counting rules, both from wrong numbers in a real report:
+     * `total` counts conversions the user was shown — never AI requests. A
+       speculative Gemini call that lost the race to the direct read used to be
+       counted as a conversion too, so one screenshot reported as two (total 6
+       for 5 conversions, "83% instant rate" for a week that was 100% instant).
+     * a debounced re-render while the user is still typing is not a conversion
+       either; it used to add one "text_direct" per 55ms pause. */
 var STATS_KEY = "spicy_weekly_stats_v1";
-function loadStats() {
-  try {
-    var s = JSON.parse(localStorage.getItem(STATS_KEY) || "{}");
-    if (!s.startDate) s.startDate = new Date().toISOString().slice(0, 10);
-    if (!s.total) s.total = 0;
-    if (!s.textDirect) s.textDirect = s.textOffline || 0;
-    if (!s.imgDirect) s.imgDirect = s.imgOffline || 0;
-    if (!s.aiFallback) s.aiFallback = 0;
-    if (!s.durations) s.durations = [];
-    return s;
-  } catch (e) {
-    return { startDate: new Date().toISOString().slice(0, 10), total: 0, textDirect: 0, imgDirect: 0, aiFallback: 0, durations: [] };
-  }
+var STATS_HISTORY_MAX = 8;
+var STATS_COUNTER_KEYS = ["total", "textDirect", "imgDirect", "aiResolved", "aiCalls"];
+
+function statsWeekStart(now) {
+  var d = new Date(now || Date.now());
+  var shift = (d.getUTCDay() + 6) % 7;                       // Monday is day 0
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - shift);
 }
+function statsDayKey(now) { return new Date(now || Date.now()).toISOString().slice(0, 10); }
+function statsEmptyPeriod() {
+  return { total: 0, textDirect: 0, imgDirect: 0, aiResolved: 0, aiCalls: 0, durations: [] };
+}
+function statsNormalizePeriod(p) {
+  var src = p || {}, out = statsEmptyPeriod();
+  out.total = Number(src.total) || 0;
+  out.textDirect = Number(src.textDirect !== undefined ? src.textDirect : src.textOffline) || 0;
+  out.imgDirect = Number(src.imgDirect !== undefined ? src.imgDirect : src.imgOffline) || 0;
+  out.aiResolved = Number(src.aiResolved) || 0;
+  out.aiCalls = Number(src.aiCalls !== undefined ? src.aiCalls : src.aiFallback) || 0;
+  out.durations = (Array.isArray(src.durations) ? src.durations : [])
+    .filter(function(n) { return typeof n === "number" && n > 0; })
+    .slice(-50);
+  return out;
+}
+function statsLifetimeOf(period) {
+  var out = {};
+  STATS_COUNTER_KEYS.forEach(function(k) { out[k] = Number(period && period[k]) || 0; });
+  return out;
+}
+function statsAddCounters(target, delta) {
+  STATS_COUNTER_KEYS.forEach(function(k) { target[k] = (Number(target[k]) || 0) + (Number(delta && delta[k]) || 0); });
+  return target;
+}
+function statsSave(s) {
+  try { localStorage.setItem(STATS_KEY, JSON.stringify(s)); } catch (e) {}
+}
+/* Always returns { week, period, lifetime, history } for the week containing
+   `now`. A store from an earlier week is rolled over here — on read — so the
+   report is correct even if the tab was closed across a week boundary. */
+function loadStats(now) {
+  var week = statsDayKey(statsWeekStart(now));
+  var raw = {};
+  try { raw = JSON.parse(localStorage.getItem(STATS_KEY) || "{}") || {}; } catch (e) { raw = {}; }
+
+  var s = { week: week, period: statsEmptyPeriod(), lifetime: statsLifetimeOf(null), history: [] };
+
+  // Store written before the weekly window existed: flat lifetime counters.
+  // Keep them as the lifetime total and open this week at zero — relabelling a
+  // lifetime total as one week's numbers would be a lie in the report.
+  if (!raw.period && typeof raw.total === "number") {
+    s.lifetime = statsLifetimeOf(statsNormalizePeriod(raw));
+    statsSave(s);
+    return s;
+  }
+  if (!raw.period) { statsSave(s); return s; }
+
+  s.period = statsNormalizePeriod(raw.period);
+  s.lifetime = statsLifetimeOf(raw.lifetime);
+  s.history = (Array.isArray(raw.history) ? raw.history : []).slice(-STATS_HISTORY_MAX);
+
+  if (raw.week && raw.week !== week) {
+    s.history.push({ week: raw.week, total: s.period.total, textDirect: s.period.textDirect,
+                     imgDirect: s.period.imgDirect, aiResolved: s.period.aiResolved, aiCalls: s.period.aiCalls });
+    s.history = s.history.slice(-STATS_HISTORY_MAX);
+    statsAddCounters(s.lifetime, s.period);
+    s.period = statsEmptyPeriod();
+    s.week = week;
+    statsSave(s);
+  }
+  return s;
+}
+/* type: text_direct | text_cached | img_direct | ai_painted  -> a conversion
+         ai_call                                             -> an AI request  */
 function recordStat(type, durationMs) {
   try {
     var s = loadStats();
-    s.total++;
-    if (type === "text_direct" || type === "text_offline") s.textDirect++;
-    if (type === "img_direct" || type === "img_offline") {
-      s.imgDirect++;
-      if (typeof durationMs === "number" && durationMs > 0) {
-        s.durations.push(Math.round(durationMs));
-        if (s.durations.length > 50) s.durations.shift();
-      }
+    var bump = { total: 0, textDirect: 0, imgDirect: 0, aiResolved: 0, aiCalls: 0 };
+    if (type === "text_direct" || type === "text_offline" || type === "text_cached") { bump.total = 1; bump.textDirect = 1; }
+    else if (type === "img_direct" || type === "img_offline") { bump.total = 1; bump.imgDirect = 1; }
+    else if (type === "ai_painted") { bump.total = 1; bump.aiResolved = 1; }
+    else if (type === "ai_call" || type === "ai_fallback") { bump.aiCalls = 1; }
+    else return;
+
+    statsAddCounters(s.period, bump);
+    statsAddCounters(s.lifetime, bump);
+    if ((type === "img_direct" || type === "img_offline") &&
+        typeof durationMs === "number" && durationMs > 0) {
+      s.period.durations.push(Math.round(durationMs));
+      if (s.period.durations.length > 50) s.period.durations.shift();
     }
-    if (type === "ai_fallback") s.aiFallback++;
-    localStorage.setItem(STATS_KEY, JSON.stringify(s));
+    statsSave(s);
   } catch (e) {}
 }
 
@@ -1928,7 +2004,9 @@ function renderAttachmentResults(results, token, batch, started) {
     // The speculative call already answered (or is still in flight) for this
     // batch: never fire a second AI request for the same attachment set.
     if (aiSpeculation.batch === batch && aiSpeculation.fired && (aiSpeculation.painted || !aiSpeculation.done)) return;
-    recordStat("ai_fallback");
+    // The speculative timer already logged this batch's AI call: logging it
+    // again here would report two AI calls for one attachment.
+    if (!(aiSpeculation.batch === batch && aiSpeculation.fired)) recordStat("ai_call");
     setStatus("Image parse did not detect flights — trying AI…");
     convertAi(true, "undetected attachment");
   } else {
@@ -1989,7 +2067,10 @@ function convertImageAttachments(batch) {
         if (imageParseVersion !== batch || !imageParsePromise) return; // direct already settled
         aiSpeculation.fired = true;
         aiSpeculation.done = false;
-        recordStat("ai_fallback");
+        // An AI *request*, not a conversion: if the direct read lands first this
+        // reply is thrown away ("AI REPLY IGNORED — direct result kept"), and a
+        // discarded reply is not something the user was shown.
+        recordStat("ai_call");
         setStatus("DIRECT READ UNCLEAR — AI RUNNING IN PARALLEL…");
         convertAi(true, "undetected attachment", batch);
       }, AI_SPECULATE_AFTER_MS) };
@@ -2091,9 +2172,12 @@ function directIncomplete(warns, segs) {
   return null;
 }
 
-function renderDirectSync(text){
+function renderDirectSync(text, opts){
   // A typed/pasted itinerary is ground truth: read it as-is, never rewritten by
   // rules learned from somebody else's blurry screenshot.
+  // opts.counted === false: this is the debounced re-render that keeps the pane
+  // live while the user is still typing, not a conversion they asked for.
+  var counted = !(opts && opts.counted === false);
   var cleaned = cleanOcrText(text, { learned: false });
   var res = window.SpicyEngine.parse(cleaned);
   var segs = res[0], warns = res[1];
@@ -2105,7 +2189,7 @@ function renderDirectSync(text){
   if(warns.length) msg+="  ·  "+warns.join(" · ");
   setStatus(msg, warns.length>0);
   tCacheSet(fp(text), outText);
-  recordStat("text_direct");
+  if (counted) recordStat("text_direct");
   return {segs:segs,warns:warns,out:outText};
 }
 
@@ -2142,6 +2226,7 @@ function convert(auto) {
       out.textContent = tc.out;
       lastTextFp = h;
       setStatus("CACHED TEXT — instant — " + (tc.out.split("\n").filter(function(l) { return / N$/.test(l); }).length) + " segs");
+      recordStat("text_cached");      // a press that produced output, instantly
       return;
     }
   }
@@ -2371,6 +2456,10 @@ function convertAi(fromAuto, reason, specBatch){
     if(rr&&rr[0].length&&rr[0].length >= (t.split("\n").filter(function(l){return / N$/.test(l);}).length)){ t=window.SpicyEngine.renderItinerary(rr[0]); }
     var previousDirect = lastOut;
     lastOut=t; out.textContent=t;
+    // The AI reply is on screen: this is the conversion. (The request itself was
+    // logged as `ai_call` when it started, so a reply that is ignored — or one
+    // that never arrives — never lands in the conversion count.)
+    recordStat("ai_painted");
     // Speculative reply won the race (direct never produced segments): mark it
     // painted so the still-running direct re-reads stop at their next pass
     // boundary and the batch completion path does not fire a second AI call.
@@ -2403,38 +2492,67 @@ function convertAi(fromAuto, reason, specBatch){
 /* REPORT:BEGIN */
 function generateWeeklyReportText() {
   var stats = loadStats();
-  var mistakes = loadMistakes();
+  var period = stats.period || {};
+  var lifetime = stats.lifetime || {};
+  var allMistakes = loadMistakes();
   var rules = loadLearnedRules();
-  var nowStr = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+  var now = new Date();
+  var nowStr = now.toISOString().replace("T", " ").slice(0, 19) + " UTC";
 
-  var totalConv = stats.total || 0;
-  var dirConv = (stats.textDirect || stats.textOffline || 0) + (stats.imgDirect || stats.imgOffline || 0);
-  var dirRate = totalConv ? Math.round((dirConv / totalConv) * 100) : 100;
+  // The heading says WEEKLY, so the numbers are one week's: the mistake log is
+  // filtered to the same window the counters cover (it stores up to 50 entries
+  // from every week the tool has been used, and mixing them in made a quiet
+  // week look like a bad one).
+  var week = stats.week || statsDayKey(statsWeekStart(now));
+  var today = statsDayKey(now);
+  var mistakes = allMistakes.filter(function(m) {
+    var day = String((m && m.when) || "").slice(0, 10);
+    return !!day && day >= week && day <= today;
+  });
 
-  var avgImgSpeed = "N/A";
-  if (stats.durations && stats.durations.length) {
-    var sum = stats.durations.reduce(function(a,b){return a+b;}, 0);
-    var average = Math.round(sum / stats.durations.length);
-    avgImgSpeed = average + "ms" + (average < 1000 ? " (< 1s)" : "");
+  var totalConv = period.total || 0;
+  var dirConv = (period.textDirect || 0) + (period.imgDirect || 0);
+  // 0 conversions is not a 100% instant rate — it is nothing to rate.
+  var rateTxt = totalConv ? Math.round((dirConv / totalConv) * 100) + "% instant rate"
+                          : "no conversions yet — nothing to rate";
+
+  var avgImgSpeed = "N/A — no screenshots parsed this week";
+  if (period.durations && period.durations.length) {
+    var sum = period.durations.reduce(function(a,b){return a+b;}, 0);
+    var average = Math.round(sum / period.durations.length);
+    avgImgSpeed = average + "ms" + (average < 1000 ? " (< 1s)" : "") +
+                  " across " + period.durations.length + " screenshot(s)";
   }
 
   var lines = [];
   lines.push("=== SPICYTERMINAL WEEKLY PERFORMANCE & ENHANCEMENT REPORT ===");
   lines.push("To: " + AUTHOR_EMAIL);
+  lines.push("Period: " + week + " → " + today + " (UTC, week starts Monday)");
   lines.push("Generated: " + nowStr);
   lines.push("App Version: SpicyTerminal v4.0 (Instant Engine + AI Mistake Learner)");
   lines.push("");
-  lines.push("--- 1. PERFORMANCE & CONVERSION STATS ---");
-  lines.push("• Total Conversions: " + totalConv);
-  lines.push("• Instant Conversions: " + dirConv + " (" + dirRate + "% instant rate)");
-  lines.push("• Direct Screenshot Conversions: " + (stats.imgDirect || stats.imgOffline || 0));
+  lines.push("--- 1. PERFORMANCE & CONVERSION STATS (this week) ---");
+  lines.push("• Total Conversions: " + totalConv + " (results shown to the user; live re-renders while typing are not counted)");
+  lines.push("• Instant Conversions: " + dirConv + " (" + rateTxt + ")");
+  lines.push("• Direct Screenshot Conversions: " + (period.imgDirect || 0));
   lines.push("• Average Screenshot Parsing Latency: " + avgImgSpeed);
-  lines.push("• AI Fallback Calls (undetected only): " + (stats.aiFallback || 0));
+  lines.push("• AI Calls Started: " + (period.aiCalls || 0) + " (includes speculative races; a reply the direct read beat is not a conversion)");
+  lines.push("• Conversions Completed By AI: " + (period.aiResolved || 0));
+  lines.push("• Since Install: " + (lifetime.total || 0) + " conversion(s)");
+  var lastWeek = (stats.history && stats.history.length) ? stats.history[stats.history.length - 1] : null;
+  if (lastWeek) {
+    lines.push("• Previous Week (" + lastWeek.week + "): " + (lastWeek.total || 0) + " conversion(s), " +
+               ((lastWeek.textDirect || 0) + (lastWeek.imgDirect || 0)) + " instant, " +
+               (lastWeek.aiResolved || 0) + " completed by AI");
+  }
   lines.push("");
-  lines.push("--- 2. DETECTED MISTAKES & AI CORRECTIONS (" + mistakes.length + ") ---");
+  lines.push("--- 2. DETECTED MISTAKES & AI CORRECTIONS (" + mistakes.length + " this week, " +
+             allMistakes.length + " in the stored log) ---");
   if (!mistakes.length) {
     lines.push("No mistakes detected this period — direct parsing running smoothly.");
+    lines.push("");
   } else {
+    if (mistakes.length > 5) lines.push("Newest 5 of " + mistakes.length + ":");
     mistakes.slice(0, 5).forEach(function(m, idx) {
       lines.push("#" + (idx+1) + " [" + m.when + "] " + m.reason);
       lines.push("  Summary: " + m.summary);
@@ -2480,9 +2598,13 @@ function generateWeeklyReportText() {
   // Recommendations are derived from what this period actually showed, not a
   // fixed list — a report that says the same thing every week cannot be acted on.
   var recs = [];
-  var imgDirect = (stats.imgDirect || stats.imgOffline || 0);
+  var imgDirect = (period.imgDirect || 0);
   recs.push(imgDirect ? "Direct Image Engine handled " + imgDirect + " screenshot(s) offline; keep OCR bounded and worker-backed."
                       : "No screenshots converted this period; the offline OCR path is untested on this device.");
+  var aiCalls = period.aiCalls || 0, aiResolved = period.aiResolved || 0;
+  if (aiCalls > aiResolved) {
+    recs.push((aiCalls - aiResolved) + " of " + aiCalls + " AI call(s) never produced a result the user saw (beaten by the direct read, or failed) — that is spare latency/cost, not lost output.");
+  }
   var unknownRows = mistakes.filter(function(m) { return /\?\?\?|NOT read|undetected/i.test((m.summary || "") + " " + (m.direct || "")); });
   if (unknownRows.length) {
     recs.push(unknownRows.length + " conversion(s) still produced placeholder rows (???? / DEP-???) — these are parse-shape gaps in the GDS row reader, not model quality; feed them to test_gds_screenshot.js.");
@@ -2505,16 +2627,35 @@ function generateWeeklyReportText() {
 }
 
 /* REPORT:END */
+var REPORT_MAIL_SUBJECT = "SpicyTerminal Weekly Report — Performance & AI Mistake Learning";
+/* Gmail compose in a new tab. Two ways this used to look broken:
+   - a blocked pop-up returns null from window.open, so the click looked dead
+     while the modal sat there with no explanation;
+   - the whole report travels in the query string, and browsers refuse or
+     truncate URLs past their length cap, so a long report could arrive half
+     missing. Past the guard the body is left out and the copy button is the
+     way to move it. */
+var MAIL_URL_SOFT_LIMIT = 60000;
+function openGmailCompose(subject, body, blockedHint) {
+  var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(AUTHOR_EMAIL) +
+            "&su=" + encodeURIComponent(subject);
+  var withBody = url + "&body=" + encodeURIComponent(body || "");
+  if (withBody.length <= MAIL_URL_SOFT_LIMIT) url = withBody;
+  else url += "&body=" + encodeURIComponent("Report too long for a compose link (" +
+            (body || "").length + " characters) — copy it from the report box and paste it here.");
+  var win = null;
+  try { win = window.open(url, "_blank"); } catch (e) { win = null; }
+  if (!win) setStatus(blockedHint || "POP-UP BLOCKED — allow pop-ups for this site, or use COPY REPORT", true);
+  return !!win;
+}
 function openWeeklyReport() {
   var reportText = generateWeeklyReportText();
   $("reportContent").value = reportText;
   $("reportModal").classList.remove("hidden");
 
   // Also pre-open Gmail compose in new tab
-  var mailUrl = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(AUTHOR_EMAIL) +
-                "&su=" + encodeURIComponent("SpicyTerminal Weekly Report — Performance & AI Mistake Learning") +
-                "&body=" + encodeURIComponent(reportText);
-  window.open(mailUrl, "_blank");
+  openGmailCompose(REPORT_MAIL_SUBJECT, reportText,
+                   "POP-UP BLOCKED — press EMAIL ADHAM again, or COPY REPORT and paste it");
 }
 
 /* ---------- UI events ---------- */
@@ -2603,7 +2744,9 @@ inp.addEventListener("input", function() {
   if (!hasAttachments()) {
     typeTimer = setTimeout(function() {
       typeTimer = null;
-      try { renderDirectSync(inp.value); } catch (e) {}
+      // Live preview while typing: parsed and cached, but never counted as a
+      // conversion — one keystroke pause is not one use of the tool.
+      try { renderDirectSync(inp.value, { counted: false }); } catch (e) {}
     }, len < 2000 ? 55 : 80);
   }
 });
@@ -2708,11 +2851,8 @@ if ($("reportCopy")) $("reportCopy").addEventListener("click", function(){
   }
 });
 if ($("reportSend")) $("reportSend").addEventListener("click", function(){
-  var txt = $("reportContent").value;
-  var mailUrl = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(AUTHOR_EMAIL) +
-                "&su=" + encodeURIComponent("SpicyTerminal Weekly Report — Performance & AI Mistake Learning") +
-                "&body=" + encodeURIComponent(txt);
-  window.open(mailUrl, "_blank");
+  openGmailCompose(REPORT_MAIL_SUBJECT, $("reportContent").value,
+                   "POP-UP BLOCKED — allow pop-ups for this site, or COPY REPORT and paste it into a new email");
 });
 
 // Bug Report: Send to adhambadraan@gmail.com
@@ -2725,7 +2865,8 @@ $("report").addEventListener("click", function(){
   var mistakeTxt = mistakes.length ? "\n=== RECENT DETECTED MISTAKES ("+mistakes.length+") ===\n" + mistakes.slice(0, 3).map(function(m, i){ return (i+1)+") "+m.when+" — "+m.summary; }).join("\n") : "";
 
   var body="=== SPICY TERMINAL BUG REPORT ===\nTO: "+AUTHOR_EMAIL+"\nWHEN: "+new Date().toISOString().replace("T"," ").slice(0,19)+" UTC\nAI MODEL: "+(window._aiModel||aiModelGet()||"(none used)")+"\n\n=== WHAT I PASTED ===\n"+(cap(input,1300)||"(empty)")+"\n\n=== WHAT THE APP PRODUCED ===\n"+(cap(output,1300)||"(empty)")+"\n\n=== WHAT I EXPECTED INSTEAD ===\n\n\n=== ANY OTHER DETAILS ===\n"+learnTxt+mistakeTxt;
-  window.open("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(AUTHOR_EMAIL)+"&su="+encodeURIComponent("SpicyTerminal bug report")+"&body="+encodeURIComponent(body), "_blank");
+  openGmailCompose("SpicyTerminal bug report", body,
+                   "POP-UP BLOCKED — allow pop-ups for this site to send the bug report");
 });
 
 // Boot the OCR worker during page idle (not on the first screenshot) so the
