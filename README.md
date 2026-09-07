@@ -14,7 +14,23 @@ hallucinations, no re-rolling the dice.
 
 - **Fast, bounded offline screenshots**: OCR is lazy-loaded, uses a worker where available, caps oversized frames, and has a short native-OCR deadline—so a stalled scanner cannot leave the app spinning forever.
 - **Parallel AI fallback**: when the fast direct OCR passes have not found flights after ~1.5s, the Gemini fallback starts *immediately* and races the remaining bounded direct re-reads instead of running after them serially — a screenshot the offline engine cannot read answers in AI-time (not 14.5s-of-local-grinding + AI-time). The deterministic result always wins when both succeed; a junk direct read full of `????` placeholders is auto re-read by AI without a manual press.
-- **AI mistake detection & self-learning**: AI detects discrepancies and teaches the tool to fix them automatically on future conversions.
+- **AI mistake detection & self-learning — that refuses to learn nonsense**: the
+  AI's answer is compared to the deterministic one **leg by leg** (same carrier,
+  same flight-number digits after look-alike folding, same route, same day), never
+  by row position, so a differently-segmented answer can no longer "correct" the
+  wrong leg. A rule is only stored when the difference is a genuine scanner
+  confusion (`O/0`, `I/1`, `S/5`, `Z/2`, `B/8`, `G/6`, `C/0`, `T/7`), and a rule
+  that reverses an existing one cancels both instead of making the tool oscillate.
+  Learned rules are applied to **screenshot OCR only** — a typed or pasted
+  itinerary is ground truth and is never rewritten.
+  A rule store written by the older learner is swept once on load, so already-
+  poisoned devices self-heal instead of keeping their contradictory rules.
+- **GDS rows are read as tables**: a screenshot of a terminal (or a re-paste of
+  this tool's own output) keeps its columns. `15SEP` is no longer split into
+  `15 SEP`, the flight-time column `6.10` is no longer mistaken for a clock, the
+  sell-status column `HK2`/`TK2` no longer becomes a phantom Turkish leg, a glued
+  `MIAVVI` is unrolled into its two airports, and a carrier the data file does
+  not know yet (IberoJet `OB`) is still read instead of dropped.
 - **Smart fallback**: Only falls back to AI in case an unreadable or handwritten screenshot cannot be detected offline.
 - **Reliable attachments**: `+ ATTACH`, drag-and-drop, and clipboard screenshots share one queue; image extensions are detected even when a browser supplies no MIME type, multiple images are parsed together in order, and stale work cannot overwrite a cleared request. Each screenshot has a small red `×` remove button, can be clicked to review full-size, and can also be removed from the review screen.
 - **Word-proof carriers**: English words that are also IATA codes (`to`, `by`,
@@ -30,6 +46,11 @@ hallucinations, no re-rolling the dice.
   (macOS pastes the latter). An accented letter used to hide a leg's route
   header, so the outbound silently borrowed the return's airports *and* the
   return's date; it no longer can.
+- **Card lists keep their clocks**: on a Google-Flights-style card the time pair
+  (`3:45 PM to 10:15 AM`) is printed *above* the flight number and below the
+  previous leg. One leg used to get it right and every leg after it printed
+  `????`; now that standalone line belongs to the flight under it, and only a
+  whole line — never the tail of a neighbouring leg's own line.
 - **Published mileages**: distances are WGS-84 geodesic miles (Vincenty), which
   is what airlines and GDS systems quote. A spherical great circle runs up to
   ~0.5% short on east/west routes — JFK-DUB read 3171 instead of the published
@@ -75,9 +96,11 @@ and archives are never shipped.
 | `test_accent_routes.js` | accented-city regression suite for the MIA/BOG bug report (Bogotá, Zürich, São Paulo…) — `node test_accent_routes.js` |
 | `test_big_wide.js` | wide test suite across 156 checks |
 | `test_very_wide.js` | 5,000 random online flight test suite |
+| `test_10k_pic_convert.js` | 10,000-iteration screenshot-card fuzz (uses the real `cleanOcrText`) — `npm run test:10k`, add `--seed=N` for a reproducible run |
 | `test_offline_images.js` | OCR cleaner + real-image OCR speed tests |
 | `test_attachment_pipeline.js` | end-to-end attachment pipeline tests (drop / paste / picker / PDF / HEIC / cache) |
 | `test_lax_man.js` | LAX–MAN round-trip regression (no phantom TO 105, Manchester is MAN not MHT) — `node test_lax_man.js` |
+| `test_mistake_learner.js` | self-learning safety + GDS re-paste regression for the 2026-09-07 weekly report — `node test_mistake_learner.js` |
 
 ## Privacy
 

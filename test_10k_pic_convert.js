@@ -8,6 +8,7 @@
  */
 
 const fs = require("fs");
+const vm = require("vm");
 const path = require("path");
 const E = require("./spicy_engine.js");
 const D = require("./spicy_data.js");
@@ -41,184 +42,46 @@ function teachToolRule(rule) {
   learnedRules.push(rule);
 }
 
-// Full OCR Cleaner matching app.js
-function cleanOcrText(rawText, customRules) {
-  let s = String(rawText || "");
+/* The cleaner used to be a copy-paste fork of app.js here, which meant the 10k
+   suite was grading a snapshot: every fix to the real `cleanOcrText` silently
+   stopped being covered, and the suite reported failures the shipped app does
+   not have. Load the real thing instead (same sandbox trick the other suites
+   use) and inject the self-healed rules through the same hook the app does. */
+const APP_SRC = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
+const CLEAN_START = APP_SRC.indexOf("var _cleanAirlines = []");
+const CLEAN_END = APP_SRC.indexOf("/* ---------- bounded, non-blocking screenshot OCR ---------- */");
+if (CLEAN_START < 0 || CLEAN_END < 0) throw new Error("cleaner markers not found in app.js");
+const _cleanSandbox = {
+  console, window: {}, SPICY_DATA: D,
+  document: { createElement: () => ({ textContent: "", innerHTML: "" }) },
+  localStorage: { getItem: () => null, setItem: () => {} },
+  loadLearnedRules: () => learnedRules
+};
+_cleanSandbox.window = _cleanSandbox;
+vm.createContext(_cleanSandbox);
+vm.runInContext(APP_SRC.slice(CLEAN_START, CLEAN_END), _cleanSandbox, { filename: "cleaner.js" });
+vm.runInContext("this.__clean = cleanOcrText;", _cleanSandbox);
+const cleanOcrText = (rawText) => _cleanSandbox.__clean(rawText);
 
-  // 1. Apply learned rules from tool self-healing
-  const activeRules = customRules || learnedRules;
-  if (activeRules && activeRules.length) {
-    activeRules.forEach(r => {
-      if (r.pattern && r.replacement !== undefined) {
-        s = s.split(r.pattern).join(r.replacement);
-      }
-    });
-  }
-
-  // 2. Line breaks and separators
-  s = s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  s = s.replace(/[•·—–]/g, " - ");
-  s = s.replace(/\s*[-–—]\s*/g, " - ");
-
-  // Glued airports e.g. DOHtoCAI -> DOH to CAI, JFK-LHR -> JFK - LHR
-  s = s.replace(/\b([A-Za-z]{3})\s*to\s*([A-Za-z]{3})\b/gi, "$1 to $2");
-  s = s.replace(/\b([A-Za-z]{3})to([A-Za-z]{3})\b/gi, "$1 to $2");
-
-  // Underscore and glyph airport repairs
-  s = s.replace(/_F[KC]\b/g, "JFK");
-  s = s.replace(/\b[lI1]FK\b/g, "JFK");
-  s = s.replace(/\bCAl\b/g, "CAI");
-  s = s.replace(/\bSlN\b/g, "SIN");
-  s = s.replace(/\blST\b/g, "IST");
-  s = s.replace(/\bLAx\b/g, "LAX");
-
-  // 3. Airline + Flight prefix handling: e.g. "BA · Flight 114" -> "BA 114", "Flight AA 123" -> "AA 123"
-  s = s.replace(/\b([A-Z0-9]{2})\s*[-·•.]*\s*Flight\s*([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
-  s = s.replace(/\bFlight\s+([A-Za-z]{2}|[0-9][A-Za-z]|[A-Za-z][0-9])[ \t]+([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
-  s = s.replace(/\bFlight\s+([0-9A-Za-z]{1,5})\b/gi, "$1");
-
-  // Airline typos & OCR confusions
-  s = s.replace(/Brltlsh\s+Alrways/gi, "British Airways");
-  s = s.replace(/Brltlsh/gi, "British");
-  s = s.replace(/Emirales/gi, "Emirates");
-  s = s.replace(/Uniled/gi, "United");
-  s = s.replace(/Delia/gi, "Delta");
-  s = s.replace(/Amerlcan/gi, "American");
-  s = s.replace(/Lufihansa/gi, "Lufthansa");
-  s = s.replace(/Qaiar/gi, "Qatar");
-  s = s.replace(/Turklsh/gi, "Turkish");
-  s = s.replace(/Slngapore/gi, "Singapore");
-
-  // 4. Month names full to 3-letter
-  const monthMap = {
-    january:"JAN", february:"FEB", march:"MAR", april:"APR", may:"MAY", june:"JUN",
-    july:"JUL", august:"AUG", september:"SEP", october:"OCT", november:"NOV", december:"DEC"
+/* `--seed=N` makes this suite reproducible. Without it the generator is
+   intentionally random (that is the point of a 10k fuzz), but then "25 failures
+   on HEAD" and "25 failures after a change" are not comparable — different runs
+   mangle different rows. With a seed a reported regression can be re-created by
+   the person who has to fix it: `node test_10k_pic_convert.js --seed=1`. */
+let _seedState = null;
+const _seedArg = (process.argv.find(a => /^--seed=/.test(a)) || "").split("=")[1];
+if (_seedArg !== undefined && _seedArg !== "") {
+  let x = (parseInt(_seedArg, 10) >>> 0) || 1;
+  _seedState = () => {
+    x = (x + 0x6D2B79F5) >>> 0;
+    let t = x;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-  Object.keys(monthMap).forEach(m => {
-    s = s.replace(new RegExp("\\b" + m + "\\b", "gi"), monthMap[m]);
-  });
-
-  // Month typos and OCR numbers before month: e.g. "IB Nou" -> "18 NOV"
-  s = s.replace(/(?<![:\d])([lI1][B8])\s*(?:Nou|nou)\b/g, function(_, d){
-    var cd = d.replace(/[lI]/g, "1").replace(/[B]/g, "8");
-    return cd + " NOV";
-  });
-
-  // 5. Day shifts: 12h, 24h, compact, and parenthesized
-  s = s.replace(/(\d{1,2}[:._]\d{2})\s*\+\s*[lIi1tT]\b/gi, "$1+1");
-  s = s.replace(/(\d{1,2}[:._]\d{2})\s*\+\s*[zZ2]\b/gi, "$1+2");
-  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[lIi1tT]\b/gi, "$1+1");
-  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[zZ2]\b/gi, "$1+2");
-  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[sS5]\b/gi, "$1+5");
-  s = s.replace(/\(\s*\+\s*[lIi1tT]\s*(?:day)?\s*\)/gi, "(+1)");
-  s = s.replace(/\(\s*\+\s*[zZ2]\s*(?:days?)?\s*\)/gi, "(+2)");
-  s = s.replace(/¥\s*[lIi1tT]/g, "¥1");
-  s = s.replace(/¥\s*[zZ2]/g, "¥2");
-  s = s.replace(/\b(AM|PM|[APNM])\s*-\s*([1-3lItT])(?![0-9A-Za-z]*[:\.\/])/gi, function(_, ap, shift) {
-    return ap + "-" + (shift === "l" || shift === "I" || shift === "t" ? "1" : shift);
-  });
-
-  // 6. Durations: e.g. 10 hr4O min, 2h 3Om, 4 hr 30 min (must not match GDS booking class / dates / airports)
-  s = s.replace(/\b([0-9]{1,2})\s*h(?:r|ours?)?[ \t]*([0-9oOsSlIzZ]{1,2})\s*(?:m|min|minutes?)\b/gi, (_, h, m) => {
-    let cm = m.replace(/[oO]/g, "0").replace(/[sS]/g, "5").replace(/[lIi]/g, "1").replace(/[zZ]/g, "2");
-    return h + " hr " + cm + " min";
-  });
-
-  // 7. Common aviation word & aircraft typos
-  const dictWords = [
-    [/Boelng/gi, "Boeing"],
-    [/Alrbus/gi, "Airbus"],
-    [/Alrlines?/gi, "Airlines"],
-    [/Alrways?/gi, "Airways"],
-    [/Buslness/gi, "Business"],
-    [/Etonomy/gi, "Economy"],
-    [/Econorny/gi, "Economy"],
-    [/Premtum/gi, "Premium"],
-    [/Nonstop/gi, "Nonstop"],
-    [/Fl[il1]ght/gi, "Flight"],
-    [/Operated\s+by/gi, "Operated by"],
-    [/Departs?/gi, "Departs"],
-    [/Arr[il1]ves?/gi, "Arrives"],
-    [/Term[il1]nal/gi, "Terminal"],
-    [/lberia/gi, "Iberia"],
-    [/\b([Tt])(\d)([Tt])\b/g, "7$27"],
-    [/Boeing\s+TTT/gi, "Boeing 777"],
-    [/\bA3[sS]0\b/gi, "A350"],
-    [/\bA38[oO]\b/gi, "A380"],
-    [/\bA32[oO]\b/gi, "A320"],
-    [/(?<![:\d])([0-2]?[1-9]|[123]0|31)[ \t]*([Nn]ou)\b/gi, "$1 NOV"],
-    [/\b([Nn]ou)[ \t]+([0-2]?[1-9]|[123]0|31)\b(?![:\.\d])/gi, "NOV $2"],
-    [/(?<![:\d])([0-2]?[1-9]|[123]0|31)[ \t]*([Aa]uq)\b/gi, "$1 AUG"],
-    [/\b([Aa]uq)[ \t]+([0-2]?[1-9]|[123]0|31)\b(?![:\.\d])/gi, "AUG $2"],
-    [/(?<![:\d])([0-2]?[1-9]|[123]0|31)[ \t]*([Ff]eh)\b/gi, "$1 FEB"],
-    [/\b([Ff]eh)[ \t]+([0-2]?[1-9]|[123]0|31)\b(?![:\.\d])/gi, "FEB $2"],
-    [/(?<![:\d])([0-2]?[1-9]|[123]0|31)[ \t]*([Dd]et)\b/gi, "$1 DEC"],
-    [/\b([Dd]et)[ \t]+([0-2]?[1-9]|[123]0|31)\b(?![:\.\d])/gi, "DEC $2"]
-  ];
-  dictWords.forEach(pair => { s = s.replace(pair[0], pair[1]); });
-
-  // 8. Times with colons, dots, or underscores (both 12h with AM/PM and 24h clocks): e.g. 7:ss PM, 7_00 PM, 6_1s AM, ll:39
-  s = s.replace(/\b([0-9A-Za-z]{1,2})[:._](\w{2})(?:\s*([AP]M?|[ap]m?))?\b/g, function(match, h, m, ap) {
-    let ch = h.replace(/[lIi]/g, "1").replace(/[oO]/g, "0").replace(/[Tt]/g, "7").replace(/[zZ]/g, "2").replace(/[sS]/g, "5");
-    let cm = m.replace(/ss/gi, "55")
-              .replace(/zs/gi, "25")
-              .replace(/so/gi, "50")
-              .replace(/os/gi, "05")
-              .replace(/ll/gi, "11")
-              .replace(/lo/gi, "10")
-              .replace(/oo/gi, "00")
-              .replace(/ts/gi, "15")
-              .replace(/t0/gi, "10")
-              .replace(/t5/gi, "15")
-              .replace(/[sS]/g, "5")
-              .replace(/[oO]/g, "0")
-              .replace(/[lIi]/g, "1")
-              .replace(/[zZ]/g, "2")
-              .replace(/[tT]/g, "1");
-    let hNum = parseInt(ch, 10), mNum = parseInt(cm, 10);
-    if (hNum > 23 || mNum > 59) return match;
-    return ch + ":" + cm + (ap ? " " + ap.toUpperCase() : "");
-  });
-
-  // 9. Compact GDS clocks: 9s0P, 94SA, 1120A, etc.
-  s = s.replace(/\b(\d{1,2})([sSoOlIzZtT0-9]{2})([APNM])(?:([+\-¥])\s*([0-9lItT]))?\b/gi, function(_, h, m, ap, sign, shift) {
-    let cm = m.replace(/[sS]/g, "5").replace(/[oO]/g, "0").replace(/[lIi]/g, "1").replace(/[zZ]/g, "2").replace(/[tT]/g, "7");
-    let sh = shift ? ((shift==="l"||shift==="I"||shift==="t") ? "1" : shift) : "";
-    return h + cm + ap.toUpperCase() + (sign ? sign + sh : "");
-  });
-
-  if (/DOH/i.test(s)) {
-    s = s.replace(/\bOR\s+/gi, "QR ");
-  }
-
-  // 10. Glued flight numbers + airport: e.g. 114lFK -> 114 JFK, ZO4lFK -> 204 JFK
-  s = s.replace(/\b([0-9A-Za-z]{1,4})[lI1]FK\b/gi, "$1 JFK");
-  s = s.replace(/\b([0-9]{1,4})([A-Z]{3})\b/g, "$1 $2");
-
-  // 11. Airline code + Flight number:
-  const airRe = new RegExp("\\b(" + AIRLINES.join("|") + ")[ \\t]+([0-9A-Za-z]{1,5})\\b", "g");
-  s = s.replace(airRe, function(match, code, num, offset) {
-    if (/^(AM|PM)$/i.test(code)) {
-      const before = s.slice(Math.max(0, offset - 8), offset);
-      if (/\d\s*$/i.test(before)) return match;
-    }
-    if (!/[0-9]/.test(num) && !/^[loszbBtT]+$/i.test(num)) return match;
-    let cnum = num.replace(/[oO]/g, "0")
-                  .replace(/[lIi]/g, "1")
-                  .replace(/[zZ]/g, "2")
-                  .replace(/[sS]/g, "5")
-                  .replace(/[b]/g, "6")
-                  .replace(/[B]/g, "8")
-                  .replace(/[gq]/g, "9")
-                  .replace(/[tT]/g, "7");
-    return code + " " + cnum;
-  });
-
-  s = s.replace(/[ \t]{2,}/g, " ");
-  return s;
+  console.log(`generator seeded with --seed=${_seedArg} (deterministic run)`);
 }
-
-function rnd(n){ return Math.floor(Math.random()*n); }
+function rnd(n){ return Math.floor((_seedState ? _seedState() : Math.random())*n); }
 function choice(a){ return a[rnd(a.length)]; }
 
 function fmt12(min){
