@@ -728,7 +728,13 @@ function cleanOcrText(rawText, opts) {
     return ch + ":" + cm + (ap ? " " + ap.toUpperCase() : "");
   });
 
-  // 7. Compact GDS clocks: 9s0P, 94SA, 1120A, etc.
+  // 7. Compact GDS clocks: 9s0P, 94SA, 1120A, etc.  The pass above folds the
+  //    spaced, colon-lost form ("105 PM" -> "105P", the missing-time half of
+  //    bug report 2026-09-09); single-digit clocks ("6 PM") were always
+  //    readable and stay untouched.  This pass only repairs glyphs inside an
+  //    ALREADY-glued compact clock — loosening it to span spaces glued the GDS
+  //    mileage column to its sell-status marker ("2699  N" -> "2699N").
+  s = s.replace(/\b(\d{3,4})[ \t]([AP])\.?[ \t]*M\b/g, "$1$2");
   s = s.replace(/\b(\d{1,2})([sSoO0-9]{2})([APNM])\b/g, function(_, h, m, ap) {
     var cm = m.replace(/[sS]/g, "5").replace(/[oO]/g, "0");
     return h + cm + ap;
@@ -795,8 +801,18 @@ function cleanOcrText(rawText, opts) {
         // "(JFK) TO Dublin (DUB)" — so only repair a lowercase word when it is
         // actually sitting in front of a flight number.
         if (_CLEAN_WORD_CODES[code.toLowerCase()]) {
-          var after = s.slice(offset + code.length, offset + code.length + 8);
+          // Wide enough to see a full "P.M." and the letter AFTER the M: the
+          // 8-char window once truncated "1234 AMS" to "1234 AM" and read the
+          // Amsterdam code as a meridiem.
+          var after = s.slice(offset + code.length, offset + code.length + 12);
           if (!/^[ \t]*\d{1,4}(?![\d:.])/.test(after)) return code;
+          // …and a number is only a FLIGHT number when no clock follows it.
+          // "to 105 PM" is a pasted/OCR'd clock pair with the colon lost (and
+          // "to 305P" the same, colon and half the meridiem lost); uppercased,
+          // "TO 105 PM" anchored a phantom Transavia flight (bug report
+          // 2026-09-09) that then stole the real leg's times.  The M must not
+          // run on into letters ("1234 AMS" is Amsterdam, not a clock).
+          if (/^[ \t]*\d{1,4}[ \t]*[AP]\.?(?:[ \t]*M(?![A-Za-z])|(?![A-Za-z]))/i.test(after)) return code;
         }
         return code.toUpperCase();
       });
