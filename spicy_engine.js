@@ -359,6 +359,16 @@ var ALIAS_NUM_RE = new RegExp(
   "\\b("+_aliasAlt+")\\b\\s*(?:flight|flt)?\\s*(?:no\\.?|number|nbr|#)?\\s*"+
   "(?:\\(?([A-Z][A-Z0-9])\\)?\\s*)?(\\d{1,4})\\b","gi");
 var CODE_NUM_RE = new RegExp("\\b("+"[A-Z][A-Z0-9]|[0-9][A-Z]"+")\\s{0,3}(\\d{1,4})\\b","g");
+/* A flight number is never IMMEDIATELY followed by a meridiem marker — a clock
+   is.  The Google-Flights return leg "… to Los Angeles (LAX) … / 1:05 PM to
+   6:00 AM" reaches this scanner with the colon lost as "to 105 PM"; the OCR
+   cleaner's case-repair had uppercased the connector, and an uppercased month
+   nearby ("DEC 19") supplied the corroboration an ambiguous code (TO,
+   Transavia) needs — so the clock pair anchored a phantom `TO 105` leg, which
+   then stole the window's time line and printed the REAL flight (AA 170) with
+   `???? ????`.  "170 PM" is a clock; "170 19DEC" is a flight.  A bare booking
+   class ("170 P") has no M, so real anchors survive this guard. */
+var MERIDIEM_AFTER_NUM_RE = /^[ \t]*[AP]\.?[ \t]*M\b/i;
 var TIME_UNIT_AFTER = /\s*(?::\d{2}|hrs?\b|hours?\b|mins?\b|minutes?\b|m\b|h\b)/i;
 function _stripFltZeros(n){var v=parseInt(n,10);return v>0?String(v):n;}   // "AF 0003" -> "AF 3"
 /* Google Flights collapsed "next flight" summary card — junk times/dates/ghost flight:
@@ -618,6 +628,7 @@ function findAnchors(text){
       var tm=TIME_UNIT_AFTER.exec(afterT);
       if(tm.index===0) continue;
     }
+    if(MERIDIEM_AFTER_NUM_RE.test(text.slice(m.index+m[0].length,m.index+m[0].length+6))) continue;
     if(_suppressedAnchor(text,m.index)) continue;
     var raw_alias=m[1].toLowerCase();
     var code=AIRLINE_ALIASES[raw_alias];
@@ -636,6 +647,7 @@ function findAnchors(text){
     var afterU=text.slice(m.index+m[0].length);
     var tu=TIME_UNIT_AFTER.exec(afterU);
     if(tu&&tu.index===0) continue;
+    if(MERIDIEM_AFTER_NUM_RE.test(afterU.slice(0,6))) continue;
     if(_suppressedAnchor(text,m.index)) continue;
     if(/^-\d/.test(text.slice(m.index+m[0].length,m.index+m[0].length+6))) continue;
     var token=(code2+num).toUpperCase();
@@ -1263,6 +1275,16 @@ function parseProse(text){
   for(var ai=0;ai<anchors.length;ai++){
     var a=anchors[ai];
     var hdr=chooseHeaderForAnchor(ai, chosenHeaders);
+    /* Is this leg's route header one it merely INHERITED from the previous
+       leg?  Two tells: the exact same header object was chosen for the
+       previous anchor, or the header sits inside the previous leg's own text
+       (at or before the previous anchor's end).  A leg wearing a borrowed
+       header may also be wearing the borrowed ROUTE — see the day-shift
+       cross-check below, which reverses it when the pasted clocks only add up
+       on the opposite direction. */
+    var inheritedHdr = !!(hdr && ai>0 && (
+      (chosenHeaders[ai-1] && chosenHeaders[ai-1][0]===hdr[0]) ||
+      hdr[0] <= anchors[ai-1].end));
     var winStart, winEnd;
     if(hdr){
       if(hdr[0] > a.start){
@@ -1440,7 +1462,14 @@ function parseProse(text){
            anchor there is ONE clock (the arrival only) or none. */
         if(datePos >= aRelS) return true;     // after anchor starts = always arrival side
         var gap = oth.slice(datePos, aRelS);
-        var clockRe = /\b\d{1,2}[:.]?\d{2}\s*[APap]\.?\s*[Mm]\.?/g;
+        /* Both clock shapes must count: "9:40 AM" and the colon-lost compact
+           "940A".  Counting only the spaced form made a colon-lost pair look
+           clock-less, the header date got misjudged as the arrival side, and
+           the leg printed the ARRIVAL date (05DEC) instead of the departure
+           date (04DEC).  Date codes like 31AUG never match: the compact form
+           needs a meridiem letter right after 3-4 digits and no word char
+           after it ("940A " counts, "31AUG" does not). */
+        var clockRe = /\b\d{1,2}[:.]?\d{2}\s*[APap]\.?\s*[Mm]\.?(?![A-Za-z])|\b\d{3,4}[APap](?![A-Za-z])/g;
         var clockCount=0, cm;
         while((cm=clockRe.exec(gap))!==null) clockCount++;
         /* Two+ clocks in the gap: the date sits in the route header, ahead
@@ -1567,6 +1596,34 @@ function parseProse(text){
             if(cand<=0) continue;
             var diff=Math.abs(cand-durToken);
             if(diff<bestDiff){bestDiff=diff;bestShift=si;}
+          }
+          /* Cross-check a BORROWED route against the leg's own pasted clocks.
+             A return leg whose header failed to publish borrows the outbound's
+             header — and printed the return with the outbound's airports and a
+             nonsense day shift: AA 170 HND->LAX 1:05 PM -> 6:00 AM (9h 55m)
+             printed as LAX->HND with `600A\u00a52`, because only the wrong
+             pair needs a +2 day shift to explain the duration.  When the
+             leg's own clocks add up BETTER with the pair reversed, the
+             direction was borrowed along with the header: flip it and say
+             so.  The geodesic distance is symmetric, so it survives the flip
+             untouched.  A genuine red-eye keeps its +1: its own pair fits
+             best, and the flip only fires when the reversed pair fits
+             strictly better. */
+          if(inheritedHdr && seg.orig && seg.dest && seg.orig!==seg.dest &&
+             AIRPORTS[seg.orig] && AIRPORTS[seg.dest]){
+            var rawRev=(arrMin-offO*60)-(depMin-offD*60);   // origin<->dest swap
+            var shiftRev=0, diffRev=Infinity;
+            for(var si4=0;si4<=3;si4++){
+              var cand4=rawRev+1440*si4;
+              if(cand4<=0) continue;
+              var diff4=Math.abs(cand4-durToken);
+              if(diff4<diffRev){diffRev=diff4;shiftRev=si4;}
+            }
+            if(diffRev<bestDiff){
+              var swapped=seg.orig; seg.orig=seg.dest; seg.dest=swapped;
+              raw=rawRev; bestShift=shiftRev; bestDiff=diffRev;
+              warn.push("route reversed (clocks only add up on the return direction) \u2014 verify origin/destination");
+            }
           }
           shift=bestShift;
         } else if(arrMin<depMin){

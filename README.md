@@ -55,6 +55,14 @@ hallucinations, no re-rolling the dice.
   previous leg. One leg used to get it right and every leg after it printed
   `????`; now that standalone line belongs to the flight under it, and only a
   whole line — never the tail of a neighbouring leg's own line.
+- **Round-trip returns stay themselves**: `to 105 PM` — a Google-Flights clock
+  pair with its colon lost — is a time again, not a phantom Transavia `TO 105`
+  that stole the real flight's clocks into `????` (the engine never anchors a
+  flight number with a meridiem glued to it). And a return whose own route
+  header failed to publish no longer silently wears the outbound's direction:
+  when the pasted clocks only add up on the opposite airport pair (1:05 PM →
+  6:00 AM in 9h 55m printed as LAX→HND with a nonsense `¥2`), the pair is
+  reversed and the row discloses it.
 - **Published mileages**: distances are WGS-84 geodesic miles (Vincenty), which
   is what airlines and GDS systems quote. A spherical great circle runs up to
   ~0.5% short on east/west routes — JFK-DUB read 3171 instead of the published
