@@ -19,12 +19,19 @@ var AIRPORTS = D.airports, AIRLINES = D.airlines,
    the engine so old baked spicy_data.js bundles can still parse newly-seen
    airports without requiring a data-regeneration step. */
 var _EXTRA_AIRPORTS = {
-  XMN: {name:"XIAMEN GAOQI INTL", lat:24.5440, lon:118.1277, off:8.0, dst:"NONE"}
+  XMN: {name:"XIAMEN GAOQI INTL", lat:24.5440, lon:118.1277, off:8.0, dst:"NONE"},
+  // Kilimanjaro Intl (HTKJ) — Turkish 563/568 and every European safari charter
+  // end here.  It was absent from the baked data file, which dropped BOTH legs
+  // of an IST-JRO-IST itinerary from the GDS table and let the prose fallback
+  // print them with a neighbour's route and the flight-time column as a clock.
+  JRO: {name:"KILIMANJARO INTL", lat:-3.4294, lon:37.0745, off:3.0, dst:"NONE"}
 };
 Object.keys(_EXTRA_AIRPORTS).forEach(function(k){ if(!AIRPORTS[k]) AIRPORTS[k]=_EXTRA_AIRPORTS[k]; });
 var _EXTRA_CITY_ALIASES = {
   "xiamen":"XMN", "xiamen gaoqi":"XMN", "xiamen gaoqi intl":"XMN",
-  "xiamen gaoqi international":"XMN"
+  "xiamen gaoqi international":"XMN",
+  "kilimanjaro":"JRO", "kilimanjaro international":"JRO",
+  "moshi":"JRO"
 };
 Object.keys(_EXTRA_CITY_ALIASES).forEach(function(k){ if(!CITY_ALIASES[k]) CITY_ALIASES[k]=_EXTRA_CITY_ALIASES[k]; });
 
@@ -840,7 +847,19 @@ function tryGdsLines(text, used){
     }
     if(!/^[A-Z]{3}$/.test(apA) || !/^[A-Z]{3}$/.test(apB)) continue;
     apA=repairAirport(apA); apB=repairAirport(apB);
-    if(!AIRPORTS[apA] || !AIRPORTS[apB]) continue;
+    /* A numbered GDS table row guarantees its columns, so two 3-letter codes
+       after the date are origin/destination even when one is newer than the
+       baked data file (the JRO outage above).  Dropping the row used to hand
+       it to the prose fallback, which read a neighbouring leg's route and
+       mistook the flight-time column for a clock.  Keep the unknown code
+       verbatim — airportName() echoes codes it cannot name, and the distance
+       column stays the printed GDS mileage — and disclose the gap. */
+    var unknownAp=[];
+    if(!AIRPORTS[apA] || !AIRPORTS[apB]){
+      if(!rowTable) continue;
+      if(!AIRPORTS[apA]) unknownAp.push(apA);
+      if(!AIRPORTS[apB]) unknownAp.push(apB);
+    }
     var orig=apA, dest=apB;
     if(orig===dest) continue;
     i+=2;
@@ -945,6 +964,10 @@ function tryGdsLines(text, used){
       dist=(AIRPORTS[orig]&&AIRPORTS[dest])?String(Math.round(haversineMiles(orig,dest))):"0";
     }
     seg.distance=dist;
+    if(unknownAp.length){
+      seg.warnings.push("unknown airport code(s) "+unknownAp.join("/")+
+        " not in the offline database — name, coordinates and distance unavailable; verify the code");
+    }
     segs.push(seg);
     if(used) used.push(li);
   }
