@@ -86,8 +86,9 @@ for (const topic of [/Copy-ready GDS output/i, /Text or screenshots/i, /AI FIX/,
 }
 assert(/Adham Badran/.test(DLG) && /Solo developer/.test(DLG), "dialog names Adham Badran with his role");
 assert(DLG.includes(EMAIL), "dialog links the author's email " + EMAIL);
-assert(/mailto:/.test(DLG) && /github\.com\/Adhambadrun\/SpicyTerminal/.test(DLG), "email + GitHub links offered");
-assert(/target="_blank"[^>]*rel="noopener"/.test(DLG), "external link is rel=noopener");
+assert(/mailto:/.test(DLG), "email link offered");
+assert(!/github\.com\/Adhambadrun\/SpicyTerminal/.test(DLG) && !/Source on GitHub/.test(DLG), "GitHub link removed from About");
+assert(!/href="https?:\/\//.test(DLG), "no external http link remains in the dialog");
 assert((DLG.match(/aria-hidden="true"/g) || []).length >= (DLG.match(/<svg/g) || []).length,
        "every decorative icon/ornament is aria-hidden");
 assert(!/lorem|placeholder text|TODO/i.test(DLG), "no filler text in the dialog copy");
@@ -197,7 +198,7 @@ vm.runInContext(ABOUT_SRC, sandbox, { filename: "about.js" });
 
 /* the card reports the same focusable order a browser would */
 const CARD = doc.getElementById("aboutCard");   // getElementById is what lazily creates the stub
-const ORDER = ["aboutClose", "aboutGithubLink", "aboutEmailLink", "aboutCopyMail", "aboutGo"];
+const ORDER = ["aboutClose", "aboutEmailLink", "aboutCopyMail", "aboutGo"];
 CARD.querySelectorAll = () => ORDER.map(id => doc.getElementById(id));
 const BTN = doc.getElementById("btnAbout");
 BTN._cls.delete("hidden");                                 // the trigger is visible
