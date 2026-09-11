@@ -119,6 +119,7 @@ and archives are never shipped.
 | `test_mistake_learner.js` | self-learning safety + GDS re-paste regression for the 2026-09-07 weekly report — `node test_mistake_learner.js` |
 | `test_about_dialog.js` | About dialog: exact `About` label, focus trap, ESC/backdrop close, and that opening it cannot disturb a conversion — `node test_about_dialog.js` |
 | `test_ai_fix_label.js` | the AI FIX label is on the button and in every user-facing hint, with no legacy name left in the chrome, and the id stays `btnAi` — `node test_ai_fix_label.js` |
+| `test_jro_kilimanjaro.js` | TK AMS–IST–JRO–IST–AMS GDS re-paste regression (2026-09-10 report): Kilimanjaro `JRO` overlay, glued `¥1` marker, `7M8` equipment, and unknown-code numbered table rows surviving instead of being mangled — `node test_jro_kilimanjaro.js` |
 | `test_weekly_report.js` | weekly-report counters: week rollover, what counts as a conversion, blocked pop-up — `node test_weekly_report.js` |
 
 ## Privacy
