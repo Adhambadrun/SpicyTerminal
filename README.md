@@ -1,5 +1,16 @@
 # SpicyTerminal
 
+> **🚧 STATUS: UNDER MAINTENANCE — temporarily not working**
+>
+> The tool is taken offline for now and the deployed site shows an
+> **Under Maintenance** page instead of the app. Nothing is deleted — the
+> full engine, app and tests are untouched, ready to be re-worked and
+> re-enabled.
+>
+> **To bring the tool back:** set `MAINTENANCE_MODE = False` in
+> [`build_web.py`](build_web.py), then run `npm run build` (or just push —
+> Vercel/Netlify run the build on every deploy).
+
 Paste flights from Google Flights, airline sites, emails or screenshots —
 get a perfect, copy-paste-ready **GDS Black Window itinerary**.
 

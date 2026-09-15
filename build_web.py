@@ -14,6 +14,21 @@ Run from anywhere:  python3 build_web.py
 """
 import base64, pathlib, io, subprocess, tempfile
 
+# ---------------------------------------------------------------------------
+# MAINTENANCE MODE
+#
+# True  -> index.html / public/index.html are built from
+#          maintenance_template.html: the whole app is replaced by a static
+#          "Under Maintenance" page (the tool is temporarily not working).
+#          None of the engine/app sources are touched.
+#
+# False -> normal build: the full single-file app is emitted.
+#
+# To bring the tool back: set this to False and run `python3 build_web.py`
+# (or just push — Vercel/Netlify run `npm run build` on deploy).
+# ---------------------------------------------------------------------------
+MAINTENANCE_MODE = True
+
 SRC = pathlib.Path(__file__).resolve().parent
 
 def png64(src, resize):
@@ -54,20 +69,28 @@ def png64(src, resize):
             # optimizer is unavailable.
             return base64.b64encode(src.read_bytes()).decode()
 
-tpl = (SRC / "index_template.html").read_text(encoding="utf-8")
 mark = png64(SRC / "logo.png", "128x128")          # tab favicon
 full = png64(SRC / "wordmark_alpha.png", "640x")  # header + welcome wordmark
-ocrad = (SRC / "ocrad.js").read_text(encoding="utf-8") if (SRC / "ocrad.js").exists() else ""
-data = (SRC / "spicy_data.js").read_text(encoding="utf-8")
-engine = (SRC / "spicy_engine.js").read_text(encoding="utf-8")
-app = (SRC / "app.js").read_text(encoding="utf-8")
 
-html = (tpl.replace("__LOGO_MARK_B64__", mark)
-           .replace("__LOGO_FULL_B64__", full)
-           .replace("__OCRAD_JS__", ocrad)
-           .replace("__SPICY_DATA__", data)
-           .replace("__SPICY_ENGINE__", engine)
-           .replace("__APP_JS__", app))
+if MAINTENANCE_MODE:
+    # Under-maintenance build: ship only the status page.  The full engine
+    # and app sources stay in the repo untouched, ready to be re-worked and
+    # re-enabled by flipping MAINTENANCE_MODE back to False.
+    tpl = (SRC / "maintenance_template.html").read_text(encoding="utf-8")
+    html = (tpl.replace("__LOGO_MARK_B64__", mark)
+               .replace("__LOGO_FULL_B64__", full))
+else:
+    tpl = (SRC / "index_template.html").read_text(encoding="utf-8")
+    ocrad = (SRC / "ocrad.js").read_text(encoding="utf-8") if (SRC / "ocrad.js").exists() else ""
+    data = (SRC / "spicy_data.js").read_text(encoding="utf-8")
+    engine = (SRC / "spicy_engine.js").read_text(encoding="utf-8")
+    app = (SRC / "app.js").read_text(encoding="utf-8")
+    html = (tpl.replace("__LOGO_MARK_B64__", mark)
+               .replace("__LOGO_FULL_B64__", full)
+               .replace("__OCRAD_JS__", ocrad)
+               .replace("__SPICY_DATA__", data)
+               .replace("__SPICY_ENGINE__", engine)
+               .replace("__APP_JS__", app))
 
 dst = SRC / "index.html"
 dst.write_text(html, encoding="utf-8")
