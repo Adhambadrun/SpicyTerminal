@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SpicyTerminal — Under Maintenance</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,__LOGO_MARK_B64__">
+<style>
+:root{--bg:#05080b;--pane:#0a0f14;--line:#17222b;--dim:#546a77;--green:#53d977;
+--green2:#1f9d55;--red:#e2574b;--amber:#f0a35c;
+--mono:ui-monospace,"Cascadia Mono","JetBrains Mono",Consolas,Menlo,monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;width:100%}
+body{background:radial-gradient(1200px 800px at 50% -10%,#0a1218 0%,var(--bg) 55%);
+color:#c9d8ce;font-family:var(--mono);min-height:100dvh;display:flex;align-items:center;
+justify-content:center;padding:24px;
+padding-top:calc(24px + env(safe-area-inset-top));
+padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.card{width:min(560px,100%)}
+.card .logo{display:block;height:clamp(26px,4.5vh,36px);width:auto;max-width:78vw;
+object-fit:contain;margin:0 auto 22px}
+.term{border:1px solid var(--line);border-radius:10px;background:rgba(10,15,20,.92);
+box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden}
+.term-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;
+border-bottom:1px solid var(--line);background:#0d141a}
+.dot{width:11px;height:11px;border-radius:50%;flex:none}
+.dot.r{background:#e2574b}.dot.y{background:#f0a35c}.dot.g{background:#53d977}
+.term-title{margin-left:8px;color:var(--dim);font-size:11px;letter-spacing:1px;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.term-body{padding:22px 20px 24px;font-size:clamp(13px,1.6vw,14.5px);line-height:1.75}
+.prompt{color:var(--green);user-select:none}
+.cmd{color:#dbe7de}
+.badge{display:inline-block;margin:16px 0 14px;padding:7px 14px;border-radius:5px;
+border:1px solid rgba(240,163,92,.45);background:rgba(240,163,92,.1);color:var(--amber);
+font-weight:700;font-size:clamp(12px,1.7vw,14px);letter-spacing:2px}
+.msg{color:#9db3c0;font-size:clamp(12px,1.6vw,13.5px);line-height:1.8;max-width:52ch}
+.msg b{color:#dbe7de;font-weight:700}
+.caret{display:inline-block;width:8px;height:1.1em;background:var(--green);
+vertical-align:text-bottom;margin-left:2px;animation:blink 1.05s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.foot{margin-top:22px;text-align:center;color:#3e4f59;font-size:11px;line-height:1.8}
+.foot .heart{color:#e2574b}
+</style>
+</head>
+<body>
+<div class="card">
+  <img class="logo" alt="SpicyTerminal" src="data:image/png;base64,__LOGO_FULL_B64__">
+  <div class="term">
+    <div class="term-bar">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="term-title">spicyterminal — status</span>
+    </div>
+    <div class="term-body">
+      <div><span class="prompt">$</span> <span class="cmd">spicyterminal --status</span></div>
+      <div class="badge">&#9888; UNDER MAINTENANCE</div>
+      <p class="msg">
+        SpicyTerminal is <b>temporarily offline</b> — the tool no longer works at
+        the moment and is taken down while it is being reworked.<br><br>
+        No pasted data is lost: nothing was ever uploaded — everything stopped, safely.
+        Please check back soon.
+      </p>
+      <div style="margin-top:18px"><span class="prompt">$</span> <span class="caret"></span></div>
+    </div>
+  </div>
+  <p class="foot">Made with <span class="heart">&hearts;</span> by <b>Adham Badran</b> — SpicyTerminal</p>
+</div>
+</body>
+</html>
