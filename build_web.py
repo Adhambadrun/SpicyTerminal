@@ -96,10 +96,29 @@ dst = SRC / "index.html"
 dst.write_text(html, encoding="utf-8")
 print(f"Built {dst}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
 
+# When the maintenance terminal accepts `spicyterminal`, it opens the real
+# application in app.html. Build that companion artifact even while the
+# maintenance landing page is selected.
+if MAINTENANCE_MODE:
+    app_tpl = (SRC / "index_template.html").read_text(encoding="utf-8")
+    app_html = (app_tpl.replace("__LOGO_MARK_B64__", mark)
+                      .replace("__LOGO_FULL_B64__", full)
+                      .replace("__OCRAD_JS__", (SRC / "ocrad.js").read_text(encoding="utf-8"))
+                      .replace("__SPICY_DATA__", (SRC / "spicy_data.js").read_text(encoding="utf-8"))
+                      .replace("__SPICY_ENGINE__", (SRC / "spicy_engine.js").read_text(encoding="utf-8"))
+                      .replace("__APP_JS__", (SRC / "app.js").read_text(encoding="utf-8")))
+else:
+    app_html = html
+
 # Deploy output.  public/ is the default output directory on Vercel and the
 # publish directory in netlify.toml, so a `git push` deploy ships ONLY the
 # single-file app — never the repo's screenshots, sources or archives.
 pub = SRC / "public"
 pub.mkdir(exist_ok=True)
 (pub / "index.html").write_text(html, encoding="utf-8")
+(pub / "app.html").write_text(app_html, encoding="utf-8")
 print(f"Built {pub / 'index.html'}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
+print(f"Built {pub / 'app.html'}: {len(app_html):,} bytes ({len(app_html)/1024/1024:.2f} MB)")
+if MAINTENANCE_MODE:
+    (SRC / "app.html").write_text(app_html, encoding="utf-8")
+    print(f"Built {SRC / 'app.html'}: {len(app_html):,} bytes ({len(app_html)/1024/1024:.2f} MB)")
