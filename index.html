@@ -38,7 +38,10 @@ font-weight:700;font-size:clamp(12px,1.7vw,14px);letter-spacing:2px}
 .caret{display:inline-block;width:8px;height:1.1em;background:var(--green);
 vertical-align:text-bottom;margin-left:2px;animation:blink 1.05s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
-.foot{margin-top:22px;text-align:center;color:#3e4f59;font-size:11px;line-height:1.8}
+ .foot{margin-top:22px;text-align:center;color:#3e4f59;font-size:11px;line-height:1.8}
+.command-line{display:flex;align-items:center;margin-top:18px}
+.command-input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:#dbe7de;font:inherit;padding:0 0 0 6px;caret-color:var(--green)}
+.command-input:focus{box-shadow:0 1px 0 rgba(83,217,119,.35)}
 .foot .heart{color:#e2574b}
 </style>
 </head>
@@ -59,7 +62,28 @@ vertical-align:text-bottom;margin-left:2px;animation:blink 1.05s steps(1) infini
         No pasted data is lost: nothing was ever uploaded — everything stopped, safely.
         Please check back soon.
       </p>
-      <div style="margin-top:18px"><span class="prompt">$</span> <span class="caret"></span></div>
+      <form class="command-line" id="commandForm" autocomplete="off">
+        <span class="prompt">$</span>
+        <input class="command-input" id="commandInput" type="text" aria-label="Terminal command" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" autofocus>
+      </form>
+      <p class="msg" id="commandMessage" role="status" aria-live="polite" style="display:none;margin-top:12px"></p>
+      <script>
+        (function () {
+          var form = document.getElementById('commandForm');
+          var input = document.getElementById('commandInput');
+          var message = document.getElementById('commandMessage');
+          form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            if (input.value.trim().toLowerCase() === 'spicyterminal') {
+              window.location.href = 'app.html';
+              return;
+            }
+            message.textContent = 'command not found — type spicyterminal to continue';
+            message.style.display = 'block';
+            input.select();
+          });
+        }());
+      </script>
     </div>
   </div>
   <p class="foot">Made with <span class="heart">&hearts;</span> by <b>Adham Badran</b> — SpicyTerminal</p>
