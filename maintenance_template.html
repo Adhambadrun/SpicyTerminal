@@ -66,20 +66,16 @@ vertical-align:text-bottom;margin-left:2px;animation:blink 1.05s steps(1) infini
         <span class="prompt">$</span>
         <input class="command-input" id="commandInput" type="text" aria-label="Terminal command" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" autofocus>
       </form>
-      <p class="msg" id="commandMessage" role="status" aria-live="polite" style="display:none;margin-top:12px"></p>
       <script>
         (function () {
           var form = document.getElementById('commandForm');
           var input = document.getElementById('commandInput');
-          var message = document.getElementById('commandMessage');
           form.addEventListener('submit', function (event) {
             event.preventDefault();
             if (input.value.trim().toLowerCase() === 'spicyterminal') {
               window.location.href = 'app.html';
               return;
             }
-            message.textContent = 'command not found — type spicyterminal to continue';
-            message.style.display = 'block';
             input.select();
           });
         }());
