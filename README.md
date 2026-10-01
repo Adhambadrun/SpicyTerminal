@@ -1,15 +1,6 @@
 # SpicyTerminal
 
-> **🚧 STATUS: UNDER MAINTENANCE — temporarily not working**
->
-> The tool is taken offline for now and the deployed site shows an
-> **Under Maintenance** page instead of the app. Nothing is deleted — the
-> full engine, app and tests are untouched, ready to be re-worked and
-> re-enabled.
->
-> **To bring the tool back:** set `MAINTENANCE_MODE = False` in
-> [`build_web.py`](build_web.py), then run `npm run build` (or just push —
-> Vercel/Netlify run the build on every deploy).
+> **Status: online.** The full flight-conversion app is served from the homepage.
 
 Paste flights from Google Flights, airline sites, emails or screenshots —
 get a perfect, copy-paste-ready **GDS Black Window itinerary**.
@@ -85,6 +76,8 @@ hallucinations, no re-rolling the dice.
   Weekly Report / Report a bug`) and opens a dialog that says what the engine does, what it
   deliberately refuses to do, and who built it — no marketing, no fluff, `Esc` closes it and
   focus goes back where it was.
+- **Terminal boot animation**: the workspace panes slide in with a quick scanline sweep, the
+  ready indicator gently pulses, and the motion automatically turns off for reduced-motion users.
 - 100% offline, private — itineraries and screenshots never leave the browser.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.
@@ -100,8 +93,8 @@ The whole app is one static file, built by `npm run build` into
   publishes `public/`.
 - **Netlify Drop**: drag the generated `index.html` onto <https://app.netlify.com/drop>
 
-Only the single built file is ever deployed; repository screenshots, sources
-and archives are never shipped.
+Only the self-contained app pages are deployed; repository screenshots, source
+files and archives are never shipped.
 
 ## Structure
 

@@ -131,8 +131,10 @@ assert(!/static file|fuzz/i.test(DLG), "no '1 static file' or fuzz-suite chip re
 
 /* motion is decoration here, so it must be switch-offable */
 const CSS = TPL.slice(TPL.indexOf("<style>"), TPL.indexOf("</style>"));
-assert(/\.about-card\{[^}]*animation:aboutIn/.test(CSS) && /prefers-reduced-motion:reduce\)\{\.about-card\{animation:none/.test(CSS),
-       "the dialog entrance is disabled under prefers-reduced-motion");
+assert(/\.about-card\{[^}]*animation:aboutIn/.test(CSS) &&
+       /prefers-reduced-motion:reduce\)\{[^}]*\.about-card\{animation:none!important/.test(CSS) &&
+       /prefers-reduced-motion:reduce\)\{[^}]*#st::before/.test(CSS),
+       "decorative motion, including the dialog entrance and status pulse, is disabled under prefers-reduced-motion");
 assert(/#btnAbout:focus-visible|\.linkbtn\{[^}]*cursor:pointer/.test(CSS),
        "the trigger stays keyboard-visible in the row");
 

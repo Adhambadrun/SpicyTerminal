@@ -14,21 +14,7 @@ Run from anywhere:  python3 build_web.py
 """
 import base64, pathlib, io, subprocess, tempfile
 
-# ---------------------------------------------------------------------------
-# MAINTENANCE MODE
-#
-# True  -> index.html / public/index.html are built from
-#          maintenance_template.html: the whole app is replaced by a static
-#          "Under Maintenance" page (the tool is temporarily not working).
-#          None of the engine/app sources are touched.
-#
-# False -> normal build: the full single-file app is emitted.
-#
-# To bring the tool back: set this to False and run `python3 build_web.py`
-# (or just push — Vercel/Netlify run `npm run build` on deploy).
-# ---------------------------------------------------------------------------
-MAINTENANCE_MODE = True
-
+# Always build and deploy the working single-file application.
 SRC = pathlib.Path(__file__).resolve().parent
 
 def png64(src, resize):
@@ -72,53 +58,31 @@ def png64(src, resize):
 mark = png64(SRC / "logo.png", "128x128")          # tab favicon
 full = png64(SRC / "wordmark_alpha.png", "640x")  # header + welcome wordmark
 
-if MAINTENANCE_MODE:
-    # Under-maintenance build: ship only the status page.  The full engine
-    # and app sources stay in the repo untouched, ready to be re-worked and
-    # re-enabled by flipping MAINTENANCE_MODE back to False.
-    tpl = (SRC / "maintenance_template.html").read_text(encoding="utf-8")
-    html = (tpl.replace("__LOGO_MARK_B64__", mark)
-               .replace("__LOGO_FULL_B64__", full))
-else:
-    tpl = (SRC / "index_template.html").read_text(encoding="utf-8")
-    ocrad = (SRC / "ocrad.js").read_text(encoding="utf-8") if (SRC / "ocrad.js").exists() else ""
-    data = (SRC / "spicy_data.js").read_text(encoding="utf-8")
-    engine = (SRC / "spicy_engine.js").read_text(encoding="utf-8")
-    app = (SRC / "app.js").read_text(encoding="utf-8")
-    html = (tpl.replace("__LOGO_MARK_B64__", mark)
-               .replace("__LOGO_FULL_B64__", full)
-               .replace("__OCRAD_JS__", ocrad)
-               .replace("__SPICY_DATA__", data)
-               .replace("__SPICY_ENGINE__", engine)
-               .replace("__APP_JS__", app))
+tpl = (SRC / "index_template.html").read_text(encoding="utf-8")
+ocrad = (SRC / "ocrad.js").read_text(encoding="utf-8") if (SRC / "ocrad.js").exists() else ""
+data = (SRC / "spicy_data.js").read_text(encoding="utf-8")
+engine = (SRC / "spicy_engine.js").read_text(encoding="utf-8")
+app = (SRC / "app.js").read_text(encoding="utf-8")
+html = (tpl.replace("__LOGO_MARK_B64__", mark)
+           .replace("__LOGO_FULL_B64__", full)
+           .replace("__OCRAD_JS__", ocrad)
+           .replace("__SPICY_DATA__", data)
+           .replace("__SPICY_ENGINE__", engine)
+           .replace("__APP_JS__", app))
 
-dst = SRC / "index.html"
-dst.write_text(html, encoding="utf-8")
-print(f"Built {dst}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
+# Keep both historical entry points in sync: index.html is the deploy root;
+# app.html remains a friendly direct URL for existing bookmarks.
+for name in ("index.html", "app.html"):
+    dst = SRC / name
+    dst.write_text(html, encoding="utf-8")
+    print(f"Built {dst}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
 
-# When the maintenance terminal accepts `spicyterminal`, it opens the real
-# application in app.html. Build that companion artifact even while the
-# maintenance landing page is selected.
-if MAINTENANCE_MODE:
-    app_tpl = (SRC / "index_template.html").read_text(encoding="utf-8")
-    app_html = (app_tpl.replace("__LOGO_MARK_B64__", mark)
-                      .replace("__LOGO_FULL_B64__", full)
-                      .replace("__OCRAD_JS__", (SRC / "ocrad.js").read_text(encoding="utf-8"))
-                      .replace("__SPICY_DATA__", (SRC / "spicy_data.js").read_text(encoding="utf-8"))
-                      .replace("__SPICY_ENGINE__", (SRC / "spicy_engine.js").read_text(encoding="utf-8"))
-                      .replace("__APP_JS__", (SRC / "app.js").read_text(encoding="utf-8")))
-else:
-    app_html = html
-
-# Deploy output.  public/ is the default output directory on Vercel and the
-# publish directory in netlify.toml, so a `git push` deploy ships ONLY the
-# single-file app — never the repo's screenshots, sources or archives.
+# Deploy output. public/ is the default output directory on Vercel and the
+# publish directory in netlify.toml. It contains only self-contained app pages,
+# never the repo's screenshots, source files or archives.
 pub = SRC / "public"
 pub.mkdir(exist_ok=True)
-(pub / "index.html").write_text(html, encoding="utf-8")
-(pub / "app.html").write_text(app_html, encoding="utf-8")
-print(f"Built {pub / 'index.html'}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
-print(f"Built {pub / 'app.html'}: {len(app_html):,} bytes ({len(app_html)/1024/1024:.2f} MB)")
-if MAINTENANCE_MODE:
-    (SRC / "app.html").write_text(app_html, encoding="utf-8")
-    print(f"Built {SRC / 'app.html'}: {len(app_html):,} bytes ({len(app_html)/1024/1024:.2f} MB)")
+for name in ("index.html", "app.html"):
+    dst = pub / name
+    dst.write_text(html, encoding="utf-8")
+    print(f"Built {dst}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
