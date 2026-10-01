@@ -85,6 +85,18 @@ hallucinations, no re-rolling the dice.
   panes stay alive instead of going dark. A strip on an empty line only shimmers, and the
   bars follow resize, rotation, the phone keyboard and scrolling. Reduced-motion users get
   a quiet static glow instead of any animated sweep.
+- **OUTPUT always scrolls**: a long itinerary scrolls inside its own window — wheel, keys,
+  touch and drag-select. The result's print animation used to leave a text-clipped
+  background (`background-clip:text`) on that window, which is the browser bug that can stop
+  a scrolling element dead. The whole print is now carried by a short-lived class that app.js
+  takes off again the moment the effect ends — and the glyph streak inside it is skipped
+  entirely while the window can scroll, and for reduced-motion users — so what you scroll is
+  a plain, native scrollport with no clipped paint or leftover filter on it.
+- **INPUT scrollbar switch**: both windows now wear the same thin terminal-green scrollbar
+  (the INPUT textarea used to keep whatever bar the browser ships). The `SCROLLBAR` pill in
+  the INPUT header hides or shows that bar, remembers the choice per device, and reports
+  itself to screen readers as a switch. Hiding is cosmetic only — the window keeps scrolling
+  by wheel, arrow keys, PageUp/PageDown and touch.
 - 100% offline, private — itineraries and screenshots never leave the browser.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.

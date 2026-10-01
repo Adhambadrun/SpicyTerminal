@@ -46,12 +46,20 @@ background:linear-gradient(100deg,transparent 30%,rgba(106,170,212,.05) 40%,rgba
 .pane.changed::after{animation:change-sweep .65s cubic-bezier(.22,.61,.36,1)}
 .pane:not(.out).changed::after{animation:change-sweep .5s cubic-bezier(.22,.61,.36,1)}
 .pane.out.changed h2{animation:label-flare .65s cubic-bezier(.22,.61,.36,1)}
-.pane.out.changed pre.out{animation:out-print .52s cubic-bezier(.2,.7,.25,1) both}
+.pane.out.printing pre.out{animation:out-print .52s cubic-bezier(.2,.7,.25,1) both}
+/* The print is never left on the OUTPUT window: app.js puts .printing on it for
+   the ~0.65s the result takes to land and takes it off again, so what the user
+   scrolls afterwards is a plain, decoration-free scrollport.  The glyph streak
+   (.shine) is the one effect a scroll container must not keep: a background
+   clipped to text on a SCROLLING element is the browser bug that stops the
+   OUTPUT window from scrolling at all (the clipped paint does not travel with
+   the text, so wheel/touch scrolling has nothing to draw).  It is therefore
+   only ever added while OUTPUT cannot scroll, and background-attachment:local
+   pins the paint to the element's contents for the frames it does run. */
 @supports ((background-clip:text) or (-webkit-background-clip:text)){
-  /* a light streak travels through the glyphs while the result prints */
-  .pane.out.changed pre.out{color:transparent;background-color:var(--out);
+  .pane.out.printing.shine pre.out{color:transparent;background-color:var(--out);
   background-image:linear-gradient(100deg,rgba(255,255,255,0) 38%,rgba(232,255,240,.95) 50%,rgba(255,255,255,0) 62%);
-  background-size:260% 100%;-webkit-background-clip:text;background-clip:text;
+  background-size:260% 100%;background-attachment:local;-webkit-background-clip:text;background-clip:text;
   animation:out-print .52s cubic-bezier(.2,.7,.25,1) both,out-shine .65s cubic-bezier(.22,.61,.36,1) both}
 }
 /* per-line glow bars — the light is not only the pane's top edge: every
@@ -89,15 +97,39 @@ pre.out:empty::before{content:"▍";color:rgba(81,224,124,.5);animation:cursor-b
 @keyframes out-print{0%{opacity:.12;transform:translateY(8px);filter:blur(1.4px)}55%{opacity:1;filter:blur(0)}100%{opacity:1;transform:translateY(0);filter:blur(0)}}
 @keyframes out-shine{0%{background-position:135% 0}100%{background-position:-45% 0}}
 @keyframes cursor-blink{50%{opacity:0}}
-.pane h2{font-size:10px;letter-spacing:2px;color:#7f95a0;padding:9px 14px 7px;font-weight:700;flex:none}
+.pane h2{font-size:10px;letter-spacing:2px;color:#7f95a0;padding:9px 14px 7px;font-weight:700;flex:none;
+display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pane.out h2{color:var(--green)}
+/* Scrollbar switch in the INPUT header.  Both windows draw the same thin
+   terminal-green bar (see the shared ::-webkit-scrollbar rules below); this
+   quiet pill — the same furniture as the status row links, not a competing
+   button — lets the INPUT bar be hidden without ever disabling scrolling.
+   Green = bar shown, dim = bar hidden. */
+.barstoggle{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;font-weight:700;
+letter-spacing:1.4px;line-height:1;color:#546a77;background:none;border:1px solid #22313c;border-radius:999px;
+padding:4px 8px 4px 7px;min-height:0;cursor:pointer;transition:color .18s ease,border-color .18s ease,background .18s ease}
+.barstoggle::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5}
+.barstoggle:hover{color:#9fb4bf;border-color:#2b3d49;filter:none}
+.barstoggle[aria-checked="true"]{color:var(--green);border-color:rgba(83,217,119,.36);background:rgba(31,157,85,.1)}
+.barstoggle[aria-checked="true"]::before{opacity:1;box-shadow:0 0 6px rgba(83,217,119,.65)}
+.barstoggle:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 textarea,pre.out{flex:1 1 0%;background:transparent;border:0;outline:0;resize:none;font-family:var(--mono);
 font-size:clamp(13px,1.15vw + 10px,15px);line-height:1.55;padding:4px 14px 12px;white-space:pre-wrap;overflow:auto;color:#dbe7de;min-height:0;min-width:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
-pre.out{display:block;color:var(--out);overflow-x:auto;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(81,224,124,.42) transparent}
-pre.out::-webkit-scrollbar{width:8px;height:8px}
-pre.out::-webkit-scrollbar-track{background:rgba(7,12,16,.72)}
-pre.out::-webkit-scrollbar-thumb{background:rgba(81,224,124,.34);border:2px solid #0a0f14;border-radius:8px}
-pre.out::-webkit-scrollbar-thumb:hover{background:rgba(81,224,124,.68)}
+pre.out{display:block;color:var(--out);overflow-x:auto;overflow-y:auto}
+/* One scrollbar language for both windows: the INPUT textarea wears exactly the
+   OUTPUT bar — thin, terminal green, on a dark track.  Chrome/Firefox use the
+   standard properties; the ::-webkit-scrollbar rules give Safari and older
+   Chromium the same bar. */
+textarea,pre.out{scrollbar-width:thin;scrollbar-color:rgba(81,224,124,.42) transparent}
+textarea::-webkit-scrollbar,pre.out::-webkit-scrollbar{width:8px;height:8px}
+textarea::-webkit-scrollbar-track,pre.out::-webkit-scrollbar-track{background:rgba(7,12,16,.72)}
+textarea::-webkit-scrollbar-thumb,pre.out::-webkit-scrollbar-thumb{background:rgba(81,224,124,.34);border:2px solid #0a0f14;border-radius:8px}
+textarea::-webkit-scrollbar-thumb:hover,pre.out::-webkit-scrollbar-thumb:hover{background:rgba(81,224,124,.68)}
+/* The switch only hides the BAR.  The window keeps overflow:auto, so wheel,
+   arrow keys, PageUp/Down, drag-select and touch still scroll it exactly as
+   before — nothing about scrolling itself changes, only the paint. */
+.pane.bars-off textarea{scrollbar-width:none;-ms-overflow-style:none}
+.pane.bars-off textarea::-webkit-scrollbar{width:0;height:0;display:none}
 pre.out:focus-visible{outline:1px solid rgba(81,224,124,.55);outline-offset:-2px}
 textarea::placeholder{color:#3d4f57}
 .bar{display:flex;flex-wrap:wrap;gap:8px;padding:2px var(--pad-x) 8px;align-items:center;flex:none}
@@ -215,7 +247,10 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 .about-foot .ok{color:var(--green)}
 @media (min-width:760px){.about-cols{grid-template-columns:1.32fr .92fr}}
 /* Motion is decorative; honor the system's reduced-motion preference. */
-@media (prefers-reduced-motion:reduce){header,.pane,.pane::before,.pane::after,.pane.changed::before,.pane.changed::after,.pane:not(.out).changed::after,.pane.out.changed h2,.pane.out.changed pre.out,.bar,.status,#st::before,pre.out:empty::before,.lineglow,.lgline,.lgline::before,.about-card{animation:none!important}button,.about-links a,.about-links button{transition:none!important}.convert:hover,.convert:active{transform:none}.pane .lineglow{display:block!important}.pane .lgline{opacity:.22!important}.pane .lgline::before{display:none!important}}
+@media (prefers-reduced-motion:reduce){header,.pane,.pane::before,.pane::after,.pane.changed::before,.pane.changed::after,.pane:not(.out).changed::after,.pane.out.changed h2,.pane.out.printing pre.out,.bar,.status,#st::before,pre.out:empty::before,.lineglow,.lgline,.lgline::before,.about-card{animation:none!important}button,.about-links a,.about-links button,.barstoggle{transition:none!important}.convert:hover,.convert:active{transform:none}.pane .lineglow{display:block!important}.pane .lgline{opacity:.22!important}.pane .lgline::before{display:none!important}
+/* No animated sweep means no reason to clip the text either — the glyph shine
+   is a moving effect, so reduced-motion users get plain OUTPUT text. */
+.pane.out.printing.shine pre.out{color:var(--out)!important;background:none!important;-webkit-background-clip:border-box!important;background-clip:border-box!important}}
 @media (max-width:840px){main{grid-template-columns:1fr;grid-template-rows:repeat(2,minmax(0,1fr))}}
 /* Narrow phones: the masthead has one job, so the credit text yields to the
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
@@ -229,7 +264,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
   <div class="credit">made by Adham Badran</div>
 </header>
 <main>
-  <section class="pane"><h2>INPUT</h2>
+  <section class="pane"><h2>INPUT<button class="barstoggle" id="btnBars" type="button" role="switch" aria-checked="true" title="INPUT scrollbar: shown — click to hide it (the window still scrolls by wheel, keys and touch)">SCROLLBAR</button></h2>
     <textarea id="inp" placeholder="Paste flights, email text or a screenshot (Ctrl+V)"></textarea>
     <div class="lineglow" aria-hidden="true"></div>
   </section>
