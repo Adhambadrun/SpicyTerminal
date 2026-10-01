@@ -112,6 +112,10 @@ function loadApp(store, opts) {
   vm.runInContext(fnSrc("setStatus"), sandbox, { filename: "setStatus.js" });
   vm.runInContext(fnSrc("fp"), sandbox, { filename: "fp.js" });
   vm.runInContext("var lastOut = '';", sandbox);
+  // Every OUTPUT repaint goes through setOut() in app.js; the pane-change
+  // animation it triggers is out of scope here, so flashPane/outPane are stubs.
+  vm.runInContext("var outPane = null, flashPane = function () {};", sandbox);
+  vm.runInContext(fnSrc("setOut"), sandbox, { filename: "setOut.js" });
   vm.runInContext(RUNTIME_SRC, sandbox, { filename: "runtime.js" });
   vm.runInContext(CACHE_SRC, sandbox, { filename: "cache.js" });
   vm.runInContext(fnSrc("renderDirectSync"), sandbox, { filename: "renderDirectSync.js" });

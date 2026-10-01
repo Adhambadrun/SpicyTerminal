@@ -14,6 +14,37 @@
 "use strict";
 var $ = function (id) { return document.getElementById(id); };
 var inp = $("inp"), out = $("out"), st = $("st");
+
+/* ---------- pane change animations ---------- */
+// INPUT and OUTPUT panes play a moving scan every time their content changes.
+// CSS animations do not restart while the trigger class is still on the
+// element, so flashPane re-adds .changed on each change (remove -> forced
+// reflow -> add) and every edit — keystroke, paste, drop, clear, new result —
+// replays the sweep instead of only the first one animating.
+function flashPane(pane) {
+  if (!pane || !pane.classList) return;
+  pane.classList.remove("changed");
+  void pane.offsetWidth; // forced reflow makes the next add restart the animation
+  pane.classList.add("changed");
+}
+function paneOf(el) {
+  if (!el) return null;
+  if (el.closest) return el.closest(".pane");
+  return el.parentNode || null;
+}
+var inpPane = paneOf(inp), outPane = paneOf(out);
+// INPUT writes done in code (clear, drop, paste, attached text files) do not
+// fire an `input` event, so they flash the pane themselves. Typing and normal
+// paste flash from the input listener further below.
+function flashInput() { flashPane(inpPane); }
+// The single writer of the OUTPUT pane: animates it exactly when text changes.
+function setOut(text) {
+  text = text == null ? "" : text;
+  if (out.textContent === text) return;
+  out.textContent = text;
+  flashPane(outPane);
+}
+
 var images = [];
 var documents = [];
 var lastOut = "";
@@ -1820,7 +1851,7 @@ function removeImage(id) {
   imageParsePromise = null;
   cancelOcrWork();
   invalidateAiForAttachmentChange();
-  out.textContent = "";
+  setOut("");
   lastOut = "";
   var remaining = readyImages();
   var label = fileName(removed);
@@ -1997,7 +2028,7 @@ function renderAttachmentResults(results, token, batch, started) {
     }
     directPaintedBatch = batch;
     lastOut = outText;
-    out.textContent = outText;
+    setOut(outText);
     var ms = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - started);
     // An attached PDF cannot be read offline; say so instead of letting the
     // user assume it was part of this result.
@@ -2027,7 +2058,7 @@ function renderAttachmentResults(results, token, batch, started) {
     setStatus("Image parse did not detect flights — trying AI…");
     convertAi(true, "undetected attachment");
   } else {
-    out.textContent = "Could not detect flights in the attachment.\n\nSupported images are converted automatically, and this one came back empty-handed. Save a Gemini key and press AI FIX — it re-reads the same attachment with a vision model and repairs the result.";
+    setOut("Could not detect flights in the attachment.\n\nSupported images are converted automatically, and this one came back empty-handed. Save a Gemini key and press AI FIX — it re-reads the same attachment with a vision model and repairs the result.");
     setStatus("ATTACHMENT NOT READ — AI FIX can re-read it", true);
   }
 }
@@ -2048,7 +2079,7 @@ function convertImageAttachments(batch) {
     var cached = imgCacheGet(list[0]._hash);
     if (cached && cached.out) {
       lastOut = cached.out;
-      out.textContent = cached.out;
+      setOut(cached.out);
       setStatus("CACHED IMAGE — instant");
       imageParsePromise = null;
       return;
@@ -2102,6 +2133,7 @@ function appendTextFiles(files, token) {
     items.forEach(function(item) {
       if (!item.text) return;
       inp.value += (inp.value ? "\n\n" : "") + item.text.slice(0, 20000);
+      flashInput();
       added += item.text.length;
     });
     if (!added) { setStatus("EMPTY TEXT ATTACHMENT", true); return; }
@@ -2173,7 +2205,7 @@ function handleFiles(fileList) {
   aiSpeculationClearTimer();
   // A new attachment is a new conversion request; never leave the previous
   // itinerary copyable while the replacement is being decoded.
-  out.textContent = "";
+  setOut("");
   lastOut = "";
   setStatus("CHECKING ATTACHMENTS…");
   Promise.all(arr.map(classifyFile)).then(function(kinds) {
@@ -2198,10 +2230,10 @@ function renderDirectSync(text, opts){
   var cleaned = cleanOcrText(text, { learned: false });
   var res = window.SpicyEngine.parse(cleaned);
   var segs = res[0], warns = res[1];
-  if(!segs.length) { lastOut=""; out.textContent=""; return {segs:segs,warns:warns,out:""}; }
+  if(!segs.length) { lastOut=""; setOut(""); return {segs:segs,warns:warns,out:""}; }
   var outText = window.SpicyEngine.renderItinerary(segs);
   lastOut = outText;
-  out.textContent = outText;
+  setOut(outText);
   var msg = "CONVERTED — "+segs.length+" segment(s)";
   if(warns.length) msg+="  ·  "+warns.join(" · ");
   setStatus(msg, warns.length>0);
@@ -2219,7 +2251,7 @@ function convert(auto) {
   var hasImg = imgs.length > 0;
   var hasAnyAttachment = hasAttachments();
   if (!text.trim() && !hasAnyAttachment) {
-    out.textContent = "";
+    setOut("");
     lastOut = "";
     setStatus("READY");
     return;
@@ -2240,7 +2272,7 @@ function convert(auto) {
     var tc = tCacheGet(h);
     if (tc && tc.out) {
       lastOut = tc.out;
-      out.textContent = tc.out;
+      setOut(tc.out);
       lastTextFp = h;
       setStatus("CACHED TEXT — instant — " + (tc.out.split("\n").filter(function(l) { return / N$/.test(l); }).length) + " segs");
       recordStat("text_cached");      // a press that produced output, instantly
@@ -2277,7 +2309,7 @@ function convert(auto) {
       if (!lack) { lastTextFp = fp(text); return; }
       if (gemKey()) { convertAi(auto, lack); return; }
       if (!r.segs.length) {
-        out.textContent = "Couldn't read this paste.\n" + (r.warns[0] || "") + "\n\nThe auto engine could not make sense of it — press AI FIX to re-read it with Gemini (add a key first if asked).";
+        setOut("Couldn't read this paste.\n" + (r.warns[0] || "") + "\n\nThe auto engine could not make sense of it — press AI FIX to re-read it with Gemini (add a key first if asked).");
         setStatus("INCOMPLETE — needs AI", true);
       } else {
         setStatus(st.textContent + "  ·  partial — AI FIX can finish", true);
@@ -2472,7 +2504,7 @@ function convertAi(fromAuto, reason, specBatch){
     var rr; try{ rr=window.SpicyEngine.parse(t); }catch(e){ rr=null; }
     if(rr&&rr[0].length&&rr[0].length >= (t.split("\n").filter(function(l){return / N$/.test(l);}).length)){ t=window.SpicyEngine.renderItinerary(rr[0]); }
     var previousDirect = lastOut;
-    lastOut=t; out.textContent=t;
+    lastOut=t; setOut(t);
     // The AI reply is on screen: this is the conversion. (The request itself was
     // logged as `ai_call` when it started, so a reply that is ignored — or one
     // that never arrives — never lands in the conversion count.)
@@ -2500,7 +2532,7 @@ function convertAi(fromAuto, reason, specBatch){
     // batch completion handler may retry (next model in the queue).
     if(specBatch && aiSpeculation.batch===specBatch){ aiSpeculation.done = true; aiSpeculation.painted = false; }
     converting=false; window._aiStartedAt=0;
-    if(fallback){ lastOut=fallback; out.textContent=fallback; setStatus("AI failed — previous result kept", true); }
+    if(fallback){ lastOut=fallback; setOut(fallback); setStatus("AI failed — previous result kept", true); }
     else{ setStatus("AI failed: "+String(e.message||e).slice(0,70), true); }
   });
 }
@@ -2800,6 +2832,7 @@ document.addEventListener("drop", function(e) {
   var txt = dt.getData("text/plain");
   if (txt) {
     inp.value += (inp.value ? "\n\n" : "") + txt;
+    flashInput();
     convert(false);
   }
 }, false);
@@ -2825,6 +2858,7 @@ inp.addEventListener("paste", function(e) {
     // Keep meaningful text, then parse both sources together.
     if (textPlain && textPlain.trim().length > 15) {
       inp.value += (inp.value ? "\n\n" : "") + textPlain;
+      flashInput();
     }
     handleFiles(files);
     return;
@@ -2839,6 +2873,7 @@ inp.addEventListener("paste", function(e) {
 // made typing feel slow, not the converter itself.
 var typeTimer = null;
 inp.addEventListener("input", function() {
+  flashPane(inpPane);
   if (typeTimer) clearTimeout(typeTimer);
   var len = inp.value.length;
   if (!hasAttachments()) {
@@ -2867,7 +2902,8 @@ $("btnClear").addEventListener("click", function() {
   imageParseVersion = -1;
   imageParsePromise = null;
   inp.value = "";
-  out.textContent = "";
+  flashInput();
+  setOut("");
   lastOut = "";
   images = [];
   documents = [];
