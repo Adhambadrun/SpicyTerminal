@@ -45,6 +45,22 @@ assert(/\.pane\.changed::after/.test(CSS) && /\.pane\.changed::before/.test(CSS)
        "every pane animates on change (INPUT and OUTPUT share the .changed rules)");
 assert(/\.pane:not\(\.out\)::after\{/.test(CSS),
        "the INPUT pane has its own sweep tint instead of the OUTPUT green");
+assert(/\.pane:not\(\.out\)\.changed::after\{animation:change-sweep \.5s/.test(CSS),
+       "INPUT's scan is shorter/quieter so per-keystroke changes stay gentle");
+
+section("2b. OUTPUT change is a full result print");
+assert(/\.pane\.out\.changed pre\.out\{animation:out-print/.test(CSS) &&
+       /@keyframes out-print\{0%\{opacity:\.12;transform:translateY\(8px\);filter:blur\(1\.4px\)\}/.test(CSS),
+       "the itinerary materializes (fade + rise + blur-to-sharp) when output changes");
+assert(/@supports \(\(background-clip:text\) or \(-webkit-background-clip:text\)\)\{[\s\S]*?\.pane\.out\.changed pre\.out\{color:transparent;[\s\S]*?out-shine/.test(CSS),
+       "a light streak travels through the glyphs (background-clip:text, @supports-guarded)");
+assert(/@keyframes out-shine\{0%\{background-position:135% 0\}100%\{background-position:-45% 0\}\}/.test(CSS),
+       "the glyph shine sweeps across and settles clean");
+assert(/\.pane\.out\.changed h2\{animation:label-flare/.test(CSS) &&
+       /@keyframes label-flare\{0%\{color:var\(--green\)\}/.test(CSS),
+       "the OUTPUT label flares and returns on every result");
+assert(/pre\.out:empty::before\{content:"[▍█]";[^}]*animation:cursor-blink/.test(CSS),
+       "an empty OUTPUT pane keeps a blinking terminal cursor");
 
 section("3. every OUTPUT repaint animates (setOut is the single writer)");
 const rawWrites = APP.match(/out\.textContent\s*=(?!=)/g) || [];
@@ -70,6 +86,8 @@ assert(/pane\.classList\.remove\("changed"\);[\s\S]{0,120}void pane\.offsetWidth
 section("6. reduced motion switches the change animation off");
 assert(/prefers-reduced-motion:reduce\)\{[^}]*\.pane\.changed::after[^}]*\.about-card\{animation:none!important/.test(CSS),
        "the change animations are in the prefers-reduced-motion:reduce off-switch");
+assert(/prefers-reduced-motion:reduce\)\{[^}]*\.pane\.out\.changed pre\.out[^}]*\.about-card\{animation:none!important/.test(CSS),
+       "the output print, label flare and cursor blink are switched off too");
 assert(/prefers-reduced-motion:reduce\)\{[^}]*\.about-card\{animation:none!important/.test(CSS) &&
        /prefers-reduced-motion:reduce\)\{[^}]*#st::before/.test(CSS),
        "the pinned reduced-motion rules (about card, status pulse) stay intact");

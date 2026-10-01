@@ -32,22 +32,39 @@ padding:4px var(--pad-x) 8px;min-height:0;width:100%}
 .pane:first-child{animation-delay:.08s}
 .pane:nth-child(2){animation-delay:.18s}
 .pane::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:6px 6px 0 0;background:linear-gradient(90deg,transparent,rgba(83,217,119,.08) 28%,rgba(83,217,119,.72) 50%,rgba(226,87,75,.28) 72%,transparent);transform:translateX(-100%);pointer-events:none;z-index:2;animation:terminal-scan 1.05s cubic-bezier(.22,.61,.36,1) .24s both}
-/* change animations — INPUT and OUTPUT panes visibly "move" every time their
-   content changes.  app.js re-adds .changed on each change (remove class →
-   forced reflow → add), so back-to-back edits replay the scan instead of only
-   the first change animating.  INPUT sweeps cool blue, OUTPUT sweeps green. */
+/* change animations — INPUT and OUTPUT panes move every time their content
+   changes.  app.js re-adds .changed on each change (remove class → forced
+   reflow → add), so back-to-back edits replay the motion instead of only the
+   first change animating.  INPUT is a cool-blue live scan (light streak + edge
+   ring); OUTPUT is a full green "result print": top scan, label flare, light
+   streak over the pane, and the itinerary itself materializing line-block. */
 .pane::after{content:"";position:absolute;inset:0;border-radius:6px;pointer-events:none;z-index:3;opacity:0;color:rgba(83,217,119,.34);
-background:linear-gradient(100deg,transparent 32%,rgba(83,217,119,.05) 42%,rgba(83,217,119,.18) 50%,rgba(83,217,119,.05) 58%,transparent 68%);background-size:260% 100%;background-position:135% 0}
-.pane:not(.out)::after{color:rgba(106,170,212,.32);
-background:linear-gradient(100deg,transparent 32%,rgba(106,170,212,.05) 42%,rgba(106,170,212,.16) 50%,rgba(106,170,212,.05) 58%,transparent 68%);background-size:260% 100%;background-position:135% 0}
-.pane.changed::before{animation:terminal-scan .62s cubic-bezier(.22,.61,.36,1)}
-.pane.changed::after{animation:change-sweep .62s cubic-bezier(.22,.61,.36,1)}
+background:linear-gradient(100deg,transparent 30%,rgba(83,217,119,.06) 40%,rgba(83,217,119,.16) 46.5%,rgba(214,255,228,.3) 50%,rgba(83,217,119,.16) 53.5%,rgba(83,217,119,.06) 60%,transparent 70%);background-size:260% 100%;background-position:135% 0}
+.pane:not(.out)::after{color:rgba(106,170,212,.3);
+background:linear-gradient(100deg,transparent 30%,rgba(106,170,212,.05) 40%,rgba(106,170,212,.13) 46.5%,rgba(198,228,255,.24) 50%,rgba(106,170,212,.13) 53.5%,rgba(106,170,212,.05) 60%,transparent 70%);background-size:260% 100%;background-position:135% 0}
+.pane.changed::before{animation:terminal-scan .65s cubic-bezier(.22,.61,.36,1)}
+.pane.changed::after{animation:change-sweep .65s cubic-bezier(.22,.61,.36,1)}
+.pane:not(.out).changed::after{animation:change-sweep .5s cubic-bezier(.22,.61,.36,1)}
+.pane.out.changed h2{animation:label-flare .65s cubic-bezier(.22,.61,.36,1)}
+.pane.out.changed pre.out{animation:out-print .52s cubic-bezier(.2,.7,.25,1) both}
+@supports ((background-clip:text) or (-webkit-background-clip:text)){
+  /* a light streak travels through the glyphs while the result prints */
+  .pane.out.changed pre.out{color:transparent;background-color:var(--out);
+  background-image:linear-gradient(100deg,rgba(255,255,255,0) 38%,rgba(232,255,240,.95) 50%,rgba(255,255,255,0) 62%);
+  background-size:260% 100%;-webkit-background-clip:text;background-clip:text;
+  animation:out-print .52s cubic-bezier(.2,.7,.25,1) both,out-shine .65s cubic-bezier(.22,.61,.36,1) both}
+}
+pre.out:empty::before{content:"▍";color:rgba(81,224,124,.5);animation:cursor-blink 1.15s step-end infinite}
 .bar{animation:chrome-enter .52s cubic-bezier(.2,.75,.25,1) .28s both}
 .status{animation:chrome-enter .52s cubic-bezier(.2,.75,.25,1) .36s both}
 @keyframes chrome-enter{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pane-enter{from{opacity:0;transform:translateY(12px) scale(.992)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes terminal-scan{to{transform:translateX(100%)}}
-@keyframes change-sweep{0%{opacity:0;background-position:135% 0;box-shadow:inset 0 0 0 1px currentColor,0 0 18px 0 currentColor}18%{opacity:1}100%{opacity:0;background-position:-45% 0;box-shadow:inset 0 0 0 1px currentColor,0 0 2px 0 currentColor}}
+@keyframes change-sweep{0%{opacity:0;background-position:135% 0;box-shadow:inset 0 0 0 1px currentColor,0 0 22px 0 currentColor}18%{opacity:1}100%{opacity:0;background-position:-45% 0;box-shadow:inset 0 0 0 1px currentColor,0 0 3px 0 currentColor}}
+@keyframes label-flare{0%{color:var(--green)}24%{color:#c8ffdd}100%{color:var(--green)}}
+@keyframes out-print{0%{opacity:.12;transform:translateY(8px);filter:blur(1.4px)}55%{opacity:1;filter:blur(0)}100%{opacity:1;transform:translateY(0);filter:blur(0)}}
+@keyframes out-shine{0%{background-position:135% 0}100%{background-position:-45% 0}}
+@keyframes cursor-blink{50%{opacity:0}}
 .pane h2{font-size:10px;letter-spacing:2px;color:#7f95a0;padding:9px 14px 7px;font-weight:700;flex:none}
 .pane.out h2{color:var(--green)}
 textarea,pre.out{flex:1;background:transparent;border:0;outline:0;resize:none;font-family:var(--mono);
@@ -169,7 +186,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 .about-foot .ok{color:var(--green)}
 @media (min-width:760px){.about-cols{grid-template-columns:1.32fr .92fr}}
 /* Motion is decorative; honor the system's reduced-motion preference. */
-@media (prefers-reduced-motion:reduce){header,.pane,.pane::before,.pane::after,.pane.changed::before,.pane.changed::after,.bar,.status,#st::before,.about-card{animation:none!important}button,.about-links a,.about-links button{transition:none!important}.convert:hover,.convert:active{transform:none}}
+@media (prefers-reduced-motion:reduce){header,.pane,.pane::before,.pane::after,.pane.changed::before,.pane.changed::after,.pane:not(.out).changed::after,.pane.out.changed h2,.pane.out.changed pre.out,.bar,.status,#st::before,pre.out:empty::before,.about-card{animation:none!important}button,.about-links a,.about-links button{transition:none!important}.convert:hover,.convert:active{transform:none}}
 @media (max-width:840px){main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
 /* Narrow phones: the masthead has one job, so the credit text yields to the
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
