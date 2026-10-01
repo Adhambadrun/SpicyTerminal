@@ -65,6 +65,14 @@ function glowBody(pane) {
 function lineGlowLayer(pane) {
   return pane && pane.querySelector ? pane.querySelector(".lineglow") : null;
 }
+function glowIgniteStep(layer) {
+  var step = GLOW_STEP_FALLBACK;
+  try {
+    var css = window.getComputedStyle ? parseFloat(window.getComputedStyle(layer).getPropertyValue("--lgstep")) : NaN;
+    if (css && !isNaN(css)) step = css;
+  } catch (e) {}
+  return step;
+}
 function buildLineGlow(pane) {
   var layer = lineGlowLayer(pane), body = glowBody(pane);
   if (!layer || !body) return null;
@@ -76,24 +84,30 @@ function buildLineGlow(pane) {
   var padTop = parseFloat(cs.paddingTop) || 0;
   var padBottom = parseFloat(cs.paddingBottom) || 0;
   var bodyTop = body.offsetTop || 0, bodyH = body.offsetHeight || 0;
-  var rows = Math.floor((bodyH - padTop - padBottom) / lh);
+  if (!bodyH) return null; // wait for layout; resize/boot refresh will try again
+  var contentH = Math.max(0, (body.clientHeight || bodyH) - padTop - padBottom);
+  var rows = Math.ceil(contentH / lh);
   if (rows < 1) rows = 1;
   if (rows > GLOW_MAX_LINES) rows = GLOW_MAX_LINES;
   // Rebuild only when the pane's geometry actually moved (resize, rotation,
   // phone keyboard): typing must not thrash the DOM on every keystroke.
-  var sig = [rows, lh, bodyTop, bodyH, padTop].join("|");
+  var sig = [rows, lh, bodyTop, bodyH, padTop, padBottom].join("|");
   if (layer._sig !== sig) {
     layer._sig = sig;
     layer.style.top = bodyTop + "px";
     layer.style.height = bodyH + "px";
-    layer.style.setProperty("--lh", lh + "px");
-    layer.style.setProperty("--lgtop", padTop + "px");
-    layer.style.setProperty("--lgdrift", (GLOW_LOOP * GLOW_SPAN / rows).toFixed(1) + "ms");
+    var driftStep = GLOW_LOOP * GLOW_SPAN / rows;
+    var igniteStep = glowIgniteStep(layer);
     while (layer.firstChild) layer.removeChild(layer.firstChild);
     for (var i = 0; i < rows; i++) {
       var line = document.createElement("i");
       line.className = "lgline";
-      line.style.setProperty("--i", i);
+      // Bake row positions and stagger delays in JS instead of relying on
+      // CSS typed multiplication, which is still missing in some mobile WebViews.
+      line.style.top = (padTop + i * lh).toFixed(2) + "px";
+      line.style.height = lh.toFixed(2) + "px";
+      line.style.setProperty("--lgdrift-delay", (i * driftStep).toFixed(1) + "ms");
+      line.style.setProperty("--lgignite-delay", (i * igniteStep).toFixed(1) + "ms");
       layer.appendChild(line);
     }
     layer._rows = rows;
@@ -125,11 +139,7 @@ function igniteLineGlow(pane) {
   void layer.offsetWidth; // forced reflow: line 1 lights again on a back-to-back change
   layer.classList.add("lit");
   if (layer._litTimer) clearTimeout(layer._litTimer);
-  var rows = layer._rows || 0, step = GLOW_STEP_FALLBACK;
-  try {
-    var css = window.getComputedStyle ? parseFloat(window.getComputedStyle(layer).getPropertyValue("--lgstep")) : NaN;
-    if (css && !isNaN(css)) step = css;
-  } catch (e) {}
+  var rows = layer._rows || 0, step = glowIgniteStep(layer);
   layer._litTimer = setTimeout(function () {
     layer._litTimer = null;
     layer.classList.remove("lit"); // hand the pane back to the idle drift

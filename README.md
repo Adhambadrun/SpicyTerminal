@@ -83,8 +83,8 @@ hallucinations, no re-rolling the dice.
   (keystroke, paste, drop, new result) ignites them one after another so the light visibly
   walks the window, and between changes the same bars keep drifting in a slow wave, so the
   panes stay alive instead of going dark. A strip on an empty line only shimmers, and the
-  bars follow resize, rotation, the phone keyboard and scrolling — and switch off entirely
-  for reduced-motion users.
+  bars follow resize, rotation, the phone keyboard and scrolling. Reduced-motion users get
+  a quiet static glow instead of any animated sweep.
 - 100% offline, private — itineraries and screenshots never leave the browser.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.

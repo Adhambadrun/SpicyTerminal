@@ -26,8 +26,8 @@ min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) en
 header{padding:var(--pad-y) var(--pad-x) 6px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none;animation:chrome-enter .5s cubic-bezier(.2,.75,.25,1) both}
 header img{height:clamp(22px,3.2vh,28px);width:auto;max-width:min(62vw,420px);display:block;object-fit:contain}
 header .credit{color:#5b6e77;font-size:clamp(10px,1.6vw,11px);flex:none}
-main{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:clamp(8px,1.4vw,14px);
-padding:4px var(--pad-x) 8px;min-height:0;width:100%}
+main{flex:1 1 0%;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr);gap:clamp(8px,1.4vw,14px);
+padding:4px var(--pad-x) 8px;min-height:0;min-width:0;width:100%}
 .pane{position:relative;border:1px solid var(--line);border-radius:6px;background:var(--pane);display:flex;flex-direction:column;min-height:0;min-width:0;animation:pane-enter .62s cubic-bezier(.2,.8,.25,1) both}
 .pane:first-child{animation-delay:.08s}
 .pane:nth-child(2){animation-delay:.18s}
@@ -63,18 +63,18 @@ background:linear-gradient(100deg,transparent 30%,rgba(106,170,212,.05) 40%,rgba
    going dark once the wave has passed. */
 .lineglow{position:absolute;left:0;right:0;top:0;height:0;overflow:hidden;pointer-events:none;z-index:2;border-radius:0 0 6px 6px;--lg:83,217,119;--lgstep:26ms;--lgdur:5600ms}
 .pane:not(.out) .lineglow{--lg:106,170,212;--lgstep:18ms}
-.lgline{position:absolute;left:0;right:0;top:calc(var(--lgtop,0px) + var(--i,0) * var(--lh,20px));height:var(--lh,20px);opacity:0;border-radius:3px;
+.lgline{position:absolute;left:0;right:0;top:0;height:20px;opacity:0;border-radius:3px;
 background:linear-gradient(180deg,rgba(var(--lg),.14),rgba(var(--lg),.035) 38%,rgba(var(--lg),0) 76%);
 box-shadow:inset 0 1px 0 rgba(var(--lg),.26),inset 0 0 18px -6px rgba(var(--lg),.5);
-animation:lg-breathe var(--lgdur,5600ms) cubic-bezier(.42,0,.4,1) infinite;animation-delay:calc(var(--i,0) * var(--lgdrift,140ms))}
+animation:lg-breathe var(--lgdur,5600ms) cubic-bezier(.42,0,.4,1) infinite;animation-delay:var(--lgdrift-delay,0ms)}
 /* a strip that sits on a line with no text in it only shimmers — the wave
    still walks the whole window, but the light belongs to the words */
 .lgline.ghost{filter:opacity(.3)}
 .lgline::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;border-radius:2px;opacity:0;
 background:linear-gradient(90deg,rgba(var(--lg),0),rgba(var(--lg),.55) 6%,rgba(255,255,255,.9) 19%,rgba(var(--lg),.72) 36%,rgba(var(--lg),.2) 60%,rgba(var(--lg),0) 84%);
 background-size:220% 100%;background-position:120% 0}
-.lineglow.lit .lgline{animation:lg-ignite .62s cubic-bezier(.2,.72,.25,1);animation-delay:calc(var(--i,0) * var(--lgstep,24ms))}
-.lineglow.lit .lgline::before{animation:lg-sweep .62s cubic-bezier(.22,.61,.36,1);animation-delay:calc(var(--i,0) * var(--lgstep,24ms))}
+.lineglow.lit .lgline{animation:lg-ignite .62s cubic-bezier(.2,.72,.25,1);animation-delay:var(--lgignite-delay,0ms)}
+.lineglow.lit .lgline::before{animation:lg-sweep .62s cubic-bezier(.22,.61,.36,1);animation-delay:var(--lgignite-delay,0ms)}
 @keyframes lg-breathe{0%{opacity:0}14%{opacity:.15}34%{opacity:.3}62%{opacity:.13}100%{opacity:0}}
 @keyframes lg-ignite{0%{opacity:0;transform:translateX(-6px) scaleX(.99)}12%{opacity:1;transform:translateX(0) scaleX(1)}38%{opacity:1}74%{opacity:.34}100%{opacity:0;transform:translateX(7px)}}
 @keyframes lg-sweep{0%{opacity:0;background-position:120% 0}16%{opacity:1}70%{opacity:.75}100%{opacity:0;background-position:-40% 0}}
@@ -91,9 +91,14 @@ pre.out:empty::before{content:"▍";color:rgba(81,224,124,.5);animation:cursor-b
 @keyframes cursor-blink{50%{opacity:0}}
 .pane h2{font-size:10px;letter-spacing:2px;color:#7f95a0;padding:9px 14px 7px;font-weight:700;flex:none}
 .pane.out h2{color:var(--green)}
-textarea,pre.out{flex:1;background:transparent;border:0;outline:0;resize:none;font-family:var(--mono);
-font-size:clamp(13px,1.15vw + 10px,15px);line-height:1.55;padding:4px 14px 12px;white-space:pre-wrap;overflow:auto;color:#dbe7de;min-height:0;-webkit-overflow-scrolling:touch}
-pre.out{color:var(--out)}
+textarea,pre.out{flex:1 1 0%;background:transparent;border:0;outline:0;resize:none;font-family:var(--mono);
+font-size:clamp(13px,1.15vw + 10px,15px);line-height:1.55;padding:4px 14px 12px;white-space:pre-wrap;overflow:auto;color:#dbe7de;min-height:0;min-width:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+pre.out{display:block;color:var(--out);overflow-x:auto;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(81,224,124,.42) transparent}
+pre.out::-webkit-scrollbar{width:8px;height:8px}
+pre.out::-webkit-scrollbar-track{background:rgba(7,12,16,.72)}
+pre.out::-webkit-scrollbar-thumb{background:rgba(81,224,124,.34);border:2px solid #0a0f14;border-radius:8px}
+pre.out::-webkit-scrollbar-thumb:hover{background:rgba(81,224,124,.68)}
+pre.out:focus-visible{outline:1px solid rgba(81,224,124,.55);outline-offset:-2px}
 textarea::placeholder{color:#3d4f57}
 .bar{display:flex;flex-wrap:wrap;gap:8px;padding:2px var(--pad-x) 8px;align-items:center;flex:none}
 button{font-family:var(--mono);cursor:pointer;border:0;border-radius:4px;font-weight:700;font-size:12px;padding:9px 18px;letter-spacing:.5px;min-height:40px;transition:filter .18s ease,transform .18s ease,box-shadow .18s ease}
@@ -210,8 +215,8 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 .about-foot .ok{color:var(--green)}
 @media (min-width:760px){.about-cols{grid-template-columns:1.32fr .92fr}}
 /* Motion is decorative; honor the system's reduced-motion preference. */
-@media (prefers-reduced-motion:reduce){header,.pane,.pane::before,.pane::after,.pane.changed::before,.pane.changed::after,.pane:not(.out).changed::after,.pane.out.changed h2,.pane.out.changed pre.out,.bar,.status,#st::before,pre.out:empty::before,.lineglow,.lgline,.lgline::before,.about-card{animation:none!important}button,.about-links a,.about-links button{transition:none!important}.convert:hover,.convert:active{transform:none}.pane .lineglow{display:none!important}}
-@media (max-width:840px){main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){header,.pane,.pane::before,.pane::after,.pane.changed::before,.pane.changed::after,.pane:not(.out).changed::after,.pane.out.changed h2,.pane.out.changed pre.out,.bar,.status,#st::before,pre.out:empty::before,.lineglow,.lgline,.lgline::before,.about-card{animation:none!important}button,.about-links a,.about-links button{transition:none!important}.convert:hover,.convert:active{transform:none}.pane .lineglow{display:block!important}.pane .lgline{opacity:.22!important}.pane .lgline::before{display:none!important}}
+@media (max-width:840px){main{grid-template-columns:1fr;grid-template-rows:repeat(2,minmax(0,1fr))}}
 /* Narrow phones: the masthead has one job, so the credit text yields to the
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
    wordmark looked worse than a quiet header. */
@@ -228,8 +233,8 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
     <textarea id="inp" placeholder="Paste flights, email text or a screenshot (Ctrl+V)"></textarea>
     <div class="lineglow" aria-hidden="true"></div>
   </section>
-  <section class="pane out"><h2>OUTPUT</h2>
-    <pre class="out" id="out"></pre>
+  <section class="pane out"><h2 id="outputLabel">OUTPUT</h2>
+    <pre class="out" id="out" role="region" aria-labelledby="outputLabel" tabindex="0"></pre>
     <div class="lineglow" aria-hidden="true"></div>
   </section>
 </main>
