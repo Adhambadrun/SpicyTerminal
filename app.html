@@ -23,12 +23,20 @@
 html,body{height:100%;height:100dvh;width:100%;max-width:100%;overflow:hidden}
 body{background:var(--bg);color:#c9d8ce;font-family:var(--mono);display:flex;flex-direction:column;
 min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-header{padding:var(--pad-y) var(--pad-x) 6px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none}
+header{padding:var(--pad-y) var(--pad-x) 6px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none;animation:chrome-enter .5s cubic-bezier(.2,.75,.25,1) both}
 header img{height:clamp(22px,3.2vh,28px);width:auto;max-width:min(62vw,420px);display:block;object-fit:contain}
 header .credit{color:#5b6e77;font-size:clamp(10px,1.6vw,11px);flex:none}
 main{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:clamp(8px,1.4vw,14px);
 padding:4px var(--pad-x) 8px;min-height:0;width:100%}
-.pane{border:1px solid var(--line);border-radius:6px;background:var(--pane);display:flex;flex-direction:column;min-height:0;min-width:0}
+.pane{position:relative;border:1px solid var(--line);border-radius:6px;background:var(--pane);display:flex;flex-direction:column;min-height:0;min-width:0;animation:pane-enter .62s cubic-bezier(.2,.8,.25,1) both}
+.pane:first-child{animation-delay:.08s}
+.pane:nth-child(2){animation-delay:.18s}
+.pane::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:6px 6px 0 0;background:linear-gradient(90deg,transparent,rgba(83,217,119,.08) 28%,rgba(83,217,119,.72) 50%,rgba(226,87,75,.28) 72%,transparent);transform:translateX(-100%);pointer-events:none;z-index:2;animation:terminal-scan 1.05s cubic-bezier(.22,.61,.36,1) .24s both}
+.bar{animation:chrome-enter .52s cubic-bezier(.2,.75,.25,1) .28s both}
+.status{animation:chrome-enter .52s cubic-bezier(.2,.75,.25,1) .36s both}
+@keyframes chrome-enter{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pane-enter{from{opacity:0;transform:translateY(12px) scale(.992)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes terminal-scan{to{transform:translateX(100%)}}
 .pane h2{font-size:10px;letter-spacing:2px;color:#7f95a0;padding:9px 14px 7px;font-weight:700;flex:none}
 .pane.out h2{color:var(--green)}
 textarea,pre.out{flex:1;background:transparent;border:0;outline:0;resize:none;font-family:var(--mono);
@@ -36,9 +44,12 @@ font-size:clamp(13px,1.15vw + 10px,15px);line-height:1.55;padding:4px 14px 12px;
 pre.out{color:var(--out)}
 textarea::placeholder{color:#3d4f57}
 .bar{display:flex;flex-wrap:wrap;gap:8px;padding:2px var(--pad-x) 8px;align-items:center;flex:none}
-button{font-family:var(--mono);cursor:pointer;border:0;border-radius:4px;font-weight:700;font-size:12px;padding:9px 18px;letter-spacing:.5px;min-height:40px}
+button{font-family:var(--mono);cursor:pointer;border:0;border-radius:4px;font-weight:700;font-size:12px;padding:9px 18px;letter-spacing:.5px;min-height:40px;transition:filter .18s ease,transform .18s ease,box-shadow .18s ease}
 button:hover{filter:brightness(1.14)}
-.convert{background:var(--red);color:#fff}
+button:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.convert{background:var(--red);color:#fff;box-shadow:0 4px 16px rgba(226,87,75,.12)}
+.convert:hover{filter:brightness(1.12);transform:translateY(-2px);box-shadow:0 9px 22px rgba(226,87,75,.24)}
+.convert:active{transform:translateY(0) scale(.985)}
 .ai{background:var(--green2);color:#04240f}
 .attach,.clear,.copy{background:#18222b;color:#9fb4bf;border:1px solid #22313c}
 #thumbs{display:inline-flex;gap:6px;align-items:center;margin-left:6px;min-height:34px;flex-wrap:wrap}
@@ -55,7 +66,10 @@ button:hover{filter:brightness(1.14)}
 .copy{margin-left:auto;padding:9px 26px}
 .status{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:4px var(--pad-x) 10px;font-size:11px;flex:none}
 #st{color:var(--green);letter-spacing:.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#st::before{content:"";display:inline-block;width:6px;height:6px;margin:0 8px 1px 1px;border-radius:50%;background:currentColor;box-shadow:0 0 0 0 rgba(83,217,119,.45);vertical-align:middle;animation:status-pulse 2.2s ease-out infinite}
 #st.warn{color:#f0a35c}
+#st.warn::before{box-shadow:0 0 0 0 rgba(240,163,92,.42)}
+@keyframes status-pulse{0%{box-shadow:0 0 0 0 currentColor;opacity:.95}65%{box-shadow:0 0 0 7px transparent;opacity:.72}100%{box-shadow:0 0 0 0 transparent;opacity:.95}}
 #report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnAbout:hover{color:#8fa6b2}
 .linkbtn{color:#3e4f59;font-size:11px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono);font-weight:400;flex:none;white-space:nowrap;min-height:auto}
 #btnWeeklyReport{margin-right:12px}
@@ -143,9 +157,8 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 .about-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:16px 0 0;padding:12px 0 0;border-top:1px solid #141e26;color:#4d6371;font-size:10px;letter-spacing:.4px;line-height:1.6}
 .about-foot .ok{color:var(--green)}
 @media (min-width:760px){.about-cols{grid-template-columns:1.32fr .92fr}}
-/* A breathing dot and a sliding card are decoration; they must not be a
-   vestibular trigger. */
-@media (prefers-reduced-motion:reduce){.about-card{animation:none}.about-links a,.about-links button{transition:none}}
+/* Motion is decorative; honor the system's reduced-motion preference. */
+@media (prefers-reduced-motion:reduce){header,.pane,.pane::before,.bar,.status,#st::before,.about-card{animation:none!important}button,.about-links a,.about-links button{transition:none!important}.convert:hover,.convert:active{transform:none}}
 @media (max-width:840px){main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
 /* Narrow phones: the masthead has one job, so the credit text yields to the
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
