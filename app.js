@@ -27,6 +27,7 @@ function flashPane(pane) {
   void pane.offsetWidth; // forced reflow makes the next add restart the animation
   pane.classList.add("changed");
   igniteLineGlow(pane); // the per-line glow bars walk the window on the same change
+  printGlyphs(pane);    // OUTPUT only: the glyph shine, kept off any window that can scroll
 }
 function paneOf(el) {
   if (!el) return null;
@@ -173,6 +174,98 @@ try {
   }
 } catch (e) {}
 setTimeout(refreshLineGlows, 600); // after the boot animation has settled
+
+/* SCROLLBARS:BEGIN */
+/* ---------- the OUTPUT print, and why it can never stop the window scrolling ---------- */
+// The result "prints" with a light streak through its glyphs: the text is
+// painted from a background clipped to the letters (background-clip:text).
+// That is the one effect that can take a window's scrolling with it — a clipped
+// background on a SCROLLING element is the known browser bug behind "the OUTPUT
+// window will not scroll down": the clipped paint does not travel with the
+// text, so once the result is long enough to scroll, the window stops moving.
+// So the print is carried by a short-lived .printing class — and the clipped
+// streak inside it (.printing.shine) only ever runs where it cannot cost the
+// user a scroll:
+//   - .printing is never left on the window: it is dropped on the effect's own
+//     `animationend`, with a timer as the safety net, so what a user scrolls
+//     afterwards is a plain, native scrollport — no clipped paint, no leftover
+//     filter or transform;
+//   - .shine is skipped while the window can scroll (vertically or
+//     horizontally): a long itinerary keeps the fade/rise print, the pane sweep
+//     and the per-line glow bars, none of which clip the text;
+//   - .shine is skipped for a user who asked for reduced motion.
+var PRINT_MS = 900;   // out-shine is .65s; the timer only exists in case animationend never fires
+// .printing  -> the fade/rise print, on every result, off again when it has played
+// .printing.shine -> adds the clipped glyph streak, ONLY where it cannot cost a scroll
+function outCanScroll() {
+  if (!out) return false;
+  var v = out.clientHeight ? out.scrollHeight > out.clientHeight + 2 : false;
+  var h = out.clientWidth ? out.scrollWidth > out.clientWidth + 2 : false;
+  return v || h;
+}
+function prefersReducedMotion() {
+  try {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  } catch (e) { return false; }
+}
+function endPrint() {
+  if (!outPane || !outPane.classList) return;
+  if (outPane._printTimer) { clearTimeout(outPane._printTimer); outPane._printTimer = null; }
+  outPane.classList.remove("printing");
+  outPane.classList.remove("shine");
+}
+function printGlyphs(pane) {
+  if (!pane || !pane.classList || pane !== outPane) return; // INPUT has no clipped text
+  if (pane._printTimer) { clearTimeout(pane._printTimer); pane._printTimer = null; }
+  pane.classList.remove("printing");
+  pane.classList.remove("shine");
+  void pane.offsetWidth; // forced reflow: the print replays on a back-to-back result
+  pane.classList.add("printing");
+  // The clipped streak never runs on a window that can scroll, nor for a user
+  // who asked for reduced motion — they keep the plain fade/rise print.
+  if (!outCanScroll() && !prefersReducedMotion()) pane.classList.add("shine");
+  pane._printTimer = setTimeout(function () {
+    pane._printTimer = null;
+    endPrint();
+  }, PRINT_MS);
+}
+// `animationend` is the honest end of the effect; the timer above is only a
+// fallback for engines that do not fire it on a background-position animation.
+if (out && out.addEventListener) {
+  out.addEventListener("animationend", function (e) {
+    if (e && (e.animationName === "out-shine" || e.animationName === "out-print")) endPrint();
+  });
+}
+
+/* ---------- INPUT scrollbar switch ---------- */
+// OUTPUT has always drawn its own thin green scrollbar; INPUT used to keep
+// whatever bar the browser ships, so the two windows of the same terminal spoke
+// two visual languages.  The switch in the INPUT header gives INPUT the OUTPUT
+// bar and lets it be hidden — hiding is cosmetic only, because the textarea
+// keeps its overflow: the window still scrolls by wheel, arrow keys, PageUp/
+// PageDown, drag-select and touch.  The choice is remembered per device.
+var BARS_KEY = "spicy_input_bars";
+var btnBars = $("btnBars");
+function inputBarsOn() {
+  try { return localStorage.getItem(BARS_KEY) !== "0"; } catch (e) { return true; }
+}
+function applyInputBars(on, persist) {
+  if (inpPane && inpPane.classList) inpPane.classList.toggle("bars-off", !on);
+  if (btnBars && btnBars.setAttribute) {
+    btnBars.setAttribute("aria-checked", on ? "true" : "false");
+    btnBars.title = on
+      ? "INPUT scrollbar: shown — click to hide it (the window still scrolls by wheel, keys and touch)"
+      : "INPUT scrollbar: hidden — click to show it (styled exactly like OUTPUT)";
+  }
+  if (persist) { try { localStorage.setItem(BARS_KEY, on ? "1" : "0"); } catch (e) {} }
+}
+function toggleInputBars() {
+  var on = !!(inpPane && inpPane.classList && inpPane.classList.contains("bars-off"));
+  applyInputBars(on, true);
+}
+if (btnBars && btnBars.addEventListener) btnBars.addEventListener("click", toggleInputBars);
+applyInputBars(inputBarsOn(), false);
+/* SCROLLBARS:END */
 
 var images = [];
 var documents = [];

@@ -56,11 +56,15 @@ assert(/\.pane:not\(\.out\)\.changed::after\{animation:change-sweep \.5s/.test(C
        "INPUT's scan is shorter/quieter so per-keystroke changes stay gentle");
 
 section("2b. OUTPUT change is a full result print");
-assert(/\.pane\.out\.changed pre\.out\{animation:out-print/.test(CSS) &&
-       /@keyframes out-print\{0%\{opacity:\.12;transform:translateY\(8px\);filter:blur\(1\.4px\)\}/.test(CSS),
-       "the itinerary materializes (fade + rise + blur-to-sharp) when output changes");
-assert(/@supports \(\(background-clip:text\) or \(-webkit-background-clip:text\)\)\{[\s\S]*?\.pane\.out\.changed pre\.out\{color:transparent;[\s\S]*?out-shine/.test(CSS),
+assert(/\.pane\.out\.printing pre\.out\{animation:out-print/.test(CSS) &&
+       /@keyframes out-print\{0%\{opacity:\.12;transform:translateY\(8px\);filter:blur\(1\.4px\)\}/.test(CSS) &&
+       !/\.pane\.out\.changed pre\.out\{animation:out-print/.test(CSS),
+       "the itinerary materializes (fade + rise + blur-to-sharp) when output changes — on the short-lived .printing, never on .changed");
+assert(/@supports \(\(background-clip:text\) or \(-webkit-background-clip:text\)\)\{[\s\S]*?\.pane\.out\.printing\.shine pre\.out\{color:transparent;[\s\S]*?out-shine/.test(CSS),
        "a light streak travels through the glyphs (background-clip:text, @supports-guarded)");
+assert(!/\.pane\.out\.(changed|printing) pre\.out\{[^}]*background-clip/.test(CSS) &&
+       /\.pane\.out\.printing\.shine pre\.out\{[^}]*background-attachment:local/.test(CSS),
+       "the clipped paint lives on the short-lived .shine class (never on .changed/.printing alone), pinned to the contents");
 assert(/@keyframes out-shine\{0%\{background-position:135% 0\}100%\{background-position:-45% 0\}\}/.test(CSS),
        "the glyph shine sweeps across and settles clean");
 assert(/\.pane\.out\.changed h2\{animation:label-flare/.test(CSS) &&
@@ -73,7 +77,7 @@ section("2c. every visible line of the window gets its own glowing bar");
 assert(/\.lineglow\{[^}]*position:absolute[^}]*pointer-events:none/.test(CSS),
        "the per-line glow layer is a decoration overlay (never intercepts clicks)");
 assert((TPL.match(/class="lineglow"/g) || []).length === 2 &&
-       /<section class="pane"><h2>INPUT<\/h2>[\s\S]*?class="lineglow"/.test(TPL) &&
+       /<section class="pane"><h2>INPUT[\s\S]*?<\/h2>[\s\S]*?class="lineglow"/.test(TPL) &&
        /<section class="pane out"><h2[^>]*>OUTPUT<\/h2>[\s\S]*?class="lineglow"/.test(TPL),
        "one glow layer inside each pane — INPUT and OUTPUT both animate per line");
 assert(/line\.style\.top = \(padTop \+ i \* lh\)\.toFixed\(2\) \+ "px";/.test(APP) &&
@@ -155,7 +159,7 @@ assert(/pane\.classList\.remove\("changed"\);[\s\S]{0,120}void pane\.offsetWidth
 section("6. reduced motion switches the change animation off");
 assert(/prefers-reduced-motion:reduce\)\{[^}]*\.pane\.changed::after[^}]*\.about-card\{animation:none!important/.test(CSS),
        "the change animations are in the prefers-reduced-motion:reduce off-switch");
-assert(/prefers-reduced-motion:reduce\)\{[^}]*\.pane\.out\.changed pre\.out[^}]*\.about-card\{animation:none!important/.test(CSS),
+assert(/prefers-reduced-motion:reduce\)\{[^}]*\.pane\.out\.printing pre\.out[^}]*\.about-card\{animation:none!important/.test(CSS),
        "the output print, label flare and cursor blink are switched off too");
 assert(/prefers-reduced-motion:reduce\)\{[^}]*\.about-card\{animation:none!important/.test(CSS) &&
        /prefers-reduced-motion:reduce\)\{[^}]*#st::before/.test(CSS),
