@@ -5,6 +5,13 @@
  *   - JS:   flashPane() restarts the CSS animation on every single change
  *           (remove class -> forced reflow -> add), so back-to-back edits replay
  *           it instead of only the first change animating.
+ *   - CSS:  .lineglow/.lgline — every visible LINE of the window carries its own
+ *           glowing bar, so the light walks the pane line by line, not just the
+ *           top edge.  JS builds one strip per real text line and re-arms them
+ *           (.lit) on each change; between changes they keep drifting.
+ *   - JS:   buildLineGlow() sizes the strips from the pane's own line-height,
+ *           refreshLineGlows() follows resizes/keyboard, syncLineGlow() keeps
+ *           the bars glued to the text while a pane scrolls.
  *   - OUTPUT is written through setOut() only, which animates exactly when the
  *     text actually changes.
  *   - INPUT flashes from the `input` listener and from every programmatic
@@ -62,6 +69,56 @@ assert(/\.pane\.out\.changed h2\{animation:label-flare/.test(CSS) &&
 assert(/pre\.out:empty::before\{content:"[▍█]";[^}]*animation:cursor-blink/.test(CSS),
        "an empty OUTPUT pane keeps a blinking terminal cursor");
 
+section("2c. every visible line of the window gets its own glowing bar");
+assert(/\.lineglow\{[^}]*position:absolute[^}]*pointer-events:none/.test(CSS),
+       "the per-line glow layer is a decoration overlay (never intercepts clicks)");
+assert((TPL.match(/class="lineglow"/g) || []).length === 2 &&
+       /<section class="pane"><h2>INPUT<\/h2>[\s\S]*?class="lineglow"/.test(TPL) &&
+       /<section class="pane out"><h2>OUTPUT<\/h2>[\s\S]*?class="lineglow"/.test(TPL),
+       "one glow layer inside each pane — INPUT and OUTPUT both animate per line");
+assert(/\.lgline\{[^}]*top:calc\(var\(--lgtop,0px\) \+ var\(--i,0\) \* var\(--lh,20px\)\)[^}]*height:var\(--lh,20px\)/.test(CSS),
+       "each strip is placed and sized from the pane's own line-height, so it lands on a real line of text");
+assert(/@keyframes lg-breathe\{/.test(CSS) && /\.lgline\{[^}]*animation:lg-breathe/.test(CSS),
+       "every line's bar keeps a slow idle drift, so both windows stay alive between changes");
+assert(/@keyframes lg-ignite\{/.test(CSS) && /\.lineglow\.lit \.lgline\{animation:lg-ignite/.test(CSS) &&
+       /@keyframes lg-sweep\{/.test(CSS) && /\.lineglow\.lit \.lgline::before\{animation:lg-sweep/.test(CSS),
+       "a change ignites every line: the bar flares with a left-to-right light sweep");
+assert(/\.lgline\{[^}]*animation-delay:calc\(var\(--i,0\) \* var\(--lgdrift/.test(CSS) &&
+       /\.lineglow\.lit \.lgline\{[^}]*animation-delay:calc\(var\(--i,0\) \* var\(--lgstep/.test(CSS),
+       "the wave is staggered per line: each line lights after the one above it (index-driven delays)");
+assert(/\.pane:not\(\.out\) \.lineglow\{--lg:106,170,212/.test(CSS) &&
+       /\.lineglow\{[^}]*--lg:83,217,119/.test(CSS),
+       "INPUT glows cool blue and OUTPUT terminal green (matching each pane)");
+assert(/\.lgline::before\{[^}]*rgba\(255,255,255,\.9\)/.test(CSS) && /@keyframes lg-sweep\{[^}]*background-position/.test(CSS),
+       "each line's bar carries a bright head that sweeps across it");
+assert(/\.lgline\.ghost\{filter:opacity\(\.3\)\}/.test(CSS) && /strip\.classList\.add\("ghost"\)/.test(APP) &&
+       /var lines = Math\.min\(text\.split\("\\n"\)\.length, layer\._rows\)/.test(APP),
+       "a stem with no text in it only shimmers — the light belongs to the words");
+
+section("2d. app.js walks the window line by line (real geometry, no thrash)");
+assert(/function buildLineGlow\(pane\)/.test(APP) && /line\.className = "lgline"/.test(APP),
+       "app.js builds one glow strip per line of the pane");
+assert(/function igniteLineGlow\(pane\)[\s\S]{0,320}layer\.classList\.add\("lit"\);/.test(APP) &&
+       /pane\.classList\.add\("changed"\);\s*\n\s*igniteLineGlow\(pane\);/.test(APP),
+       "flashPane() re-arms the per-line wave on every change, right after .changed");
+assert(/if \(layer\._sig !== sig\)/.test(APP) && /var sig = \[rows, lh, bodyTop, bodyH, padTop\]\.join\("\|"\)/.test(APP),
+       "strips are rebuilt only when the pane geometry actually moved (typing never thrashes the DOM)");
+assert(/rows > GLOW_MAX_LINES/.test(APP) && /GLOW_MAX_LINES = 80/.test(APP),
+       "the strip count is capped so a very tall window cannot build thousands of nodes");
+assert(/function refreshLineGlows\(\)/.test(APP) &&
+       /window\.addEventListener\("resize", refreshLineGlows\)/.test(APP) &&
+       /window\.addEventListener\("orientationchange", refreshLineGlows\)/.test(APP) &&
+       /new window\.ResizeObserver/.test(APP),
+       "the bars follow window resize, rotation and pane reflow (phone keyboard)");
+assert(/function syncLineGlow\(pane\)/.test(APP) &&
+       /inp\.addEventListener\("scroll", function \(\) \{ syncLineGlow\(inpPane\); \}\)/.test(APP) &&
+       /out\.addEventListener\("scroll", function \(\) \{ syncLineGlow\(outPane\); \}\)/.test(APP),
+       "scrolling a pane slides the bars with the text instead of drifting off the lines");
+assert(/setTimeout\(function \(\) \{\s*\n\s*layer\._litTimer = null;\s*\n\s*layer\.classList\.remove\("lit"\);/.test(APP),
+       "when the wave ends the pane hands itself back to the idle drift");
+assert(/var css = window\.getComputedStyle \? parseFloat\(window\.getComputedStyle\(layer\)\.getPropertyValue\("--lgstep"\)\)/.test(APP),
+       "each pane's own CSS stagger drives its wave length (INPUT faster than OUTPUT)");
+
 section("3. every OUTPUT repaint animates (setOut is the single writer)");
 const rawWrites = APP.match(/out\.textContent\s*=(?!=)/g) || [];
 assert(rawWrites.length === 1 && /function setOut\(text\)/.test(APP),
@@ -91,11 +148,17 @@ assert(/prefers-reduced-motion:reduce\)\{[^}]*\.pane\.out\.changed pre\.out[^}]*
 assert(/prefers-reduced-motion:reduce\)\{[^}]*\.about-card\{animation:none!important/.test(CSS) &&
        /prefers-reduced-motion:reduce\)\{[^}]*#st::before/.test(CSS),
        "the pinned reduced-motion rules (about card, status pulse) stay intact");
+assert(/prefers-reduced-motion:reduce\)\{[^}]*\.lineglow,\.lgline,\.lgline::before,\.about-card\{animation:none!important/.test(CSS) &&
+       /prefers-reduced-motion:reduce\)\{[\s\S]*?\.pane \.lineglow\{display:none!important\}\}/.test(CSS),
+       "the per-line glow bars are switched off completely under prefers-reduced-motion");
 
 section("7. the built single-file page carries the feature");
 assert(BUILT.includes("@keyframes change-sweep") && BUILT.includes("function flashPane(") &&
        BUILT.includes("function setOut("),
        "built index.html contains the change animation CSS and JS");
+assert(BUILT.includes("@keyframes lg-ignite") && BUILT.includes("@keyframes lg-breathe") &&
+       BUILT.includes("function buildLineGlow(") && BUILT.includes('class="lineglow"'),
+       "built index.html carries the per-line glow bars (CSS, JS and markup)");
 
 console.log("\n=== SUMMARY: " + passed + " passed, " + failed + " failed ===");
 process.exit(failed ? 1 : 0);

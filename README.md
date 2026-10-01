@@ -78,6 +78,13 @@ hallucinations, no re-rolling the dice.
   focus goes back where it was.
 - **Terminal boot animation**: the workspace panes slide in with a quick scanline sweep, the
   ready indicator gently pulses, and the motion automatically turns off for reduced-motion users.
+- **Per-line glow bars**: both windows light up line by line — every visible line of INPUT
+  carries a cool-blue glowing bar and every line of OUTPUT a terminal-green one. A change
+  (keystroke, paste, drop, new result) ignites them one after another so the light visibly
+  walks the window, and between changes the same bars keep drifting in a slow wave, so the
+  panes stay alive instead of going dark. A strip on an empty line only shimmers, and the
+  bars follow resize, rotation, the phone keyboard and scrolling — and switch off entirely
+  for reduced-motion users.
 - 100% offline, private — itineraries and screenshots never leave the browser.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.
