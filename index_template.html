@@ -90,9 +90,9 @@ background-size:220% 100%;background-position:120% 0}
    blurred into a soft bloom.  Two comet heads sit half a turn apart so the
    whole outline is always lit and always moving. */
 @property --edge-ang{syntax:"<angle>";inherits:true;initial-value:0deg}
-.edgeglow{position:absolute;inset:-1px;border-radius:7px;pointer-events:none;z-index:4;--eg:83,217,119;--eg-hi:226,255,236;--eg-speed:5.2s;
+.edgeglow{position:absolute;inset:-1px;border-radius:7px;pointer-events:none;z-index:4;--eg:83,217,119;--eg-hi:226,255,236;--eg-speed:11s;
 animation:edge-spin var(--eg-speed) linear infinite}
-.pane:not(.out) .edgeglow{--eg:106,170,212;--eg-hi:214,236,255;animation-delay:-1.3s}
+.pane:not(.out) .edgeglow{--eg:106,170,212;--eg-hi:214,236,255;animation-delay:-2.8s}
 .edgeglow::before,.edgeglow::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:2px;
 background:conic-gradient(from var(--edge-ang),rgba(var(--eg),.1) 0deg,rgba(var(--eg),.22) 90deg,rgba(var(--eg),.95) 172deg,rgb(var(--eg-hi)) 180deg,rgba(var(--eg),.1) 180deg,rgba(var(--eg),.22) 270deg,rgba(var(--eg),.95) 352deg,rgb(var(--eg-hi)) 360deg);
 -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
