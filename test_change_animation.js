@@ -164,7 +164,7 @@ assert(/prefers-reduced-motion:reduce\)\{[^}]*\.pane\.out\.printing pre\.out[^}]
 assert(/prefers-reduced-motion:reduce\)\{[^}]*\.about-card\{animation:none!important/.test(CSS) &&
        /prefers-reduced-motion:reduce\)\{[^}]*#st::before/.test(CSS),
        "the pinned reduced-motion rules (about card, status pulse) stay intact");
-assert(/prefers-reduced-motion:reduce\)\{[^}]*\.lineglow,\.lgline,\.lgline::before,\.about-card\{animation:none!important/.test(CSS) &&
+assert(/prefers-reduced-motion:reduce\)\{[^}]*\.lineglow,\.lgline,\.lgline::before,\.edgeglow,\.about-card\{animation:none!important/.test(CSS) &&
        /\.pane \.lineglow\{display:block!important\}\.pane \.lgline\{opacity:\.22!important\}\.pane \.lgline::before\{display:none!important\}/.test(CSS),
        "reduced-motion users still get a static glow bar without any animated sweep");
 
@@ -175,6 +175,20 @@ assert(BUILT.includes("@keyframes change-sweep") && BUILT.includes("function fla
 assert(BUILT.includes("@keyframes lg-ignite") && BUILT.includes("@keyframes lg-breathe") &&
        BUILT.includes("function buildLineGlow(") && BUILT.includes('class="lineglow"'),
        "built index.html carries the per-line glow bars (CSS, JS and markup)");
+
+section("8. endless glow travelling around the full border of both frames");
+assert(/@property --edge-ang\{syntax:"<angle>"/.test(CSS) && /@keyframes edge-spin\{to\{--edge-ang:360deg\}\}/.test(CSS),
+       "a registered angle is animated a full turn (edge-spin)");
+assert(/\.edgeglow\{[^}]*animation:edge-spin var\(--eg-speed\) linear infinite/.test(CSS),
+       "the edge glow loops forever at constant speed");
+assert(/\.edgeglow::before,\.edgeglow::after\{[^}]*conic-gradient\(from var\(--edge-ang\)/.test(CSS) &&
+       /mask-composite:exclude/.test(CSS),
+       "the light is a conic ring masked to the border, with a blurred bloom layer");
+assert(/\.pane:not\(\.out\) \.edgeglow\{--eg:106,170,212/.test(CSS),
+       "INPUT glows blue, OUTPUT green");
+assert((TPL.match(/<div class="edgeglow" aria-hidden="true"><\/div>/g) || []).length === 2 &&
+       BUILT.includes('class="edgeglow"') && BUILT.includes("@keyframes edge-spin"),
+       "both frames carry the edge glow in the template and the built page");
 
 console.log("\n=== SUMMARY: " + passed + " passed, " + failed + " failed ===");
 process.exit(failed ? 1 : 0);
