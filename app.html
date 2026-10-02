@@ -83,6 +83,23 @@ background:linear-gradient(90deg,rgba(var(--lg),0),rgba(var(--lg),.55) 6%,rgba(2
 background-size:220% 100%;background-position:120% 0}
 .lineglow.lit .lgline{animation:lg-ignite .62s cubic-bezier(.2,.72,.25,1);animation-delay:var(--lgignite-delay,0ms)}
 .lineglow.lit .lgline::before{animation:lg-sweep .62s cubic-bezier(.22,.61,.36,1);animation-delay:var(--lgignite-delay,0ms)}
+/* edge glow — an endless light that travels around the FULL border of both
+   frames (INPUT blue, OUTPUT green), never stopping.  .edgeglow carries a
+   registered angle (--edge-ang) that spins forever; its ::before is a sharp
+   conic-gradient ring masked down to the border, its ::after the same ring
+   blurred into a soft bloom.  Two comet heads sit half a turn apart so the
+   whole outline is always lit and always moving. */
+@property --edge-ang{syntax:"<angle>";inherits:true;initial-value:0deg}
+.edgeglow{position:absolute;inset:-1px;border-radius:7px;pointer-events:none;z-index:4;--eg:83,217,119;--eg-hi:226,255,236;--eg-speed:5.2s;
+animation:edge-spin var(--eg-speed) linear infinite}
+.pane:not(.out) .edgeglow{--eg:106,170,212;--eg-hi:214,236,255;animation-delay:-1.3s}
+.edgeglow::before,.edgeglow::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:2px;
+background:conic-gradient(from var(--edge-ang),rgba(var(--eg),.1) 0deg,rgba(var(--eg),.22) 90deg,rgba(var(--eg),.95) 172deg,rgb(var(--eg-hi)) 180deg,rgba(var(--eg),.1) 180deg,rgba(var(--eg),.22) 270deg,rgba(var(--eg),.95) 352deg,rgb(var(--eg-hi)) 360deg);
+-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+.edgeglow::before{padding:1px}
+.edgeglow::after{inset:-3px;padding:4px;filter:blur(6px);opacity:.85}
+@keyframes edge-spin{to{--edge-ang:360deg}}
 @keyframes lg-breathe{0%{opacity:0}14%{opacity:.15}34%{opacity:.3}62%{opacity:.13}100%{opacity:0}}
 @keyframes lg-ignite{0%{opacity:0;transform:translateX(-6px) scaleX(.99)}12%{opacity:1;transform:translateX(0) scaleX(1)}38%{opacity:1}74%{opacity:.34}100%{opacity:0;transform:translateX(7px)}}
 @keyframes lg-sweep{0%{opacity:0;background-position:120% 0}16%{opacity:1}70%{opacity:.75}100%{opacity:0;background-position:-40% 0}}
@@ -229,7 +246,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 .about-foot .ok{color:var(--green)}
 @media (min-width:760px){.about-cols{grid-template-columns:1.32fr .92fr}}
 /* Motion is decorative; honor the system's reduced-motion preference. */
-@media (prefers-reduced-motion:reduce){header,.pane,.pane::before,.pane::after,.pane.changed::before,.pane.changed::after,.pane:not(.out).changed::after,.pane.out.changed h2,.pane.out.printing pre.out,.bar,.status,#st::before,pre.out:empty::before,.lineglow,.lgline,.lgline::before,.about-card{animation:none!important}button,.about-links a,.about-links button{transition:none!important}.convert:hover,.convert:active{transform:none}.pane .lineglow{display:block!important}.pane .lgline{opacity:.22!important}.pane .lgline::before{display:none!important}
+@media (prefers-reduced-motion:reduce){header,.pane,.pane::before,.pane::after,.pane.changed::before,.pane.changed::after,.pane:not(.out).changed::after,.pane.out.changed h2,.pane.out.printing pre.out,.bar,.status,#st::before,pre.out:empty::before,.lineglow,.lgline,.lgline::before,.edgeglow,.about-card{animation:none!important}button,.about-links a,.about-links button{transition:none!important}.convert:hover,.convert:active{transform:none}.pane .lineglow{display:block!important}.pane .lgline{opacity:.22!important}.pane .lgline::before{display:none!important}
 /* No animated sweep means no reason to clip the text either — the glyph shine
    is a moving effect, so reduced-motion users get plain OUTPUT text. */
 .pane.out.printing.shine pre.out{color:var(--out)!important;background:none!important;-webkit-background-clip:border-box!important;background-clip:border-box!important}}
@@ -249,10 +266,12 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
   <section class="pane"><h2>INPUT</h2>
     <textarea id="inp" placeholder="Paste flights, email text or a screenshot (Ctrl+V)"></textarea>
     <div class="lineglow" aria-hidden="true"></div>
+    <div class="edgeglow" aria-hidden="true"></div>
   </section>
   <section class="pane out"><h2 id="outputLabel">OUTPUT</h2>
     <pre class="out" id="out" role="region" aria-labelledby="outputLabel" tabindex="0"></pre>
     <div class="lineglow" aria-hidden="true"></div>
+    <div class="edgeglow" aria-hidden="true"></div>
   </section>
 </main>
 <div class="bar">
