@@ -1,6 +1,6 @@
 "use strict";
-/* test_scroll_bars.js — the OUTPUT window must always scroll, and the INPUT
- * window gets the OUTPUT scrollbar (with a switch).
+/* test_scroll_bars.js — the OUTPUT window must always scroll, and INPUT wears
+ * the OUTPUT scrollbar.
  *
  * What this pins down:
  *   - OUTPUT stays a native scrollport (overflow-y:auto, overscroll-behavior:
@@ -15,10 +15,9 @@
  *     `animationend` with a timer as the safety net — so a clipped background
  *     is never left behind on a window the user can scroll;
  *   - both windows wear one scrollbar: the INPUT textarea shares the OUTPUT's
- *     thin green bar (standard properties + ::-webkit-scrollbar rules);
- *   - the INPUT header carries a real switch (role=switch, aria-checked wired
- *     by app.js and remembered per device) that hides only the BAR — the
- *     textarea keeps overflow:auto, so wheel/keys/touch keep scrolling;
+ *     thin green bar (standard properties + ::-webkit-scrollbar rules), and
+ *     nothing can hide it — the INPUT header is just the label, and app.js has
+ *     no scrollbar state at all;
  *   - the committed single-file artifact carries all of it.
  *
  * Behaviour runs the REAL SCROLLBARS block of app.js in a vm sandbox with a DOM
@@ -90,36 +89,25 @@ for (const part of ["::-webkit-scrollbar{width:8px;height:8px}",
          new RegExp("pre\\.out::-webkit-scrollbar[^{]*\\{[^}]*" + decl + "[^}]*\\}").test(CSS),
          "Safari/Chromium bar rule is shared: " + part);
 }
-assert(!/textarea::-webkit-scrollbar\{[^}]*display:none/.test(CSS.replace(/\.pane\.bars-off textarea::-webkit-scrollbar\{[^}]*\}/g, "")),
-       "the default INPUT rule has no hidden-bar leftover (only the switch hides it)");
+assert(!/::-webkit-scrollbar[^{]*\{[^}]*display:none/.test(CSS) && !/scrollbar-width:none/.test(CSS),
+       "nothing anywhere hides a scrollbar — the shared bar is always drawn");
 
-/* ---------- 4. the switch in the INPUT header ---------- */
-section("4. the INPUT scrollbar switch");
+/* ---------- 4. no switch: the INPUT header is just the label ---------- */
+section("4. no scrollbar switch, and no way to hide the bar");
 const IN_HEAD = (TPL.match(/<section class="pane"><h2>INPUT[\s\S]*?<\/h2>/) || [""])[0];
-const BTN = (IN_HEAD.match(/<button[^>]*id="btnBars"[\s\S]*?<\/button>/) || [""])[0];
-assert(BTN.length > 0, "the switch sits inside the INPUT header, next to the INPUT label");
-assert(/class="barstoggle"/.test(BTN) && />SCROLLBAR</.test(BTN),
-       "it is labelled SCROLLBAR and wears the quiet .barstoggle chrome");
-assert(/role="switch"/.test(BTN) && /aria-checked="true"/.test(BTN),
-       "it announces itself as a switch (aria-checked), not as a mystery glyph");
-assert(/title="[^"]{30,}"/.test(BTN) && /still scrolls/i.test(BTN),
-       "the hover hint says hiding the bar does not stop the window scrolling");
-assert((TPL.match(/id="btnBars"/g) || []).length === 1, "the switch is declared exactly once");
-assert(/\.barstoggle\[aria-checked="true"\]\{color:var\(--green\)/.test(CSS) &&
-       /\.barstoggle:focus-visible\{outline:2px solid var\(--green\)/.test(CSS),
-       "ON reads green like the OUTPUT window, and the switch stays keyboard-visible");
-assert(/\.pane h2\{[^}]*display:flex[^}]*justify-content:space-between/.test(CSS),
-       "the header lays the label and the switch out without shifting either");
-assert(/\.pane\.bars-off textarea\{scrollbar-width:none;-ms-overflow-style:none\}/.test(CSS) &&
-       /\.pane\.bars-off textarea::-webkit-scrollbar\{width:0;height:0;display:none\}/.test(CSS),
-       "OFF hides the bar only (scrollbar-width/::-webkit-scrollbar), never the scrolling");
-assert(!/\.pane\.bars-off[^{]*\{[^}]*overflow:/.test(CSS),
-       "nothing in the OFF state touches overflow — the window still scrolls");
+assert(IN_HEAD.length > 0 && !/<button/.test(IN_HEAD) && /<h2>INPUT<\/h2>/.test(IN_HEAD),
+       "the INPUT header carries the label and nothing else");
+assert(!/btnBars|barstoggle|bars-off/.test(TPL),
+       "the SCROLLBAR pill and its state hooks are gone from the page");
+assert(!/btnBars|barstoggle|bars-off|spicy_input_bars/.test(APP),
+       "app.js keeps no scrollbar state (no switch, no per-device bar preference)");
+assert(!/\.barstoggle/.test(CSS) && !/\.pane\.bars-off/.test(CSS) && !/\.barstoggle/.test(BUILT),
+       "the switch's CSS is gone too, built page included");
 
 /* ---------- 5. real behaviour: the SCROLLBARS block in a vm sandbox ---------- */
 section("5. behaviour (real app.js code in a vm sandbox)");
 const SRC = APP.slice(APP.indexOf("/* SCROLLBARS:BEGIN */"), APP.indexOf("/* SCROLLBARS:END */") + "/* SCROLLBARS:END */".length);
-assert(SRC.length > 800 && /function printGlyphs\(/.test(SRC) && /function toggleInputBars\(/.test(SRC),
+assert(SRC.length > 800 && /function printGlyphs\(/.test(SRC) && /function endPrint\(/.test(SRC),
        "the SCROLLBARS block extracts cleanly from app.js");
 
 function makePane(id) {
@@ -147,16 +135,10 @@ function makePane(id) {
 function makeApp(opts) {
   opts = opts || {};
   const outPane = makePane("outPane"), inpPane = makePane("inpPane");
-  const els = { btnBars: makePane("btnBars") };
   const scheduled = [];
-  const store = Object.assign({}, opts.store);
   const sandbox = {
     console,
-    document: { getElementById: (id) => els[id] || (els[id] = makePane(id)) },
-    localStorage: {
-      getItem: (k) => (k in store ? store[k] : null),
-      setItem: (k, v) => { store[k] = String(v); }
-    },
+    document: { getElementById: (id) => makePane(id) },
     window: { matchMedia: () => ({ matches: !!opts.reducedMotion }) },
     setTimeout: (fn, ms) => { scheduled.push({ fn, ms, cancelled: false }); return scheduled.length; },
     clearTimeout: (id) => { if (scheduled[id - 1]) scheduled[id - 1].cancelled = true; },
@@ -165,40 +147,17 @@ function makeApp(opts) {
     inpPane: inpPane
   };
   sandbox.window.window = sandbox.window;
-  sandbox.window.localStorage = sandbox.localStorage;
   vm.createContext(sandbox);
-  vm.runInContext("var $ = function (id) { return document.getElementById(id); };", sandbox, { filename: "dollar.js" });
   vm.runInContext(SRC, sandbox, { filename: "scrollbars.js" });
   return {
-    sandbox, out: sandbox.out, outPane, inpPane, btnBars: els.btnBars, store, scheduled,
+    sandbox, out: sandbox.out, outPane, inpPane, scheduled,
     runTimers() { scheduled.forEach(t => { if (!t.cancelled) t.fn(); }); },
     print(pane) { vm.runInContext("printGlyphs(__pane)", Object.assign(sandbox, { __pane: pane || sandbox.outPane }), { filename: "call.js" }); }
   };
 }
 
-/* the switch: default ON, click toggles the class + aria + storage */
-let app = makeApp();
-assert(app.inpPane._cls.has("bars-off") === false, "INPUT starts with the bar shown");
-assert(app.btnBars.getAttribute("aria-checked") === "true", "the switch starts checked");
-app.btnBars.fire("click", {});
-assert(app.inpPane._cls.has("bars-off") === true, "clicking the switch hides the INPUT bar");
-assert(app.btnBars.getAttribute("aria-checked") === "false", "the switch reports aria-checked=false");
-assert(app.store["spicy_input_bars"] === "0", "the choice is remembered on the device");
-assert(/hidden/.test(app.btnBars.title) && /show it/.test(app.btnBars.title), "the hint explains the OFF state");
-app.btnBars.fire("click", {});
-assert(!app.inpPane._cls.has("bars-off"), "clicking again brings the bar back");
-assert(app.store["spicy_input_bars"] === "1" && app.btnBars.getAttribute("aria-checked") === "true",
-       "the switch round-trips to ON");
-assert(/still scrolls by wheel, keys and touch/.test(app.btnBars.title),
-       "the ON hint promises the window keeps scrolling without the bar");
-
-/* a remembered choice is applied on the next visit */
-app = makeApp({ store: { spicy_input_bars: "0" } });
-assert(app.inpPane._cls.has("bars-off") && app.btnBars.getAttribute("aria-checked") === "false",
-       "a remembered 'bar hidden' state is restored on load");
-
 /* the print only runs where it cannot cost a scroll */
-app = makeApp();
+let app = makeApp();
 app.print();
 assert(app.outPane._cls.has("printing"), "a result prints (fade/rise)");
 assert(app.outPane._cls.has("shine"), "a short result also gets the glyph streak");
@@ -250,16 +209,15 @@ assert(!app.outPane._cls.has("printing") && !app.outPane._cls.has("shine"),
 
 /* ---------- 6. the built artifact carries it ---------- */
 section("6. the committed single-file page carries the fix");
-assert(BUILT.includes("/* SCROLLBARS:BEGIN */") && BUILT.includes("function printGlyphs(") &&
-       BUILT.includes("function toggleInputBars("),
+assert(BUILT.includes("/* SCROLLBARS:BEGIN */") && BUILT.includes("function printGlyphs("),
        "built index.html inlines the SCROLLBARS block (a forgotten npm run build fails here)");
 assert(BUILT.includes(".pane.out.printing.shine pre.out") && BUILT.includes("background-attachment:local") &&
        BUILT.includes("textarea,pre.out{scrollbar-width:thin"),
        "built index.html carries the scroll-safe shine and the shared scrollbar rules");
-assert(/<button class="barstoggle" id="btnBars"[^>]*role="switch"/.test(BUILT),
-       "built index.html ships the INPUT scrollbar switch");
-assert(/OUTPUT always scrolls/.test(README) && /INPUT scrollbar switch/.test(README),
-       "README documents the OUTPUT scroll guarantee and the INPUT scrollbar switch");
+assert(!/btnBars|barstoggle|bars-off/.test(BUILT),
+       "built index.html ships no SCROLLBAR switch");
+assert(/OUTPUT always scrolls/.test(README) && !/SCROLLBAR pill/.test(README),
+       "README documents the OUTPUT scroll guarantee and no longer advertises the switch");
 
 console.log("\n=== SUMMARY: " + PASS + " passed, " + FAIL + " failed ===");
 process.exit(FAIL ? 1 : 0);

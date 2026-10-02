@@ -92,11 +92,10 @@ hallucinations, no re-rolling the dice.
   takes off again the moment the effect ends — and the glyph streak inside it is skipped
   entirely while the window can scroll, and for reduced-motion users — so what you scroll is
   a plain, native scrollport with no clipped paint or leftover filter on it.
-- **INPUT scrollbar switch**: both windows now wear the same thin terminal-green scrollbar
-  (the INPUT textarea used to keep whatever bar the browser ships). The `SCROLLBAR` pill in
-  the INPUT header hides or shows that bar, remembers the choice per device, and reports
-  itself to screen readers as a switch. Hiding is cosmetic only — the window keeps scrolling
-  by wheel, arrow keys, PageUp/PageDown and touch.
+- **INPUT wears the OUTPUT scrollbar**: both windows speak one scrollbar language — thin,
+  terminal green, on a dark track (the INPUT textarea used to keep whatever bar the browser
+  ships). Both bars are always drawn: there is no switch to hide them, and scrolling itself
+  is plain native behaviour — wheel, arrow keys, PageUp/PageDown, drag-select and touch.
 - 100% offline, private — itineraries and screenshots never leave the browser.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.

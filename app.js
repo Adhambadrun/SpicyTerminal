@@ -237,34 +237,6 @@ if (out && out.addEventListener) {
   });
 }
 
-/* ---------- INPUT scrollbar switch ---------- */
-// OUTPUT has always drawn its own thin green scrollbar; INPUT used to keep
-// whatever bar the browser ships, so the two windows of the same terminal spoke
-// two visual languages.  The switch in the INPUT header gives INPUT the OUTPUT
-// bar and lets it be hidden — hiding is cosmetic only, because the textarea
-// keeps its overflow: the window still scrolls by wheel, arrow keys, PageUp/
-// PageDown, drag-select and touch.  The choice is remembered per device.
-var BARS_KEY = "spicy_input_bars";
-var btnBars = $("btnBars");
-function inputBarsOn() {
-  try { return localStorage.getItem(BARS_KEY) !== "0"; } catch (e) { return true; }
-}
-function applyInputBars(on, persist) {
-  if (inpPane && inpPane.classList) inpPane.classList.toggle("bars-off", !on);
-  if (btnBars && btnBars.setAttribute) {
-    btnBars.setAttribute("aria-checked", on ? "true" : "false");
-    btnBars.title = on
-      ? "INPUT scrollbar: shown — click to hide it (the window still scrolls by wheel, keys and touch)"
-      : "INPUT scrollbar: hidden — click to show it (styled exactly like OUTPUT)";
-  }
-  if (persist) { try { localStorage.setItem(BARS_KEY, on ? "1" : "0"); } catch (e) {} }
-}
-function toggleInputBars() {
-  var on = !!(inpPane && inpPane.classList && inpPane.classList.contains("bars-off"));
-  applyInputBars(on, true);
-}
-if (btnBars && btnBars.addEventListener) btnBars.addEventListener("click", toggleInputBars);
-applyInputBars(inputBarsOn(), false);
 /* SCROLLBARS:END */
 
 var images = [];
