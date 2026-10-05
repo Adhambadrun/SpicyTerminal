@@ -1,0 +1,163 @@
+/* Seat Map route — scoped styles only; the existing terminal page is unchanged. */
+.seatmap-page{position:fixed;inset:0;z-index:45;display:block;overflow:auto;background:var(--bg);color:#c9d8ce;font-family:var(--mono);}
+.seatmap-page.hidden{display:none!important}
+body.seatmap-active{overflow:hidden}
+body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,body.seatmap-active>.status,body.seatmap-active>.welcome,body.seatmap-active>.modal{display:none!important}
+.seatmap-topbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:46px;padding:8px clamp(14px,3vw,28px);border-bottom:1px solid #1e2b34;background:#05080b;}
+.seatmap-back{display:inline-flex;align-items:center;gap:8px;color:#9aadb6;text-decoration:none;font-size:10px;letter-spacing:.8px;}
+.seatmap-back:hover{color:#e2efe6;text-decoration:underline;text-underline-offset:3px;}
+.seatmap-wordmark{color:#c9d8ce;font-size:10px;letter-spacing:1.5px;}
+.seatmap-top-tag{border:1px solid #283740;padding:5px 8px;color:#8fa6b2;font-size:9px;letter-spacing:1.1px;white-space:nowrap;}
+.seatmap-main{width:min(1440px,100%);margin:0 auto;padding:clamp(16px,3vw,30px);}
+.seatmap-title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;}
+.seatmap-title{font-size:clamp(19px,3vw,28px);font-weight:500;letter-spacing:.8px;color:#e0e9e3;}
+.seatmap-subtitle{margin-top:7px;color:#7d919a;font-size:11px;line-height:1.65;max-width:78ch;}
+.seatmap-dev-banner{display:flex;align-items:flex-start;gap:10px;margin:0 0 18px;padding:11px 13px;border:1px solid #66572d;background:#15130d;color:#ddc77f;font-size:10px;line-height:1.65;letter-spacing:.15px;}
+.seatmap-dev-mark{flex:none;border:1px solid #806b34;padding:3px 6px;color:#efd77e;font-size:9px;letter-spacing:1px;white-space:nowrap;}
+.seatmap-card{border:1px solid #1e2b34;background:#080d11;padding:14px;}
+.seatmap-form{display:grid;grid-template-columns:1.1fr .75fr .75fr 1fr 1fr auto;gap:10px;align-items:end;}
+.seatmap-field{display:flex;flex-direction:column;gap:6px;min-width:0;}
+.seatmap-field label,.seatmap-overline{color:#7d919a;font-size:9px;letter-spacing:1.1px;text-transform:uppercase;}
+.seatmap-field input,.seatmap-field select,.seatmap-filter-select{width:100%;min-width:0;height:36px;padding:0 9px;border:1px solid #293841;border-radius:0;outline:0;background:#05080b;color:#d2ddd6;font-family:var(--mono);font-size:11px;}
+.seatmap-field input:focus,.seatmap-field select:focus,.seatmap-filter-select:focus{border-color:#82959e;outline:1px solid #82959e;outline-offset:1px;}
+.seatmap-page button{min-height:0;border-radius:0;font-family:var(--mono);font-weight:500;}
+.seatmap-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px!important;padding:7px 11px;border:1px solid #33434d;background:#090e12;color:#c9d8ce;font-size:10px;letter-spacing:.65px;text-align:center;text-decoration:none;white-space:nowrap;cursor:pointer;}
+.seatmap-btn:hover:not(:disabled){background:#c9d8ce;color:#05080b;filter:none;}
+.seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
+.seatmap-btn:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline:2px solid #c9d8ce;outline-offset:2px;}
+.seatmap-btn-primary{border-color:#8fa6b2;color:#e0e9e3;}
+.seatmap-examples{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:12px;}
+.seatmap-examples-label{margin-right:2px;color:#647983;font-size:9px;letter-spacing:.8px;}
+.seatmap-example{min-height:26px!important;padding:4px 8px;border:1px solid #25343d;background:transparent;color:#9aadb6;font-size:9px;letter-spacing:.45px;cursor:pointer;}
+.seatmap-example:hover{border-color:#647983;color:#e0e9e3;filter:none;}
+.seatmap-form-status{min-height:16px;margin-top:9px;color:#91a59d;font-size:9px;letter-spacing:.3px;}
+.seatmap-form-status.is-error{color:#e59c91;}
+.seatmap-demo{margin-top:16px;}
+.seatmap-flight-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid #1e2b34;background:#080d11;}
+.seatmap-flight-name{color:#e0e9e3;font-size:13px;letter-spacing:.55px;}
+.seatmap-flight-meta{margin-top:5px;color:#8498a0;font-size:10px;line-height:1.6;}
+.seatmap-source-pill{flex:none;border:1px solid #66572d;padding:6px 8px;color:#ddc77f;font-size:9px;letter-spacing:1px;text-align:center;}
+.seatmap-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:10px 0;padding:9px;border:1px solid #1e2b34;background:#070b0e;}
+.seatmap-toolbar-group{display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
+.seatmap-zoom-value{min-width:42px;color:#8fa6b2;font-size:9px;text-align:center;}
+.seatmap-refresh-info{color:#71858d;font-size:9px;letter-spacing:.45px;}
+.seatmap-demo-layout{display:grid;grid-template-columns:190px minmax(0,1fr) 220px;align-items:start;gap:10px;}
+.seatmap-side-panel{display:grid;gap:10px;min-width:0;}
+.seatmap-panel{border:1px solid #1e2b34;background:#080d11;min-width:0;}
+.seatmap-panel-title{padding:10px 11px;border-bottom:1px solid #1e2b34;color:#8fa6b2;font-size:9px;letter-spacing:1.15px;}
+.seatmap-panel-body{padding:11px;}
+.seatmap-filter-list{display:grid;gap:10px;}
+.seatmap-filter{display:flex;align-items:flex-start;gap:8px;color:#a7b6ba;font-size:10px;line-height:1.4;cursor:pointer;}
+.seatmap-filter input{flex:none;width:13px;height:13px;margin:1px 0 0;accent-color:#c9d8ce;}
+.seatmap-filter-select{height:31px;margin-top:9px;font-size:10px;}
+.seatmap-legend{display:grid;gap:8px;}
+.seatmap-legend-item{display:flex;align-items:center;gap:8px;color:#9aadb6;font-size:9px;}
+.seatmap-swatch{width:14px;height:14px;border:1px solid currentColor;}
+.seatmap-swatch.available{background:#155b34;color:#a6f5c0;}
+.seatmap-swatch.occupied{background:#79342f;color:#f3aaa4;}
+.seatmap-swatch.blocked{background:#313b40;color:#afbac1;}
+.seatmap-swatch.premium{background:#78622b;color:#f1d58e;}
+.seatmap-swatch.extra-legroom{background:#204d7a;color:#b6d8ff;}
+.seatmap-swatch.exit-row{background:#75651e;color:#f6e19c;}
+.seatmap-availability-summary{margin-top:10px;padding-top:9px;border-top:1px solid #1e2b34;color:#879ba2;font-size:9px;line-height:1.6;}
+.seatmap-canvas-wrap{position:relative;min-width:0;border:1px solid #1e2b34;background:#05080b;}
+.seatmap-canvas{height:min(68vh,780px);min-height:520px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y;scrollbar-color:#394950 #05080b;}
+.seatmap-svg{display:block;width:100%;height:auto;min-height:100%;margin:0 auto;overflow:visible;touch-action:none;cursor:grab;}
+.seatmap-svg:active{cursor:grabbing;}
+.seatmap-fuselage{fill:#080d11;stroke:#52626a;stroke-width:2;}
+.seatmap-centerline{fill:none;stroke:#26343b;stroke-width:1;stroke-dasharray:4 9;}
+.seatmap-wing{fill:#0b1116;stroke:#26343b;stroke-width:1.2;}
+.seatmap-facility{fill:#80939a;font-family:var(--mono);font-size:9px;letter-spacing:1.1px;}
+.seatmap-cabin-label{fill:#a6b5b8;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:2px;}
+.seatmap-row-label{fill:#84969e;font-family:var(--mono);font-size:9px;}
+.seatmap-exit-label{fill:#e6d581;font-family:var(--mono);font-size:8px;letter-spacing:1px;}
+.seatmap-seat{cursor:pointer;outline:none;}
+.seatmap-seat-box{stroke-width:1.25;}
+.seatmap-seat-letter{fill:currentColor;font-family:var(--mono);font-size:10px;font-weight:700;pointer-events:none;}
+.seatmap-seat-mark{fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:square;pointer-events:none;}
+.seatmap-seat.status-available{color:#a6f5c0;}
+.seatmap-seat.status-available .seatmap-seat-box{fill:#155b34;stroke:#56b779;}
+.seatmap-seat.status-occupied{color:#f3aaa4;}
+.seatmap-seat.status-occupied .seatmap-seat-box{fill:#79342f;stroke:#b56b65;}
+.seatmap-seat.status-blocked{color:#afbac1;}
+.seatmap-seat.status-blocked .seatmap-seat-box{fill:#313b40;stroke:#65737a;}
+.seatmap-seat.status-premium{color:#f1d58e;}
+.seatmap-seat.status-premium .seatmap-seat-box{fill:#78622b;stroke:#b49a52;}
+.seatmap-seat.status-extra_legroom{color:#b6d8ff;}
+.seatmap-seat.status-extra_legroom .seatmap-seat-box{fill:#204d7a;stroke:#5d86b1;}
+.seatmap-seat.status-exit_row{color:#f6e19c;}
+.seatmap-seat.status-exit_row .seatmap-seat-box{fill:#75651e;stroke:#bb9f43;}
+.seatmap-seat.is-filtered-out{opacity:.16;}
+.seatmap-seat.is-selected .seatmap-seat-box{stroke:#f5f8f6;stroke-width:2.8;}
+.seatmap-seat.is-demo-choice .seatmap-seat-box{stroke:#ffffff;stroke-width:3.2;stroke-dasharray:3 2;}
+.seatmap-seat:focus .seatmap-seat-box{stroke:#ffffff;stroke-width:2.8;}
+.seatmap-tooltip{position:absolute;z-index:2;max-width:250px;padding:6px 8px;border:1px solid #52626a;background:#05080b;color:#e1ebe4;font-size:9px;letter-spacing:.35px;pointer-events:none;}
+.seatmap-map-foot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:8px;color:#70838c;font-size:9px;line-height:1.6;}
+.seatmap-count{margin:10px 0 2px;color:#d6e1da;font-size:23px;line-height:1;}
+.seatmap-count-caption{margin-top:6px;color:#80939a;font-size:9px;line-height:1.5;}
+.seatmap-details{min-height:160px;}
+.seatmap-empty-detail{color:#71858d;font-size:10px;line-height:1.7;}
+.seatmap-detail-name{color:#e0e9e3;font-size:24px;letter-spacing:.8px;}
+.seatmap-detail-status{margin:6px 0 12px;font-size:9px;letter-spacing:.7px;}
+.status-text-available{color:#a6f5c0;}.status-text-occupied{color:#f3aaa4;}.status-text-blocked{color:#afbac1;}.status-text-premium{color:#f1d58e;}.status-text-extra_legroom{color:#b6d8ff;}.status-text-exit_row{color:#f6e19c;}
+.seatmap-detail-list{display:grid;gap:8px;margin:0 0 12px;}
+.seatmap-detail-list>div{display:grid;grid-template-columns:68px minmax(0,1fr);gap:7px;align-items:start;}
+.seatmap-detail-list dt{color:#667b84;font-size:8px;letter-spacing:.8px;}
+.seatmap-detail-list dd{margin:0;color:#b7c5c7;font-size:9px;line-height:1.45;overflow-wrap:anywhere;}
+.seatmap-selection-status{margin:9px 0;color:#8fa6b2;font-size:9px;line-height:1.55;}
+.seatmap-export-row{display:flex;flex-wrap:wrap;gap:6px;}
+.seatmap-export-row .seatmap-btn{flex:1 1 auto;}
+.seatmap-disclaimer{margin-top:15px;padding:10px 12px;border:1px solid #28343a;color:#89999e;font-size:9px;line-height:1.65;}
+.seatmap-disclaimer strong{color:#c7d3ce;font-weight:600;}
+.seatmap-notice{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.84);}
+.seatmap-notice.hidden{display:none!important}
+.seatmap-notice-card{width:min(540px,100%);border:1px solid #4a5356;background:#05080b;padding:23px;}
+.seatmap-notice-kicker{margin-bottom:12px;color:#d9c375;font-size:9px;letter-spacing:1.8px;}
+.seatmap-notice-card h2{margin-bottom:12px;color:#e1e9e4;font-size:18px;font-weight:500;letter-spacing:.75px;}
+.seatmap-notice-card p{margin-bottom:10px;color:#a7b6ba;font-size:11px;line-height:1.75;}
+.seatmap-notice-card p strong{color:#e5d382;font-weight:600;}
+.seatmap-notice-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:17px;}
+.seatmap-notice-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 11px;border:1px solid #33434d;color:#a7b6ba;text-decoration:none;font-size:10px;letter-spacing:.65px;}
+.seatmap-summary-dialog{position:fixed;inset:0;z-index:72;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.82);}
+.seatmap-summary-dialog.hidden{display:none!important}
+.seatmap-summary-card{width:min(560px,100%);max-height:88vh;overflow:auto;border:1px solid #394950;background:#05080b;padding:16px;}
+.seatmap-summary-card h2{margin-bottom:10px;color:#d8e4dc;font-size:11px;font-weight:500;letter-spacing:1.2px;}
+.seatmap-summary-card pre{overflow:auto;white-space:pre-wrap;color:#a8b7b6;font-family:var(--mono);font-size:10px;line-height:1.7;}
+.seatmap-summary-actions{display:flex;justify-content:flex-end;margin-top:14px;}
+@media(max-width:1120px){.seatmap-form{grid-template-columns:repeat(3,minmax(0,1fr));}.seatmap-form .seatmap-btn{align-self:end;}.seatmap-demo-layout{grid-template-columns:180px minmax(0,1fr);}.seatmap-side-panel-right{grid-column:2;grid-row:2;grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-side-panel-left{grid-row:1 / span 2;}}
+@media(max-width:760px){.seatmap-main{padding:15px 12px 24px;}.seatmap-title-row{align-items:flex-start;flex-direction:column;}.seatmap-demo-layout{grid-template-columns:1fr;}.seatmap-side-panel-left,.seatmap-side-panel-right{grid-column:auto;grid-row:auto;grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-canvas{height:64vh;min-height:440px;}.seatmap-toolbar{align-items:flex-start;}.seatmap-flight-heading{align-items:flex-start;}.seatmap-source-pill{max-width:132px;white-space:normal;line-height:1.45;}}
+@media(max-width:520px){.seatmap-topbar{padding:8px 11px;}.seatmap-wordmark{font-size:9px;letter-spacing:.8px;}.seatmap-top-tag{font-size:8px;padding:4px 5px;}.seatmap-form{grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-form .seatmap-btn{grid-column:1 / -1;}.seatmap-side-panel-left,.seatmap-side-panel-right{grid-template-columns:1fr;}.seatmap-toolbar{display:grid;grid-template-columns:1fr;}.seatmap-toolbar-group{justify-content:flex-start;}.seatmap-canvas{height:60vh;min-height:390px;}.seatmap-notice-card{padding:18px 15px;}.seatmap-notice-card h2{font-size:15px;}.seatmap-examples-label{flex-basis:100%;}}
+@media(prefers-reduced-motion:reduce){.seatmap-page *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+/* The new route keeps the requested black-and-white chrome; only seat-state
+   swatches and seat cells intentionally use status colors. */
+.seatmap-page{background:#000;color:#f3f3f3;}
+.seatmap-topbar,.seatmap-card,.seatmap-panel,.seatmap-flight-heading,.seatmap-toolbar,.seatmap-notice-card,.seatmap-summary-card{background:#000;border-color:#3a3a3a;}
+.seatmap-canvas-wrap,.seatmap-canvas,.seatmap-field input,.seatmap-field select,.seatmap-filter-select,.seatmap-tooltip{background:#000;border-color:#4a4a4a;color:#f2f2f2;}
+.seatmap-canvas{scrollbar-color:#555 #000;}
+.seatmap-dev-banner{border-color:#555;background:#000;color:#ddd;}
+.seatmap-dev-mark,.seatmap-source-pill{border-color:#777;color:#eee;}
+.seatmap-notice-kicker,.seatmap-notice-card p strong{color:#fff;}
+.seatmap-notice-card p,.seatmap-notice-actions a{color:#d0d0d0;}
+.seatmap-notice-actions a{border-color:#666;}
+.seatmap-btn,.seatmap-example{border-color:#666;background:#000;color:#f2f2f2;}
+.seatmap-btn-primary{border-color:#fff;color:#fff;}
+.seatmap-btn:hover:not(:disabled),.seatmap-example:hover{border-color:#fff;background:#fff;color:#000;}
+.seatmap-btn:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline-color:#fff;}
+.seatmap-field input:focus,.seatmap-field select:focus,.seatmap-filter-select:focus{border-color:#fff;outline-color:#fff;}
+.seatmap-back,.seatmap-wordmark,.seatmap-title,.seatmap-flight-name,.seatmap-detail-name,.seatmap-count,.seatmap-notice-card h2{color:#f2f2f2;}
+.seatmap-subtitle,.seatmap-flight-meta,.seatmap-panel-title,.seatmap-field label,.seatmap-overline,.seatmap-examples-label,.seatmap-zoom-value,.seatmap-refresh-info,.seatmap-filter,.seatmap-legend-item,.seatmap-availability-summary,.seatmap-map-foot,.seatmap-count-caption,.seatmap-empty-detail,.seatmap-detail-list dt,.seatmap-detail-list dd,.seatmap-selection-status,.seatmap-disclaimer,.seatmap-summary-card h2,.seatmap-summary-card pre{color:#bdbdbd;}
+.seatmap-fuselage{fill:#050505;stroke:#777;}
+.seatmap-centerline{stroke:#383838;}
+.seatmap-wing{fill:#080808;stroke:#393939;}
+.seatmap-facility,.seatmap-cabin-label,.seatmap-row-label{fill:#c5c5c5;}
+.seatmap-filter input{accent-color:#fff;}
+.seatmap-exit-label{fill:#f6e19c;}
+.seatmap-top-tag{border-color:#666;color:#ddd;}
+.seatmap-panel-title{border-color:#333;}
+.seatmap-form-status{color:#bdbdbd;}
+.seatmap-form-status.is-error{color:#f2a8a0;}
+.seatmap-back:hover{color:#fff;}
+.seatmap-disclaimer{border-color:#3a3a3a;}
+.seatmap-disclaimer strong{color:#eee;}
+@media(max-width:1120px){.seatmap-side-panel-right{border-color:#3a3a3a;}}

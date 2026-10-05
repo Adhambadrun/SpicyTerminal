@@ -158,7 +158,7 @@ button:focus-visible{outline:2px solid var(--green);outline-offset:3px}
 #st.warn{color:#f0a35c}
 #st.warn::before{box-shadow:0 0 0 0 rgba(240,163,92,.42)}
 @keyframes status-pulse{0%{box-shadow:0 0 0 0 currentColor;opacity:.95}65%{box-shadow:0 0 0 7px transparent;opacity:.72}100%{box-shadow:0 0 0 0 transparent;opacity:.95}}
-#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnAbout:hover{color:#8fa6b2}
+#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnSeatMap:hover,#btnAbout:hover{color:#8fa6b2}
 .linkbtn{color:#3e4f59;font-size:11px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono);font-weight:400;flex:none;white-space:nowrap;min-height:auto}
 #btnWeeklyReport{margin-right:12px}
 /* welcome — small card, app visible behind (translucent backdrop) */
@@ -260,6 +260,170 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
    wordmark looked worse than a quiet header. */
 @media (max-width:560px){.status{gap:6px 10px}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}}
+/* Seat Map route — scoped styles only; the existing terminal page is unchanged. */
+.seatmap-page{position:fixed;inset:0;z-index:45;display:block;overflow:auto;background:var(--bg);color:#c9d8ce;font-family:var(--mono);}
+.seatmap-page.hidden{display:none!important}
+body.seatmap-active{overflow:hidden}
+body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,body.seatmap-active>.status,body.seatmap-active>.welcome,body.seatmap-active>.modal{display:none!important}
+.seatmap-topbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:46px;padding:8px clamp(14px,3vw,28px);border-bottom:1px solid #1e2b34;background:#05080b;}
+.seatmap-back{display:inline-flex;align-items:center;gap:8px;color:#9aadb6;text-decoration:none;font-size:10px;letter-spacing:.8px;}
+.seatmap-back:hover{color:#e2efe6;text-decoration:underline;text-underline-offset:3px;}
+.seatmap-wordmark{color:#c9d8ce;font-size:10px;letter-spacing:1.5px;}
+.seatmap-top-tag{border:1px solid #283740;padding:5px 8px;color:#8fa6b2;font-size:9px;letter-spacing:1.1px;white-space:nowrap;}
+.seatmap-main{width:min(1440px,100%);margin:0 auto;padding:clamp(16px,3vw,30px);}
+.seatmap-title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;}
+.seatmap-title{font-size:clamp(19px,3vw,28px);font-weight:500;letter-spacing:.8px;color:#e0e9e3;}
+.seatmap-subtitle{margin-top:7px;color:#7d919a;font-size:11px;line-height:1.65;max-width:78ch;}
+.seatmap-dev-banner{display:flex;align-items:flex-start;gap:10px;margin:0 0 18px;padding:11px 13px;border:1px solid #66572d;background:#15130d;color:#ddc77f;font-size:10px;line-height:1.65;letter-spacing:.15px;}
+.seatmap-dev-mark{flex:none;border:1px solid #806b34;padding:3px 6px;color:#efd77e;font-size:9px;letter-spacing:1px;white-space:nowrap;}
+.seatmap-card{border:1px solid #1e2b34;background:#080d11;padding:14px;}
+.seatmap-form{display:grid;grid-template-columns:1.1fr .75fr .75fr 1fr 1fr auto;gap:10px;align-items:end;}
+.seatmap-field{display:flex;flex-direction:column;gap:6px;min-width:0;}
+.seatmap-field label,.seatmap-overline{color:#7d919a;font-size:9px;letter-spacing:1.1px;text-transform:uppercase;}
+.seatmap-field input,.seatmap-field select,.seatmap-filter-select{width:100%;min-width:0;height:36px;padding:0 9px;border:1px solid #293841;border-radius:0;outline:0;background:#05080b;color:#d2ddd6;font-family:var(--mono);font-size:11px;}
+.seatmap-field input:focus,.seatmap-field select:focus,.seatmap-filter-select:focus{border-color:#82959e;outline:1px solid #82959e;outline-offset:1px;}
+.seatmap-page button{min-height:0;border-radius:0;font-family:var(--mono);font-weight:500;}
+.seatmap-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px!important;padding:7px 11px;border:1px solid #33434d;background:#090e12;color:#c9d8ce;font-size:10px;letter-spacing:.65px;text-align:center;text-decoration:none;white-space:nowrap;cursor:pointer;}
+.seatmap-btn:hover:not(:disabled){background:#c9d8ce;color:#05080b;filter:none;}
+.seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
+.seatmap-btn:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline:2px solid #c9d8ce;outline-offset:2px;}
+.seatmap-btn-primary{border-color:#8fa6b2;color:#e0e9e3;}
+.seatmap-examples{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:12px;}
+.seatmap-examples-label{margin-right:2px;color:#647983;font-size:9px;letter-spacing:.8px;}
+.seatmap-example{min-height:26px!important;padding:4px 8px;border:1px solid #25343d;background:transparent;color:#9aadb6;font-size:9px;letter-spacing:.45px;cursor:pointer;}
+.seatmap-example:hover{border-color:#647983;color:#e0e9e3;filter:none;}
+.seatmap-form-status{min-height:16px;margin-top:9px;color:#91a59d;font-size:9px;letter-spacing:.3px;}
+.seatmap-form-status.is-error{color:#e59c91;}
+.seatmap-demo{margin-top:16px;}
+.seatmap-flight-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid #1e2b34;background:#080d11;}
+.seatmap-flight-name{color:#e0e9e3;font-size:13px;letter-spacing:.55px;}
+.seatmap-flight-meta{margin-top:5px;color:#8498a0;font-size:10px;line-height:1.6;}
+.seatmap-source-pill{flex:none;border:1px solid #66572d;padding:6px 8px;color:#ddc77f;font-size:9px;letter-spacing:1px;text-align:center;}
+.seatmap-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:10px 0;padding:9px;border:1px solid #1e2b34;background:#070b0e;}
+.seatmap-toolbar-group{display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
+.seatmap-zoom-value{min-width:42px;color:#8fa6b2;font-size:9px;text-align:center;}
+.seatmap-refresh-info{color:#71858d;font-size:9px;letter-spacing:.45px;}
+.seatmap-demo-layout{display:grid;grid-template-columns:190px minmax(0,1fr) 220px;align-items:start;gap:10px;}
+.seatmap-side-panel{display:grid;gap:10px;min-width:0;}
+.seatmap-panel{border:1px solid #1e2b34;background:#080d11;min-width:0;}
+.seatmap-panel-title{padding:10px 11px;border-bottom:1px solid #1e2b34;color:#8fa6b2;font-size:9px;letter-spacing:1.15px;}
+.seatmap-panel-body{padding:11px;}
+.seatmap-filter-list{display:grid;gap:10px;}
+.seatmap-filter{display:flex;align-items:flex-start;gap:8px;color:#a7b6ba;font-size:10px;line-height:1.4;cursor:pointer;}
+.seatmap-filter input{flex:none;width:13px;height:13px;margin:1px 0 0;accent-color:#c9d8ce;}
+.seatmap-filter-select{height:31px;margin-top:9px;font-size:10px;}
+.seatmap-legend{display:grid;gap:8px;}
+.seatmap-legend-item{display:flex;align-items:center;gap:8px;color:#9aadb6;font-size:9px;}
+.seatmap-swatch{width:14px;height:14px;border:1px solid currentColor;}
+.seatmap-swatch.available{background:#155b34;color:#a6f5c0;}
+.seatmap-swatch.occupied{background:#79342f;color:#f3aaa4;}
+.seatmap-swatch.blocked{background:#313b40;color:#afbac1;}
+.seatmap-swatch.premium{background:#78622b;color:#f1d58e;}
+.seatmap-swatch.extra-legroom{background:#204d7a;color:#b6d8ff;}
+.seatmap-swatch.exit-row{background:#75651e;color:#f6e19c;}
+.seatmap-availability-summary{margin-top:10px;padding-top:9px;border-top:1px solid #1e2b34;color:#879ba2;font-size:9px;line-height:1.6;}
+.seatmap-canvas-wrap{position:relative;min-width:0;border:1px solid #1e2b34;background:#05080b;}
+.seatmap-canvas{height:min(68vh,780px);min-height:520px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y;scrollbar-color:#394950 #05080b;}
+.seatmap-svg{display:block;width:100%;height:auto;min-height:100%;margin:0 auto;overflow:visible;touch-action:none;cursor:grab;}
+.seatmap-svg:active{cursor:grabbing;}
+.seatmap-fuselage{fill:#080d11;stroke:#52626a;stroke-width:2;}
+.seatmap-centerline{fill:none;stroke:#26343b;stroke-width:1;stroke-dasharray:4 9;}
+.seatmap-wing{fill:#0b1116;stroke:#26343b;stroke-width:1.2;}
+.seatmap-facility{fill:#80939a;font-family:var(--mono);font-size:9px;letter-spacing:1.1px;}
+.seatmap-cabin-label{fill:#a6b5b8;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:2px;}
+.seatmap-row-label{fill:#84969e;font-family:var(--mono);font-size:9px;}
+.seatmap-exit-label{fill:#e6d581;font-family:var(--mono);font-size:8px;letter-spacing:1px;}
+.seatmap-seat{cursor:pointer;outline:none;}
+.seatmap-seat-box{stroke-width:1.25;}
+.seatmap-seat-letter{fill:currentColor;font-family:var(--mono);font-size:10px;font-weight:700;pointer-events:none;}
+.seatmap-seat-mark{fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:square;pointer-events:none;}
+.seatmap-seat.status-available{color:#a6f5c0;}
+.seatmap-seat.status-available .seatmap-seat-box{fill:#155b34;stroke:#56b779;}
+.seatmap-seat.status-occupied{color:#f3aaa4;}
+.seatmap-seat.status-occupied .seatmap-seat-box{fill:#79342f;stroke:#b56b65;}
+.seatmap-seat.status-blocked{color:#afbac1;}
+.seatmap-seat.status-blocked .seatmap-seat-box{fill:#313b40;stroke:#65737a;}
+.seatmap-seat.status-premium{color:#f1d58e;}
+.seatmap-seat.status-premium .seatmap-seat-box{fill:#78622b;stroke:#b49a52;}
+.seatmap-seat.status-extra_legroom{color:#b6d8ff;}
+.seatmap-seat.status-extra_legroom .seatmap-seat-box{fill:#204d7a;stroke:#5d86b1;}
+.seatmap-seat.status-exit_row{color:#f6e19c;}
+.seatmap-seat.status-exit_row .seatmap-seat-box{fill:#75651e;stroke:#bb9f43;}
+.seatmap-seat.is-filtered-out{opacity:.16;}
+.seatmap-seat.is-selected .seatmap-seat-box{stroke:#f5f8f6;stroke-width:2.8;}
+.seatmap-seat.is-demo-choice .seatmap-seat-box{stroke:#ffffff;stroke-width:3.2;stroke-dasharray:3 2;}
+.seatmap-seat:focus .seatmap-seat-box{stroke:#ffffff;stroke-width:2.8;}
+.seatmap-tooltip{position:absolute;z-index:2;max-width:250px;padding:6px 8px;border:1px solid #52626a;background:#05080b;color:#e1ebe4;font-size:9px;letter-spacing:.35px;pointer-events:none;}
+.seatmap-map-foot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:8px;color:#70838c;font-size:9px;line-height:1.6;}
+.seatmap-count{margin:10px 0 2px;color:#d6e1da;font-size:23px;line-height:1;}
+.seatmap-count-caption{margin-top:6px;color:#80939a;font-size:9px;line-height:1.5;}
+.seatmap-details{min-height:160px;}
+.seatmap-empty-detail{color:#71858d;font-size:10px;line-height:1.7;}
+.seatmap-detail-name{color:#e0e9e3;font-size:24px;letter-spacing:.8px;}
+.seatmap-detail-status{margin:6px 0 12px;font-size:9px;letter-spacing:.7px;}
+.status-text-available{color:#a6f5c0;}.status-text-occupied{color:#f3aaa4;}.status-text-blocked{color:#afbac1;}.status-text-premium{color:#f1d58e;}.status-text-extra_legroom{color:#b6d8ff;}.status-text-exit_row{color:#f6e19c;}
+.seatmap-detail-list{display:grid;gap:8px;margin:0 0 12px;}
+.seatmap-detail-list>div{display:grid;grid-template-columns:68px minmax(0,1fr);gap:7px;align-items:start;}
+.seatmap-detail-list dt{color:#667b84;font-size:8px;letter-spacing:.8px;}
+.seatmap-detail-list dd{margin:0;color:#b7c5c7;font-size:9px;line-height:1.45;overflow-wrap:anywhere;}
+.seatmap-selection-status{margin:9px 0;color:#8fa6b2;font-size:9px;line-height:1.55;}
+.seatmap-export-row{display:flex;flex-wrap:wrap;gap:6px;}
+.seatmap-export-row .seatmap-btn{flex:1 1 auto;}
+.seatmap-disclaimer{margin-top:15px;padding:10px 12px;border:1px solid #28343a;color:#89999e;font-size:9px;line-height:1.65;}
+.seatmap-disclaimer strong{color:#c7d3ce;font-weight:600;}
+.seatmap-notice{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.84);}
+.seatmap-notice.hidden{display:none!important}
+.seatmap-notice-card{width:min(540px,100%);border:1px solid #4a5356;background:#05080b;padding:23px;}
+.seatmap-notice-kicker{margin-bottom:12px;color:#d9c375;font-size:9px;letter-spacing:1.8px;}
+.seatmap-notice-card h2{margin-bottom:12px;color:#e1e9e4;font-size:18px;font-weight:500;letter-spacing:.75px;}
+.seatmap-notice-card p{margin-bottom:10px;color:#a7b6ba;font-size:11px;line-height:1.75;}
+.seatmap-notice-card p strong{color:#e5d382;font-weight:600;}
+.seatmap-notice-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:17px;}
+.seatmap-notice-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 11px;border:1px solid #33434d;color:#a7b6ba;text-decoration:none;font-size:10px;letter-spacing:.65px;}
+.seatmap-summary-dialog{position:fixed;inset:0;z-index:72;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.82);}
+.seatmap-summary-dialog.hidden{display:none!important}
+.seatmap-summary-card{width:min(560px,100%);max-height:88vh;overflow:auto;border:1px solid #394950;background:#05080b;padding:16px;}
+.seatmap-summary-card h2{margin-bottom:10px;color:#d8e4dc;font-size:11px;font-weight:500;letter-spacing:1.2px;}
+.seatmap-summary-card pre{overflow:auto;white-space:pre-wrap;color:#a8b7b6;font-family:var(--mono);font-size:10px;line-height:1.7;}
+.seatmap-summary-actions{display:flex;justify-content:flex-end;margin-top:14px;}
+@media(max-width:1120px){.seatmap-form{grid-template-columns:repeat(3,minmax(0,1fr));}.seatmap-form .seatmap-btn{align-self:end;}.seatmap-demo-layout{grid-template-columns:180px minmax(0,1fr);}.seatmap-side-panel-right{grid-column:2;grid-row:2;grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-side-panel-left{grid-row:1 / span 2;}}
+@media(max-width:760px){.seatmap-main{padding:15px 12px 24px;}.seatmap-title-row{align-items:flex-start;flex-direction:column;}.seatmap-demo-layout{grid-template-columns:1fr;}.seatmap-side-panel-left,.seatmap-side-panel-right{grid-column:auto;grid-row:auto;grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-canvas{height:64vh;min-height:440px;}.seatmap-toolbar{align-items:flex-start;}.seatmap-flight-heading{align-items:flex-start;}.seatmap-source-pill{max-width:132px;white-space:normal;line-height:1.45;}}
+@media(max-width:520px){.seatmap-topbar{padding:8px 11px;}.seatmap-wordmark{font-size:9px;letter-spacing:.8px;}.seatmap-top-tag{font-size:8px;padding:4px 5px;}.seatmap-form{grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-form .seatmap-btn{grid-column:1 / -1;}.seatmap-side-panel-left,.seatmap-side-panel-right{grid-template-columns:1fr;}.seatmap-toolbar{display:grid;grid-template-columns:1fr;}.seatmap-toolbar-group{justify-content:flex-start;}.seatmap-canvas{height:60vh;min-height:390px;}.seatmap-notice-card{padding:18px 15px;}.seatmap-notice-card h2{font-size:15px;}.seatmap-examples-label{flex-basis:100%;}}
+@media(prefers-reduced-motion:reduce){.seatmap-page *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+/* The new route keeps the requested black-and-white chrome; only seat-state
+   swatches and seat cells intentionally use status colors. */
+.seatmap-page{background:#000;color:#f3f3f3;}
+.seatmap-topbar,.seatmap-card,.seatmap-panel,.seatmap-flight-heading,.seatmap-toolbar,.seatmap-notice-card,.seatmap-summary-card{background:#000;border-color:#3a3a3a;}
+.seatmap-canvas-wrap,.seatmap-canvas,.seatmap-field input,.seatmap-field select,.seatmap-filter-select,.seatmap-tooltip{background:#000;border-color:#4a4a4a;color:#f2f2f2;}
+.seatmap-canvas{scrollbar-color:#555 #000;}
+.seatmap-dev-banner{border-color:#555;background:#000;color:#ddd;}
+.seatmap-dev-mark,.seatmap-source-pill{border-color:#777;color:#eee;}
+.seatmap-notice-kicker,.seatmap-notice-card p strong{color:#fff;}
+.seatmap-notice-card p,.seatmap-notice-actions a{color:#d0d0d0;}
+.seatmap-notice-actions a{border-color:#666;}
+.seatmap-btn,.seatmap-example{border-color:#666;background:#000;color:#f2f2f2;}
+.seatmap-btn-primary{border-color:#fff;color:#fff;}
+.seatmap-btn:hover:not(:disabled),.seatmap-example:hover{border-color:#fff;background:#fff;color:#000;}
+.seatmap-btn:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline-color:#fff;}
+.seatmap-field input:focus,.seatmap-field select:focus,.seatmap-filter-select:focus{border-color:#fff;outline-color:#fff;}
+.seatmap-back,.seatmap-wordmark,.seatmap-title,.seatmap-flight-name,.seatmap-detail-name,.seatmap-count,.seatmap-notice-card h2{color:#f2f2f2;}
+.seatmap-subtitle,.seatmap-flight-meta,.seatmap-panel-title,.seatmap-field label,.seatmap-overline,.seatmap-examples-label,.seatmap-zoom-value,.seatmap-refresh-info,.seatmap-filter,.seatmap-legend-item,.seatmap-availability-summary,.seatmap-map-foot,.seatmap-count-caption,.seatmap-empty-detail,.seatmap-detail-list dt,.seatmap-detail-list dd,.seatmap-selection-status,.seatmap-disclaimer,.seatmap-summary-card h2,.seatmap-summary-card pre{color:#bdbdbd;}
+.seatmap-fuselage{fill:#050505;stroke:#777;}
+.seatmap-centerline{stroke:#383838;}
+.seatmap-wing{fill:#080808;stroke:#393939;}
+.seatmap-facility,.seatmap-cabin-label,.seatmap-row-label{fill:#c5c5c5;}
+.seatmap-filter input{accent-color:#fff;}
+.seatmap-exit-label{fill:#f6e19c;}
+.seatmap-top-tag{border-color:#666;color:#ddd;}
+.seatmap-panel-title{border-color:#333;}
+.seatmap-form-status{color:#bdbdbd;}
+.seatmap-form-status.is-error{color:#f2a8a0;}
+.seatmap-back:hover{color:#fff;}
+.seatmap-disclaimer{border-color:#3a3a3a;}
+.seatmap-disclaimer strong{color:#eee;}
+@media(max-width:1120px){.seatmap-side-panel-right{border-color:#3a3a3a;}}
+
 </style>
 </head>
 <body>
@@ -291,9 +455,10 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 <div class="status">
   <span id="st">READY</span>
   <button id="btnAbout" class="linkbtn" type="button" aria-haspopup="dialog" aria-controls="aboutModal" title="What SpicyTerminal does, what it refuses to do, and who built it">About</button>
-  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert one complete flight segment to enable its booking link">BOOKING LINK</button>
+  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert one complete Alaska Airlines flight to enable its flight-number search link. Clicking opens an external search and shares supported flight details; no booking or purchase is made.">BOOKING LINK</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
   <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
+  <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Open the Seat Map preview; live seat data is not connected">Seat Map</a>
   <button id="report" class="linkbtn">Report a bug</button>
 </div>
 
@@ -356,7 +521,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
     </div>
 
     <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS ready to copy format to paste into Backoffice.</b>
-      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. If you click BOOKING LINK, the selected booking site receives that segment's route and date (and its flight number for Alaska) to prefill a search.</p>
+      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK is enabled only for a complete, single-segment Alaska Airlines itinerary with a flight-number search URL. Clicking opens an external one-way search for one adult and no children and shares the flight number, origin, destination, and departure date with Alaska Airlines. Flight times and cabin are not prefilled by this link; unsupported airlines and uncertain or multi-segment itineraries stay disabled. Check flight availability on the external site; it never books or purchases a ticket automatically.</p>
 
     <ul class="about-stats">
       <li><b>0</b> accounts · cookies · trackers</li>
@@ -374,7 +539,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3.2l1.7 4.7 4.7 1.7-4.7 1.7L11 16l-1.7-4.7L4.6 9.6l4.7-1.7z"/><path d="M18.4 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></svg></span>
             <span><b><code>AI FIX</code>.</b> When a first read cannot see the flights, it re-reads and repairs the output. Your key, your call.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
-            <span><b>Private.</b> Conversion stays in this tab. A booking-link click sends the route and date (and flight number for Alaska) only to the selected booking site.</span></li>
+            <span><b>Private.</b> Conversion stays in this tab. Clicking BOOKING LINK opens an external Alaska Airlines one-way search for one adult and no children, and shares the flight number, origin, destination, and departure date. This link does not prefill flight times or cabin, and it never books or purchases automatically. Other carriers stay unavailable unless an exact-flight search URL is verified.</span></li>
         </ul>
       </section>
 
@@ -401,6 +566,193 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
       <span class="sep">|</span>
       <span>Fewer surprises, not more features.</span>
       <button class="save" id="aboutGo" type="button" style="margin-left:auto;padding:7px 16px;font-size:11px">START CONVERTING →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Seat Map is a separate static route. Its data is a local illustration, not airline inventory. -->
+<div class="seatmap-page hidden" id="seatmapPage">
+  <div class="seatmap-topbar">
+    <a class="seatmap-back" id="seatmapBackLink" href="/" aria-label="Return to SpicyTerminal">← SPICYTERMINAL</a>
+    <span class="seatmap-wordmark">SEAT MAP VIEWER</span>
+    <span class="seatmap-top-tag">FEATURE PREVIEW</span>
+  </div>
+  <div class="seatmap-main" id="seatmapContent">
+    <div class="seatmap-title-row">
+      <div>
+        <h1 class="seatmap-title" id="seatmapPageTitle">SEAT MAP</h1>
+        <p class="seatmap-subtitle">Explore an aircraft layout and seat-level details in a local demo. No airline seat map or availability provider is connected.</p>
+      </div>
+    </div>
+    <div class="seatmap-dev-banner" role="status">
+      <span class="seatmap-dev-mark">IN DEVELOPMENT</span>
+      <span><strong>Demo only.</strong> Layouts, seat statuses, and refreshes below are simulated in this browser. They are not live airline data and must not be used to choose or book a real seat.</span>
+    </div>
+
+    <section class="seatmap-card" aria-labelledby="seatmapSearchTitle">
+      <h2 class="seatmap-panel-title" id="seatmapSearchTitle" style="padding:0 0 11px;border:0">SAMPLE FLIGHT DETAILS</h2>
+      <form class="seatmap-form" id="seatmapForm" novalidate>
+        <div class="seatmap-field">
+          <label for="seatmapFlightNumber">Flight number</label>
+          <input id="seatmapFlightNumber" name="flightNumber" type="text" value="AS100" inputmode="text" autocomplete="off" spellcheck="false" maxlength="8" aria-describedby="seatmapFormStatus">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapOrigin">Origin</label>
+          <input id="seatmapOrigin" name="origin" type="text" value="SEA" autocomplete="off" spellcheck="false" maxlength="3">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapDestination">Destination</label>
+          <input id="seatmapDestination" name="destination" type="text" value="LAX" autocomplete="off" spellcheck="false" maxlength="3">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapDate">Departure date</label>
+          <input id="seatmapDate" name="date" type="date" autocomplete="off">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapAircraft">Aircraft layout · sample</label>
+          <select id="seatmapAircraft" name="aircraftCode">
+            <option value="738">Boeing 737-800 · 738</option>
+            <option value="320">Airbus A320 · 320</option>
+            <option value="77W">Boeing 777-300ER · 77W</option>
+          </select>
+        </div>
+        <button class="seatmap-btn seatmap-btn-primary" id="seatmapSearchButton" type="submit">GENERATE SAMPLE MAP</button>
+      </form>
+      <div class="seatmap-examples" aria-label="Example sample flights">
+        <span class="seatmap-examples-label">QUICK EXAMPLES</span>
+        <button class="seatmap-example" type="button" data-seatmap-example data-flight="AS100" data-origin="SEA" data-destination="LAX" data-aircraft="738">AS100 · 738</button>
+        <button class="seatmap-example" type="button" data-seatmap-example data-flight="BA117" data-origin="LHR" data-destination="JFK" data-aircraft="77W">BA117 · 77W</button>
+        <button class="seatmap-example" type="button" data-seatmap-example data-flight="DL2305" data-origin="JFK" data-destination="BOS" data-aircraft="320">DL2305 · 320</button>
+      </div>
+      <div class="seatmap-form-status" id="seatmapFormStatus" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="seatmap-demo hidden" id="seatmapDemo" aria-labelledby="seatmapFlightName">
+      <div class="seatmap-flight-heading">
+        <div>
+          <h2 class="seatmap-flight-name" id="seatmapFlightName">SAMPLE FLIGHT</h2>
+          <p class="seatmap-flight-meta" id="seatmapFlightMeta"></p>
+        </div>
+        <span class="seatmap-source-pill">SIMULATED<br>NOT LIVE</span>
+      </div>
+      <div class="seatmap-toolbar">
+        <div class="seatmap-toolbar-group" aria-label="Map zoom controls">
+          <button class="seatmap-btn" id="seatmapZoomOut" type="button" aria-label="Zoom out">−</button>
+          <span class="seatmap-zoom-value" id="seatmapZoomValue">100%</span>
+          <button class="seatmap-btn" id="seatmapZoomIn" type="button" aria-label="Zoom in">+</button>
+          <button class="seatmap-btn" id="seatmapZoomReset" type="button">RESET VIEW</button>
+        </div>
+        <div class="seatmap-toolbar-group">
+          <span class="seatmap-refresh-info" id="seatmapRefreshCountdown">NEXT SIMULATED UPDATE —</span>
+          <button class="seatmap-btn" id="seatmapRefreshNow" type="button">REFRESH SAMPLE</button>
+        </div>
+      </div>
+
+      <div class="seatmap-demo-layout">
+        <aside class="seatmap-side-panel seatmap-side-panel-left" aria-label="Seat map filters and legend">
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">FILTER SEATS</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-filter-list">
+                <label class="seatmap-filter"><input id="seatmapFilterAvailableOnly" type="checkbox"><span>Selectable sample seats</span></label>
+                <label class="seatmap-filter"><input id="seatmapFilterWindowOnly" type="checkbox"><span>Window seats</span></label>
+                <label class="seatmap-filter"><input id="seatmapFilterAisleOnly" type="checkbox"><span>Aisle seats</span></label>
+                <label class="seatmap-filter"><input id="seatmapFilterExitOnly" type="checkbox"><span>Exit-row seats</span></label>
+              </div>
+              <label class="seatmap-overline" for="seatmapFilterCabin" style="display:block;margin-top:13px">Cabin</label>
+              <select class="seatmap-filter-select" id="seatmapFilterCabin">
+                <option value="all">All cabins</option>
+                <option value="first">First</option>
+                <option value="business">Business</option>
+                <option value="premium_economy">Premium Economy</option>
+                <option value="economy">Economy</option>
+              </select>
+            </div>
+          </section>
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">SAMPLE STATUS KEY</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-legend">
+                <div class="seatmap-legend-item"><span class="seatmap-swatch available"></span>Available</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch occupied"></span>Occupied</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch blocked"></span>Unavailable</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch premium"></span>Premium</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch extra-legroom"></span>Extra legroom</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch exit-row"></span>Exit row</div>
+              </div>
+              <div class="seatmap-availability-summary" id="seatmapStatusCounts" aria-live="polite">Generate a sample map to view counts.</div>
+            </div>
+          </section>
+        </aside>
+
+        <div>
+          <div class="seatmap-canvas-wrap">
+            <div class="seatmap-canvas" id="seatmapCanvas" aria-label="Scrollable interactive sample seat map">
+              <svg class="seatmap-svg" id="seatmapSvg" role="group" aria-label="Interactive simulated seat map"></svg>
+            </div>
+            <div class="seatmap-tooltip hidden" id="seatmapTooltip" role="status"></div>
+          </div>
+          <div class="seatmap-map-foot">
+            <span>Click a seat for sample details · drag to pan · use controls to zoom</span>
+            <span id="seatmapLastUpdated">NO SAMPLE GENERATED</span>
+          </div>
+        </div>
+
+        <aside class="seatmap-side-panel seatmap-side-panel-right" aria-label="Selected seat details and exports">
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">SEAT DETAILS</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-details" id="seatmapSeatDetails" aria-live="polite"><p class="seatmap-empty-detail">Choose a seat to inspect its sample status and layout features.</p></div>
+              <button class="seatmap-btn" id="seatmapDemoSelect" type="button" disabled>SELECT A SAMPLE SEAT</button>
+              <p class="seatmap-selection-status" id="seatmapSelectionStatus">NO SEAT SELECTED</p>
+            </div>
+          </section>
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">SAMPLE COUNTS</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-count" id="seatmapAvailableCount">—</div>
+              <p class="seatmap-count-caption">SELECTABLE SAMPLE SEATS</p>
+              <p class="seatmap-count-caption"><span id="seatmapTotalCount">—</span> seats in this illustrative layout. Counts are not inventory.</p>
+            </div>
+          </section>
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">LOCAL EXPORTS</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-export-row">
+                <button class="seatmap-btn" id="seatmapCopyAscii" type="button">COPY TEXT MAP</button>
+                <button class="seatmap-btn" id="seatmapDownloadCsv" type="button">CSV</button>
+                <button class="seatmap-btn" id="seatmapDownloadJson" type="button">JSON</button>
+                <button class="seatmap-btn" id="seatmapShowSummary" type="button" aria-haspopup="dialog" aria-controls="seatmapSummaryDialog">SUMMARY</button>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+      <p class="seatmap-disclaimer" id="seatmapRefreshStatus" role="status" aria-live="polite"><strong>SIMULATED REFRESH:</strong> the 30-second refresh changes sample statuses locally. It does not check a flight, contact an airline, reserve a seat, or confirm availability.</p>
+    </section>
+  </div>
+
+  <div class="seatmap-notice" id="seatmapNotice" role="dialog" aria-modal="true" aria-labelledby="seatmapNoticeTitle" aria-describedby="seatmapNoticeBody">
+    <div class="seatmap-notice-card">
+      <div class="seatmap-notice-kicker">FEATURE STATUS · IN DEVELOPMENT</div>
+      <h2 id="seatmapNoticeTitle">Seat Map is still under development</h2>
+      <div id="seatmapNoticeBody">
+        <p>The live airline seat-inventory connection has not been implemented. This preview uses static aircraft layouts and <strong>simulated seat availability</strong> generated in your browser.</p>
+        <p>Refreshes, seat counts, cabin details, and availability are sample-only—not current flight data, pricing, or a reservation. Do not use this demo to choose or book a real seat.</p>
+        <p>No airline API is called and no API key is required.</p>
+      </div>
+      <div class="seatmap-notice-actions">
+        <a href="/" id="seatmapNoticeBack">BACK TO SPICYTERMINAL</a>
+        <button class="seatmap-btn seatmap-btn-primary" id="seatmapNoticeContinue" type="button">CONTINUE TO SAMPLE VIEWER</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="seatmap-summary-dialog hidden" id="seatmapSummaryDialog" role="dialog" aria-modal="true" aria-labelledby="seatmapSummaryTitle">
+    <div class="seatmap-summary-card">
+      <h2 id="seatmapSummaryTitle">SAMPLE FLIGHT SUMMARY</h2>
+      <pre id="seatmapSummaryText"></pre>
+      <div class="seatmap-summary-actions"><button class="seatmap-btn" id="seatmapSummaryClose" type="button">CLOSE</button></div>
     </div>
   </div>
 </div>
@@ -10328,12 +10680,16 @@ function setOut(text) {
 }
 
 /* BOOKING_LINK:BEGIN */
-/* A booking search is available only for one fully parsed, future, non-placeholder
-   segment. Known carriers go to their own search page; other carriers use the
-   Google Flights search fallback from SpicyLinkGenerator. No estimated fare or
-   pricing data is ever added to the generated URL. */
+/*
+ * Offer one booking search only when the carrier URL carries an exact flight
+ * identity. Of the existing carrier URLs, only Alaska's F1 handoff carries the
+ * route, date, and flight number together; AA/BA/DL/UA links were only broad
+ * route/date searches and are intentionally not presented as exact-flight
+ * links. The current F1 handoff has no verified time or cabin fields, so those
+ * are not added or claimed. This only opens a search; it never submits a booking.
+ */
 var BOOKING_LINK_MONTHS = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
-var BOOKING_LINK_CARRIERS = {AA:"American Airlines",BA:"British Airways",DL:"Delta Air Lines",UA:"United Airlines",AS:"Alaska Airlines"};
+var BOOKING_LINK_CARRIERS = {AS:"Alaska Airlines"};
 function bookingLinkDateYmd(ddmmm, now) {
   var m = /^(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/.exec(String(ddmmm || "").trim().toUpperCase());
   if (!m) return "";
@@ -10356,50 +10712,40 @@ function bookingClockValid(value) {
   if ((mark === "N" || mark === "M") && (hour !== 12 || minute !== 0)) return false;
   return true;
 }
-function bookingLinkCabin(segment) {
-  var cabin = String((segment && segment.cabin) || "").toUpperCase();
-  if (cabin.indexOf("FIRST") >= 0) return "FIRST";
-  if (cabin.indexOf("BUSINESS") >= 0) return "BUSINESS";
-  if (cabin.indexOf("PREMIUM") >= 0) return "PREMIUM_ECONOMY";
-  return "COACH";
-}
 function buildSingleSegmentBookingLink(segment, dateYmd) {
   var carrier = String(segment.airline || "").trim().toUpperCase();
+  if (!Object.prototype.hasOwnProperty.call(BOOKING_LINK_CARRIERS, carrier)) {
+    return {eligible:false, reason:"No verified exact-flight booking search is available for this airline."};
+  }
+
   var flight = String(segment.flight_no || "").trim();
   var origin = String(segment.orig || "").trim().toUpperCase();
   var destination = String(segment.dest || "").trim().toUpperCase();
-  var cabin = bookingLinkCabin(segment);
-  var enc = encodeURIComponent;
-  var url, site = BOOKING_LINK_CARRIERS[carrier] || "Google Flights";
-
-  if (carrier === "AA") {
-    var aa = ["tripType=oneWay", "searchType=Revenue", "cabinType=" + cabin, "carriers=ALL", "adult=1", "child=0", "infantInLap=0"];
-    [["slices[0].origin", origin], ["slices[0].destination", destination], ["slices[0].departureDate", dateYmd], ["slices[0].departureTime", "ANYTIME"]].forEach(function (pair) {
-      aa.push(enc(pair[0]) + "=" + enc(pair[1]));
-    });
-    url = "https://www.aa.com/booking/find-flights?" + aa.join("&");
-  } else if (carrier === "BA") {
-    var baCabin = cabin === "FIRST" ? "F" : cabin === "BUSINESS" ? "C" : cabin === "PREMIUM_ECONOMY" ? "W" : "M";
-    url = "https://www.britishairways.com/travel/book/public/en_gb/processOffer?onds=" +
-      enc(origin + "-" + destination + "_" + dateYmd) + "&ad=1&yad=0&ch=0&inf=0&cabin=" + baCabin + "&flex=LOWEST&ond=1";
-  } else if (carrier === "DL") {
-    url = "https://www.delta.com/flight-search/book-a-flight?tripType=ONE_WAY&originCity=" + enc(origin) +
-      "&destinationCity=" + enc(destination) + "&departureDate=" + enc(dateYmd) + "&paxCount=1";
-  } else if (carrier === "UA") {
-    var unitedCabin = cabin === "FIRST" ? 7 : cabin === "BUSINESS" ? 4 : 1;
-    url = "https://www.united.com/en/us/fsr/choose-flights?f=" + enc(origin) + "&t=" + enc(destination) +
-      "&d=" + enc(dateYmd) + "&tt=1&at=1&sc=" + unitedCabin + "&px=1";
-  } else if (carrier === "AS") {
-    var parts = dateYmd.split("-");
-    var alaskaDate = parts[1] + "/" + parts[2] + "/" + parts[0];
-    var alaskaFlight = enc(origin + "|" + destination + "|" + alaskaDate + "|" + flight + "|f");
-    url = "https://www.alaskaair.com/planbook/shoppingstart?A=1&C=0&FT=ow&F1=" + alaskaFlight +
-      "&DEST=" + enc(destination) + "&frm=cart&META=GOO_CS";
-  } else {
-    var query = "Flights from " + origin + " to " + destination + " on " + dateYmd;
-    url = "https://www.google.com/travel/flights?q=" + enc(query) + "&curr=USD";
+  var parts = String(dateYmd || "").split("-");
+  if (parts.length !== 3 || !/^\d{4}$/.test(parts[0]) || !/^\d{2}$/.test(parts[1]) || !/^\d{2}$/.test(parts[2])) {
+    return {eligible:false, reason:"A valid future departure date is required."};
   }
-  return {url:url, site:site, carrier:carrier, flight:flight, origin:origin, destination:destination, date:dateYmd};
+
+  // Alaska's booking handoff serializes one flight in F1 as
+  // origin|destination|MM/DD/YYYY|flight number|f. The route is the Alaska site
+  // itself; F1 carries the specific flight number as well as its route/date.
+  // Do not add departure/arrival times or cabin: no current F1 fields for those
+  // values have been verified. Other carrier URLs remain disabled until an
+  // equivalent exact-flight handoff is verified.
+  var alaskaDate = parts[1] + "/" + parts[2] + "/" + parts[0];
+  var alaskaFlight = encodeURIComponent([origin, destination, alaskaDate, flight, "f"].join("|"));
+  var url = "https://www.alaskaair.com/planbook/shoppingstart?A=1&C=0&FT=ow&F1=" + alaskaFlight +
+    "&DEST=" + encodeURIComponent(destination) + "&frm=cart&META=GOO_CS";
+  return {
+    url:url,
+    site:BOOKING_LINK_CARRIERS[carrier],
+    carrier:carrier,
+    flight:flight,
+    origin:origin,
+    destination:destination,
+    date:dateYmd,
+    sharedFields:["flight number", "origin", "destination", "departure date"]
+  };
 }
 function bookingGdsRowCount(text) {
   var head = String(text || "").split(/^\s*<--additional-->\s*$/im)[0];
@@ -10410,7 +10756,7 @@ function bookingGdsRowCount(text) {
 }
 function bookingLinkWarningsBlock(warnings) {
   for (var i = 0; i < (warnings || []).length; i++) {
-    if (/NOT read|missing|unknown|route reversed|repeat the same route|duplicat/i.test(String(warnings[i]))) return true;
+    if (/NOT read|missing|unknown|route reversed|repeat the same route|duplicat|hidden[ -]?stop|uncertain|ambiguous|incomplete/i.test(String(warnings[i]))) return true;
   }
   return false;
 }
@@ -10442,6 +10788,9 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
   if (!/^[A-Z0-9]{2}$/.test(airline) || !/^\d{1,6}$/.test(flight)) {
     return {eligible:false, reason:"A valid airline code and flight number are required."};
   }
+  if (!Object.prototype.hasOwnProperty.call(BOOKING_LINK_CARRIERS, airline)) {
+    return {eligible:false, reason:"No verified exact-flight booking search is available for this airline."};
+  }
   if (!/^[A-Z]{3}$/.test(origin) || !/^[A-Z]{3}$/.test(destination) || origin === destination) {
     return {eligible:false, reason:"A valid origin and destination are required."};
   }
@@ -10451,19 +10800,29 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
   var dateYmd = bookingLinkDateYmd(segment.date_ddmmm, now);
   if (!dateYmd) return {eligible:false, reason:"A valid future departure date is required."};
   var details = buildSingleSegmentBookingLink(segment, dateYmd);
+  if (!details || !details.url) return details || {eligible:false, reason:"No verified exact-flight booking search is available."};
   details.eligible = true;
   return details;
+}
+function bookingLinkCurrentDetails(text) {
+  return bookingSourceDirty
+    ? {eligible:false, reason:"Input changed — convert it before opening a booking link."}
+    : bookingLinkFromOutput(text, bookingSourceWarnings);
 }
 function invalidateBookingLinkButton() {
   bookingSourceDirty = true;
   refreshBookingLinkButton("");
 }
-function refreshBookingLinkButton(text) {
+function bookingLinkDisclosure(details) {
+  return "Opens a one-way search for one adult and no children on " + details.site +
+    ", sharing flight number " + details.flight + ", origin " + details.origin +
+    ", destination " + details.destination + ", and departure date " + details.date +
+    " with that external site. Flight times and cabin are not prefilled; verify flight availability on the airline site. No booking or purchase is made.";
+}
+function refreshBookingLinkButton(text, knownDetails) {
   var button = $("btnBookingLink");
   if (!button) return;
-  var details = bookingSourceDirty
-    ? {eligible:false, reason:"Input changed — convert it before opening a booking link."}
-    : bookingLinkFromOutput(text, bookingSourceWarnings);
+  var details = knownDetails || bookingLinkCurrentDetails(text);
   button.disabled = !details.eligible;
   if (button.classList) {
     if (typeof button.classList.toggle === "function") button.classList.toggle("booking-link-ready", !!details.eligible);
@@ -10472,9 +10831,12 @@ function refreshBookingLinkButton(text) {
   }
   if (button.setAttribute) {
     button.setAttribute("aria-disabled", details.eligible ? "false" : "true");
-    button.setAttribute("aria-label", details.eligible ? "Open " + details.site + " booking search for " + details.origin + " to " + details.destination : "Booking link unavailable: " + details.reason);
+    button.setAttribute("aria-label", details.eligible
+      ? "Open " + details.site + " search for " + details.carrier + " " + details.flight + ", " + details.origin + " to " + details.destination + " on " + details.date
+      : "Booking link unavailable: " + details.reason);
+    button.setAttribute("aria-description", details.eligible ? bookingLinkDisclosure(details) : details.reason);
   }
-  button.title = details.eligible ? "Open " + details.site + " booking search for " + details.origin + " to " + details.destination + " on " + details.date + ". Verify flight availability and fare on the booking site." : details.reason;
+  button.title = details.eligible ? bookingLinkDisclosure(details) : details.reason;
 }
 function copyBookingUrl(url) {
   function fallbackCopy() {
@@ -10495,8 +10857,9 @@ function copyBookingUrl(url) {
   return fallbackCopy();
 }
 function openBookingLink() {
-  var details = bookingLinkFromOutput(out ? out.textContent : "", bookingSourceWarnings);
-  refreshBookingLinkButton(out ? out.textContent : "");
+  var text = out ? out.textContent : "";
+  var details = bookingLinkCurrentDetails(text);
+  refreshBookingLinkButton(text, details);
   if (!details.eligible) {
     setStatus("BOOKING LINK NOT AVAILABLE — " + details.reason, true);
     return false;
@@ -10505,7 +10868,7 @@ function openBookingLink() {
   var tab = null;
   try { tab = window.open("about:blank", "_blank"); } catch (e) { tab = null; }
   if (!tab) {
-    setStatus("POP-UP BLOCKED — booking link copied if clipboard access is available", true);
+    setStatus("POP-UP BLOCKED — flight-search link copied if clipboard access is available; no booking was made", true);
     return false;
   }
   try { tab.opener = null; } catch (e) {}
@@ -10515,7 +10878,7 @@ function openBookingLink() {
   } catch (e) {
     try { tab.location.href = details.url; } catch (ignored) {}
   }
-  setStatus("OPENED " + details.site.toUpperCase() + " BOOKING SEARCH — " + details.origin + " → " + details.destination);
+  setStatus("OPENED " + details.site.toUpperCase() + " BOOKING SEARCH — FLIGHT DETAILS SHARED; NO BOOKING OR PURCHASE MADE");
   return true;
 }
 /* BOOKING_LINK:END */
@@ -13752,6 +14115,948 @@ try {
 } catch (e) {}
 
 })();
+</script>
+<script>/* Seat Map demo for SpicyTerminal.
+ *
+ * This is intentionally a static, local-only viewer. It does not call an
+ * airline, inventory provider, or backend. Every seat status is generated
+ * deterministically from the entered demo flight and refresh counter.
+ */
+(function (root) {
+  "use strict";
+
+  /** Static aircraft outlines used only by the clearly labelled demo viewer. */
+  var AIRCRAFT_LAYOUTS = {
+    "738": {
+      name: "Boeing 737-800",
+      iataCode: "738",
+      icaoCode: "B738",
+      wingStartRow: 12,
+      wingEndRow: 23,
+      facilities: ["GALLEY", "LAVATORY", "EXIT"],
+      cabins: [
+        { name: "Business", code: "business", from: 1, to: 4, groups: [["A", "B", "C"], ["D", "E", "F"]], pitch: 38, width: 21, features: ["RECLINE", "POWER — SAMPLE"] },
+        { name: "Economy", code: "economy", from: 5, to: 33, groups: [["A", "B", "C"], ["D", "E", "F"]], exitRows: [16, 17], pitch: 31, width: 17, features: ["STANDARD LEGROOM — SAMPLE"] }
+      ]
+    },
+    "320": {
+      name: "Airbus A320",
+      iataCode: "320",
+      icaoCode: "A320",
+      wingStartRow: 11,
+      wingEndRow: 20,
+      facilities: ["GALLEY", "LAVATORY", "EXIT"],
+      cabins: [
+        { name: "Business", code: "business", from: 1, to: 3, groups: [["A", "B", "C"], ["D", "E", "F"]], pitch: 37, width: 21, features: ["RECLINE", "POWER — SAMPLE"] },
+        { name: "Economy", code: "economy", from: 4, to: 31, groups: [["A", "B", "C"], ["D", "E", "F"]], exitRows: [14, 15], pitch: 30, width: 18, features: ["STANDARD LEGROOM — SAMPLE"] }
+      ]
+    },
+    "77W": {
+      name: "Boeing 777-300ER",
+      iataCode: "77W",
+      icaoCode: "B77W",
+      wingStartRow: 28,
+      wingEndRow: 43,
+      facilities: ["GALLEY", "LAVATORY", "EXIT"],
+      cabins: [
+        { name: "First", code: "first", from: 1, to: 4, groups: [["A"], ["D", "G"], ["K"]], pitch: 80, width: 34, features: ["LIE-FLAT — SAMPLE", "POWER — SAMPLE"] },
+        { name: "Business", code: "business", from: 5, to: 15, groups: [["A", "C"], ["D", "E", "G"], ["H", "K"]], pitch: 44, width: 22, features: ["LIE-FLAT — SAMPLE", "POWER — SAMPLE"] },
+        { name: "Premium Economy", code: "premium_economy", from: 16, to: 26, groups: [["A", "B", "C"], ["D", "E", "F", "G"], ["H", "J", "K"]], pitch: 38, width: 19, features: ["EXTRA LEGROOM — SAMPLE", "POWER — SAMPLE"] },
+        { name: "Economy", code: "economy", from: 27, to: 58, groups: [["A", "B", "C"], ["D", "E", "F", "G"], ["H", "J", "K"]], exitRows: [38, 39], pitch: 32, width: 17, features: ["STANDARD LEGROOM — SAMPLE"] }
+      ]
+    }
+  };
+
+  var AVAILABLE_STATUSES = ["available", "premium", "extra_legroom", "exit_row"];
+  var STATUS_LABELS = {
+    available: "Available",
+    occupied: "Occupied",
+    blocked: "Unavailable",
+    premium: "Premium",
+    extra_legroom: "Extra legroom",
+    exit_row: "Exit row"
+  };
+
+  /** Normalize and validate an airline flight number without inventing a carrier. */
+  function normalizeFlightNumber(value) {
+    var normalized = String(value == null ? "" : value).toUpperCase().replace(/[\s-]+/g, "");
+    if (!/^[A-Z0-9]{2,3}\d{1,4}[A-Z]?$/.test(normalized)) {
+      throw new TypeError("Enter a flight number such as AS100 or BA72.");
+    }
+    return normalized;
+  }
+
+  /** Normalize a three-letter airport code. */
+  function normalizeAirport(value, fieldName) {
+    var normalized = String(value == null ? "" : value).trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(normalized)) {
+      throw new TypeError((fieldName || "Airport") + " must be a three-letter IATA code.");
+    }
+    return normalized;
+  }
+
+  /** Validate a strict YYYY-MM-DD date without relying on locale parsing. */
+  function normalizeDate(value) {
+    var normalized = String(value == null ? "" : value).trim();
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+    if (!match) throw new TypeError("Choose a valid departure date.");
+    var year = Number(match[1]);
+    var month = Number(match[2]);
+    var day = Number(match[3]);
+    var date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+      throw new TypeError("Choose a valid departure date.");
+    }
+    return normalized;
+  }
+
+  /** Return an unsigned deterministic hash used for sample statuses. */
+  function hashString(value) {
+    var hash = 2166136261;
+    var text = String(value);
+    for (var i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  /** Choose a visibly varied but reproducible status for a sample seat. */
+  function sampleStatus(seed, seat, refreshIndex) {
+    var score = hashString(seed + "|" + seat.id + "|" + refreshIndex) % 100;
+    var premiumCabin = seat.cabinCode === "first" || seat.cabinCode === "business" || seat.cabinCode === "premium_economy";
+    if (seat.isExitRow) {
+      if (score < 42) return "exit_row";
+      if (score < 69) return "occupied";
+      if (score < 77) return "blocked";
+      return "available";
+    }
+    if (premiumCabin) {
+      if (score < 42) return "premium";
+      if (score < 70) return "occupied";
+      if (score < 77) return "blocked";
+      return "available";
+    }
+    if (score < 53) return "available";
+    if (score < 78) return "occupied";
+    if (score < 87) return "blocked";
+    if (score < 94) return "extra_legroom";
+    return "premium";
+  }
+
+  /** Determine whether a seat is at a window, aisle, or middle position. */
+  function seatPosition(groupIndex, groupCount, seatIndex, groupLength) {
+    var isOuterGroup = groupIndex === 0 || groupIndex === groupCount - 1;
+    var isOuterSeat = seatIndex === 0 || seatIndex === groupLength - 1;
+    if (isOuterGroup && isOuterSeat) {
+      return (groupIndex === 0 && seatIndex === 0) || (groupIndex === groupCount - 1 && seatIndex === groupLength - 1)
+        ? "window"
+        : "aisle";
+    }
+    if (!isOuterGroup && isOuterSeat) return "aisle";
+    return "middle";
+  }
+
+  /** Build a full local demo map; no network request or provider data is used. */
+  function createDemoSeatMap(input, refreshIndex) {
+    var details = input || {};
+    var flightNumber = normalizeFlightNumber(details.flightNumber);
+    var origin = normalizeAirport(details.origin, "Origin");
+    var destination = normalizeAirport(details.destination, "Destination");
+    var departureDate = normalizeDate(details.date);
+    var aircraftCode = String(details.aircraftCode || "").toUpperCase();
+    var layout = AIRCRAFT_LAYOUTS[aircraftCode];
+    if (!layout) throw new TypeError("Choose one of the sample aircraft layouts.");
+    var refresh = Number.isFinite(Number(refreshIndex)) ? Math.max(0, Math.floor(Number(refreshIndex))) : 0;
+    var seed = [flightNumber, origin, destination, departureDate, aircraftCode].join("|");
+    var cabins = [];
+    var totalSeats = 0;
+
+    layout.cabins.forEach(function (cabin) {
+      var rows = [];
+      for (var rowNumber = cabin.from; rowNumber <= cabin.to; rowNumber++) {
+        var isExitRow = (cabin.exitRows || []).indexOf(rowNumber) !== -1;
+        var seats = [];
+        cabin.groups.forEach(function (group, groupIndex) {
+          group.forEach(function (letter, seatIndex) {
+            var id = String(rowNumber) + letter;
+            var seat = {
+              id: id,
+              row: rowNumber,
+              letter: letter,
+              cabin: cabin.name,
+              cabinCode: cabin.code,
+              position: seatPosition(groupIndex, cabin.groups.length, seatIndex, group.length),
+              status: "available",
+              isExitRow: isExitRow,
+              pitchInches: cabin.pitch,
+              widthInches: cabin.width,
+              features: cabin.features.slice()
+            };
+            if (isExitRow) seat.features.push("EXIT ROW — SAMPLE");
+            if (seat.position === "window") seat.features.push("WINDOW POSITION");
+            if (seat.position === "aisle") seat.features.push("AISLE POSITION");
+            seat.status = sampleStatus(seed, seat, refresh);
+            seats.push(seat);
+            totalSeats++;
+          });
+        });
+        rows.push({ rowNumber: rowNumber, isExitRow: isExitRow, seats: seats });
+      }
+      cabins.push({ name: cabin.name, code: cabin.code, rows: rows, features: cabin.features.slice() });
+    });
+
+    return {
+      flightNumber: flightNumber,
+      origin: origin,
+      destination: destination,
+      departureDate: departureDate,
+      aircraftCode: aircraftCode,
+      aircraftName: layout.name,
+      icaoCode: layout.icaoCode,
+      source: "SIMULATED SAMPLE DATA",
+      refreshIndex: refresh,
+      generatedAt: new Date().toISOString(),
+      wingStartRow: layout.wingStartRow,
+      wingEndRow: layout.wingEndRow,
+      facilities: layout.facilities.slice(),
+      cabins: cabins,
+      totalSeats: totalSeats
+    };
+  }
+
+  /** Flatten all cabins into a stable row-major seat array. */
+  function flattenSeats(map) {
+    var seats = [];
+    (map && map.cabins || []).forEach(function (cabin) {
+      cabin.rows.forEach(function (row) {
+        row.seats.forEach(function (seat) { seats.push(seat); });
+      });
+    });
+    return seats;
+  }
+
+  /** Count sample statuses, treating premium and exit seats as selectable. */
+  function countStatuses(map) {
+    var counts = { total: 0, available: 0, selectable: 0, occupied: 0, blocked: 0, premium: 0, extra_legroom: 0, exit_row: 0 };
+    flattenSeats(map).forEach(function (seat) {
+      counts.total++;
+      if (Object.prototype.hasOwnProperty.call(counts, seat.status)) counts[seat.status]++;
+      if (AVAILABLE_STATUSES.indexOf(seat.status) !== -1) counts.selectable++;
+    });
+    return counts;
+  }
+
+  /** Filter sample seats by status, cabin, and position without mutating the map. */
+  function filterSeats(map, filters) {
+    var options = filters || {};
+    return flattenSeats(map).filter(function (seat) {
+      if (options.availableOnly && AVAILABLE_STATUSES.indexOf(seat.status) === -1) return false;
+      if (options.windowOnly && seat.position !== "window") return false;
+      if (options.aisleOnly && seat.position !== "aisle") return false;
+      if (options.exitOnly && !seat.isExitRow) return false;
+      if (options.cabin && options.cabin !== "all" && seat.cabinCode !== options.cabin) return false;
+      return true;
+    });
+  }
+
+  /** Calculate consistent SVG coordinates for every seat and cabin label. */
+  function calculateLayout(map) {
+    var width = 720;
+    var seatWidth = 30;
+    var seatHeight = 25;
+    var seatGap = 4;
+    var aisleGap = 22;
+    var rowStep = 32;
+    var y = 58;
+    var rows = [];
+    var cabins = [];
+    var seats = [];
+
+    (map && map.cabins || []).forEach(function (cabin) {
+      var cabinStart = y;
+      y += 28;
+      cabin.rows.forEach(function (row) {
+        var sourceLayout = AIRCRAFT_LAYOUTS[map.aircraftCode].cabins.filter(function (item) { return item.code === cabin.code; })[0];
+        var groups = sourceLayout.groups;
+        var rowWidth = 0;
+        groups.forEach(function (group, groupIndex) {
+          rowWidth += group.length * seatWidth + Math.max(0, group.length - 1) * seatGap;
+          if (groupIndex < groups.length - 1) rowWidth += aisleGap;
+        });
+        var x = (width - rowWidth) / 2;
+        var rowY = y;
+        var rowSeats = [];
+        groups.forEach(function (group, groupIndex) {
+          group.forEach(function (letter, seatIndex) {
+            var seat = row.seats.filter(function (candidate) { return candidate.letter === letter; })[0];
+            var placed = {
+              seat: seat,
+              x: x,
+              y: rowY,
+              width: seatWidth,
+              height: seatHeight,
+              groupIndex: groupIndex,
+              seatIndex: seatIndex
+            };
+            rowSeats.push(placed);
+            seats.push(placed);
+            x += seatWidth + seatGap;
+          });
+          if (groupIndex < groups.length - 1) x += aisleGap - seatGap;
+        });
+        rows.push({ rowNumber: row.rowNumber, y: rowY, x: (width - rowWidth) / 2, width: rowWidth, isExitRow: row.isExitRow, seats: rowSeats, cabin: cabin.name });
+        y += rowStep;
+      });
+      cabins.push({ name: cabin.name, code: cabin.code, y: cabinStart + 5, startY: cabinStart, endY: y - rowStep });
+      y += 20;
+    });
+
+    return {
+      width: width,
+      height: y + 28,
+      seatWidth: seatWidth,
+      seatHeight: seatHeight,
+      rows: rows,
+      cabins: cabins,
+      seats: seats,
+      wingStart: rows.filter(function (row) { return row.rowNumber === map.wingStartRow; })[0] || null,
+      wingEnd: rows.filter(function (row) { return row.rowNumber === map.wingEndRow; })[0] || null
+    };
+  }
+
+  /** Return a short human-readable status label. */
+  function statusLabel(status) {
+    return STATUS_LABELS[status] || "Unknown";
+  }
+
+  /** Create a plain-text map suitable for clipboard export. */
+  function exportAscii(map) {
+    var symbols = { available: "○", occupied: "●", blocked: "×", premium: "◇", extra_legroom: "⬡", exit_row: "△" };
+    var lines = ["SEAT MAP DEMO — SIMULATED DATA", map.flightNumber + " " + map.origin + "-" + map.destination + " | " + map.departureDate + " | " + map.aircraftName, ""];
+    map.cabins.forEach(function (cabin) {
+      lines.push("[ " + cabin.name.toUpperCase() + " ]");
+      cabin.rows.forEach(function (row) {
+        var cells = row.seats.map(function (seat) { return seat.letter + symbols[seat.status]; });
+        lines.push(String(row.rowNumber).padStart(2, "0") + "  " + cells.join(" ") + (row.isExitRow ? "  EXIT ROW" : ""));
+      });
+      lines.push("");
+    });
+    lines.push("○ available  ● occupied  × unavailable  ◇ premium  ⬡ extra legroom  △ exit row");
+    lines.push("Sample statuses only; no airline inventory or booking is connected.");
+    return lines.join("\n");
+  }
+
+  /** Export all sample seats as RFC-style escaped CSV rows. */
+  function exportCsv(map) {
+    function quote(value) { return '"' + String(value == null ? "" : value).replace(/"/g, '""') + '"'; }
+    var rows = [["flight", "origin", "destination", "date", "aircraft", "seat", "cabin", "position", "status", "pitch_in", "width_in", "sample_data"]];
+    flattenSeats(map).forEach(function (seat) {
+      rows.push([map.flightNumber, map.origin, map.destination, map.departureDate, map.aircraftName, seat.id, seat.cabin, seat.position, statusLabel(seat.status), seat.pitchInches, seat.widthInches, "simulated"]);
+    });
+    return rows.map(function (row) { return row.map(quote).join(","); }).join("\r\n");
+  }
+
+  /** Build a short text status summary for copy/export. */
+  function exportSummary(map) {
+    var counts = countStatuses(map);
+    return [
+      "SPICYTERMINAL SEAT MAP — DEMO SUMMARY",
+      "Flight: " + map.flightNumber + "  " + map.origin + " → " + map.destination,
+      "Date: " + map.departureDate,
+      "Aircraft: " + map.aircraftName + " (" + map.aircraftCode + ")",
+      "Seats in sample layout: " + counts.total,
+      "Sample selectable: " + counts.selectable + " · occupied: " + counts.occupied + " · unavailable: " + counts.blocked,
+      "Data source: SIMULATED SAMPLE DATA — not live airline inventory.",
+      "No seat was reserved or booked."
+    ].join("\n");
+  }
+
+  /** Convert untrusted text to safe HTML for the few generated SVG/details nodes. */
+  function escapeHtml(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (character) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
+    });
+  }
+
+  /** Check whether a status belongs in the sample available-seat count. */
+  function isSelectableStatus(status) {
+    return AVAILABLE_STATUSES.indexOf(status) !== -1;
+  }
+
+  var API = {
+    AIRCRAFT_LAYOUTS: AIRCRAFT_LAYOUTS,
+    AVAILABLE_STATUSES: AVAILABLE_STATUSES.slice(),
+    normalizeFlightNumber: normalizeFlightNumber,
+    normalizeAirport: normalizeAirport,
+    normalizeDate: normalizeDate,
+    createDemoSeatMap: createDemoSeatMap,
+    flattenSeats: flattenSeats,
+    countStatuses: countStatuses,
+    filterSeats: filterSeats,
+    calculateLayout: calculateLayout,
+    statusLabel: statusLabel,
+    exportAscii: exportAscii,
+    exportCsv: exportCsv,
+    exportSummary: exportSummary,
+    isSelectableStatus: isSelectableStatus
+  };
+
+  if (typeof module === "object" && module && module.exports) module.exports = API;
+  if (!root) return;
+  root.SpicySeatMap = API;
+
+  /** Escape markup values used in the generated, static seat-map UI. */
+  function escapeUi(value) {
+    return escapeHtml(value);
+  }
+
+  /** Create the SVG plane, cabin labels, row numbers, exits, and seat buttons. */
+  function renderSvg(state, svg) {
+    var geometry = state.geometry;
+    var width = geometry.width;
+    var height = geometry.height;
+    var markup = [];
+    var availableSet = {};
+    filterSeats(state.map, state.filters).forEach(function (seat) { availableSet[seat.id] = true; });
+    var center = width / 2;
+    var fuselageLeft = 118;
+    var fuselageRight = width - fuselageLeft;
+    var top = 18;
+    var bottom = height - 10;
+
+    markup.push('<title>Interactive simulated seat map for ' + escapeUi(state.map.flightNumber) + '</title>');
+    markup.push('<g id="seatmapPlane" transform="translate(' + state.panX.toFixed(1) + ' ' + state.panY.toFixed(1) + ') scale(' + state.zoom.toFixed(2) + ')">');
+    if (geometry.wingStart && geometry.wingEnd) {
+      var wingTop = geometry.wingStart.y + 8;
+      var wingBottom = geometry.wingEnd.y + 26;
+      markup.push('<path class="seatmap-wing" d="M ' + (center - 16) + ' ' + (wingTop - 22) + ' L ' + (fuselageLeft - 62) + ' ' + (wingTop + 78) + ' L ' + (fuselageLeft - 45) + ' ' + (wingBottom + 42) + ' L ' + (center - 22) + ' ' + (wingBottom + 4) + ' L ' + center + ' ' + (wingBottom + 22) + ' L ' + (center + 22) + ' ' + (wingBottom + 4) + ' L ' + (fuselageRight + 45) + ' ' + (wingBottom + 42) + ' L ' + (fuselageRight + 62) + ' ' + (wingTop + 78) + ' L ' + (center + 16) + ' ' + (wingTop - 22) + ' Z"/>');
+    }
+    markup.push('<path class="seatmap-fuselage" d="M ' + center + ' ' + top + ' C ' + (center - 74) + ' ' + top + ' ' + fuselageLeft + ' ' + (top + 44) + ' ' + fuselageLeft + ' ' + (top + 104) + ' L ' + fuselageLeft + ' ' + (bottom - 96) + ' C ' + fuselageLeft + ' ' + (bottom - 35) + ' ' + (center - 62) + ' ' + bottom + ' ' + center + ' ' + bottom + ' C ' + (center + 62) + ' ' + bottom + ' ' + fuselageRight + ' ' + (bottom - 35) + ' ' + fuselageRight + ' ' + (bottom - 96) + ' L ' + fuselageRight + ' ' + (top + 104) + ' C ' + fuselageRight + ' ' + (top + 44) + ' ' + (center + 74) + ' ' + top + ' ' + center + ' ' + top + ' Z"/>');
+    markup.push('<path class="seatmap-centerline" d="M ' + center + ' ' + (top + 34) + ' L ' + center + ' ' + (bottom - 28) + '"/>');
+    markup.push('<text class="seatmap-facility" x="' + center + '" y="' + (top + 25) + '" text-anchor="middle">FRONT · GALLEY / LAVATORY</text>');
+    markup.push('<text class="seatmap-facility" x="' + center + '" y="' + (bottom - 12) + '" text-anchor="middle">REAR · LAVATORY</text>');
+
+    geometry.cabins.forEach(function (cabin) {
+      markup.push('<text class="seatmap-cabin-label" x="' + center + '" y="' + cabin.y + '" text-anchor="middle">' + escapeUi(cabin.name.toUpperCase()) + '</text>');
+    });
+    geometry.rows.forEach(function (row) {
+      var leftX = row.x - 14;
+      var rightX = row.x + row.width + 14;
+      markup.push('<text class="seatmap-row-label" x="' + leftX + '" y="' + (row.y + 17) + '" text-anchor="end">' + row.rowNumber + '</text>');
+      markup.push('<text class="seatmap-row-label" x="' + rightX + '" y="' + (row.y + 17) + '" text-anchor="start">' + row.rowNumber + '</text>');
+      if (row.isExitRow) {
+        markup.push('<text class="seatmap-exit-label" x="' + (row.x + row.width / 2) + '" y="' + (row.y - 3) + '" text-anchor="middle">EXIT ROW · SAMPLE</text>');
+      }
+    });
+
+    geometry.seats.forEach(function (placed) {
+      var seat = placed.seat;
+      var isShownByFilter = !!availableSet[seat.id];
+      var isSelected = state.selectedSeatId === seat.id;
+      var isDemoChoice = state.demoSeatId === seat.id;
+      var label = "Seat " + seat.id + ", " + statusLabel(seat.status) + ", " + seat.cabin + ", " + seat.position;
+      var className = "seatmap-seat status-" + seat.status + (isSelected ? " is-selected" : "") + (isDemoChoice ? " is-demo-choice" : "") + (isShownByFilter ? "" : " is-filtered-out");
+      markup.push('<g class="' + className + '" data-seat-id="' + escapeUi(seat.id) + '" tabindex="0" role="button" aria-label="' + escapeUi(label) + '">');
+      markup.push('<rect class="seatmap-seat-box" x="' + placed.x + '" y="' + placed.y + '" width="' + placed.width + '" height="' + placed.height + '" rx="1"/>');
+      markup.push('<text class="seatmap-seat-letter" x="' + (placed.x + placed.width / 2) + '" y="' + (placed.y + 17) + '" text-anchor="middle">' + escapeUi(seat.letter) + '</text>');
+      if (seat.isExitRow) markup.push('<path class="seatmap-seat-mark" d="M ' + (placed.x + 4) + ' ' + (placed.y + 4) + ' l 4 4 -4 4"/>');
+      markup.push('</g>');
+    });
+    markup.push('</g>');
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    svg.setAttribute("aria-label", "Interactive simulated seat map for " + state.map.flightNumber + ", " + state.map.aircraftName);
+    svg.innerHTML = markup.join("");
+  }
+
+  /** Fill the selected-seat details panel using text-safe DOM updates. */
+  function renderDetails(doc, state) {
+    var panel = doc.getElementById("seatmapSeatDetails");
+    var action = doc.getElementById("seatmapDemoSelect");
+    if (!panel || !action) return;
+    var seat = state.selectedSeatId ? state.seatsById[state.selectedSeatId] : null;
+    if (!seat) {
+      panel.innerHTML = '<p class="seatmap-empty-detail">Choose a seat to inspect its sample status and layout features.</p>';
+      action.disabled = true;
+      action.textContent = "SELECT A SAMPLE SEAT";
+      return;
+    }
+    var features = seat.features.slice();
+    var status = statusLabel(seat.status);
+    panel.innerHTML = '<div class="seatmap-detail-name">' + escapeUi(seat.id) + '</div>' +
+      '<div class="seatmap-detail-status status-text-' + escapeUi(seat.status) + '">' + escapeUi(status.toUpperCase()) + ' · SIMULATED</div>' +
+      '<dl class="seatmap-detail-list">' +
+      '<div><dt>CABIN</dt><dd>' + escapeUi(seat.cabin) + '</dd></div>' +
+      '<div><dt>POSITION</dt><dd>' + escapeUi(seat.position) + '</dd></div>' +
+      '<div><dt>PITCH</dt><dd>' + escapeUi(seat.pitchInches) + ' in · sample</dd></div>' +
+      '<div><dt>WIDTH</dt><dd>' + escapeUi(seat.widthInches) + ' in · sample</dd></div>' +
+      '<div><dt>FEATURES</dt><dd>' + escapeUi(features.join(" · ")) + '</dd></div>' +
+      '<div><dt>PRICE</dt><dd>Not connected in demo</dd></div>' +
+      '</dl>';
+    action.disabled = !isSelectableStatus(seat.status);
+    if (!isSelectableStatus(seat.status)) {
+      action.textContent = "SAMPLE SEAT NOT AVAILABLE";
+    } else if (state.demoSeatId === seat.id) {
+      action.textContent = "REMOVE DEMO SELECTION";
+    } else {
+      action.textContent = "ADD TO DEMO SELECTION";
+    }
+  }
+
+  /** Render the simulated availability totals and source labels. */
+  function renderStats(doc, state) {
+    var counts = countStatuses(state.map);
+    var count = doc.getElementById("seatmapAvailableCount");
+    var total = doc.getElementById("seatmapTotalCount");
+    var selection = doc.getElementById("seatmapSelectionStatus");
+    var update = doc.getElementById("seatmapLastUpdated");
+    if (count) count.textContent = String(counts.selectable);
+    if (total) total.textContent = String(counts.total);
+    if (selection) selection.textContent = state.demoSeatId
+      ? "DEMO SELECTION: " + state.demoSeatId + " — NO RESERVATION MADE"
+      : "NO SEAT SELECTED";
+    if (update) update.textContent = "SIMULATED UPDATE " + new Date(state.map.generatedAt).toLocaleTimeString();
+    var statusCounts = doc.getElementById("seatmapStatusCounts");
+    if (statusCounts) {
+      statusCounts.textContent = "SELECTABLE " + counts.selectable + " · OCCUPIED " + counts.occupied + " · UNAVAILABLE " + counts.blocked;
+    }
+  }
+
+  /** Update the countdown until the next local-only sample refresh. */
+  function updateCountdown(doc, state) {
+    var element = doc.getElementById("seatmapRefreshCountdown");
+    if (!element || !state.nextRefreshAt) return;
+    var seconds = Math.max(0, Math.ceil((state.nextRefreshAt - Date.now()) / 1000));
+    var mm = String(Math.floor(seconds / 60)).padStart(2, "0");
+    var ss = String(seconds % 60).padStart(2, "0");
+    element.textContent = "NEXT SIMULATED UPDATE 00:" + mm + ":" + ss;
+  }
+
+  /** Render seat SVG, details, and status counters in a single update. */
+  function renderViewer(doc, state) {
+    if (!state.map) return;
+    state.seatsById = {};
+    flattenSeats(state.map).forEach(function (seat) { state.seatsById[seat.id] = seat; });
+    state.geometry = calculateLayout(state.map);
+    var flightName = doc.getElementById("seatmapFlightName");
+    var flightMeta = doc.getElementById("seatmapFlightMeta");
+    if (flightName) flightName.textContent = state.map.flightNumber + " · " + state.map.origin + " → " + state.map.destination;
+    if (flightMeta) flightMeta.textContent = state.map.departureDate + " · " + state.map.aircraftName + " (" + state.map.aircraftCode + ") · " + state.map.totalSeats + " seats in static sample layout";
+    var svg = doc.getElementById("seatmapSvg");
+    if (svg) renderSvg(state, svg);
+    var zoomLabel = doc.getElementById("seatmapZoomValue");
+    if (zoomLabel) zoomLabel.textContent = Math.round(state.zoom * 100) + "%";
+    renderDetails(doc, state);
+    renderStats(doc, state);
+    updateCountdown(doc, state);
+  }
+
+  /** Generate the next deterministic demo refresh and preserve the inspected seat. */
+  function refreshSample(doc, state) {
+    if (!state.currentInput) return;
+    state.refreshTick++;
+    state.map = createDemoSeatMap(state.currentInput, state.refreshTick);
+    if (state.demoSeatId) {
+      var updatedChoice = flattenSeats(state.map).filter(function (seat) { return seat.id === state.demoSeatId; })[0];
+      if (!updatedChoice || !isSelectableStatus(updatedChoice.status)) state.demoSeatId = null;
+    }
+    state.nextRefreshAt = Date.now() + 30000;
+    renderViewer(doc, state);
+    var live = doc.getElementById("seatmapRefreshStatus");
+    if (live) live.textContent = "SIMULATED SAMPLE REFRESH " + new Date(state.map.generatedAt).toLocaleTimeString() + " — NO AIRLINE DATA REQUESTED";
+  }
+
+  /** Set accessible status text without inserting any user-provided markup. */
+  function setNotice(doc, message, isError) {
+    var status = doc.getElementById("seatmapFormStatus");
+    if (!status) return;
+    status.textContent = message || "";
+    status.classList.toggle("is-error", !!isError);
+  }
+
+  /** Download text locally using a short-lived object URL. */
+  function downloadText(text, fileName, type) {
+    if (!root.Blob || !root.URL || !root.URL.createObjectURL) return false;
+    var blob = new root.Blob([text], { type: type || "text/plain;charset=utf-8" });
+    var url = root.URL.createObjectURL(blob);
+    var anchor = root.document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.hidden = true;
+    root.document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    root.URL.revokeObjectURL(url);
+    return true;
+  }
+
+  /** Copy demo text with Clipboard API and a browser fallback. */
+  function copyText(text) {
+    if (root.navigator && root.navigator.clipboard && root.navigator.clipboard.writeText) {
+      return root.navigator.clipboard.writeText(text);
+    }
+    var textarea = root.document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    root.document.body.appendChild(textarea);
+    textarea.select();
+    var copied = false;
+    try { copied = root.document.execCommand("copy"); } catch (error) { copied = false; }
+    textarea.remove();
+    return copied ? Promise.resolve() : Promise.reject(new Error("Clipboard access is unavailable."));
+  }
+
+  /** Bind the /seatmap preview page and all of its local demo interactions. */
+  function initializeSeatMapPage(doc) {
+    if (!root.location || root.location.pathname.replace(/\/+$/, "") !== "/seatmap") return;
+    var page = doc.getElementById("seatmapPage");
+    if (!page) return;
+    doc.body.classList.add("seatmap-active");
+    page.classList.remove("hidden");
+
+    var notice = doc.getElementById("seatmapNotice");
+    var content = doc.getElementById("seatmapContent");
+    var continueButton = doc.getElementById("seatmapNoticeContinue");
+    var form = doc.getElementById("seatmapForm");
+    var demo = doc.getElementById("seatmapDemo");
+    var searchButton = doc.getElementById("seatmapSearchButton");
+    var state = {
+      map: null,
+      currentInput: null,
+      refreshTick: 0,
+      nextRefreshAt: 0,
+      timer: null,
+      selectedSeatId: null,
+      demoSeatId: null,
+      seatsById: {},
+      geometry: null,
+      filters: { availableOnly: false, windowOnly: false, aisleOnly: false, exitOnly: false, cabin: "all" },
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      pointers: new Map(),
+      drag: null
+    };
+
+    function closeNotice() {
+      if (!notice) return;
+      notice.classList.add("hidden");
+      if (content) {
+        content.removeAttribute("aria-hidden");
+        if ("inert" in content) content.inert = false;
+      }
+      if (form) {
+        var firstInput = doc.getElementById("seatmapFlightNumber");
+        if (firstInput) firstInput.focus();
+      }
+    }
+
+    if (notice) {
+      notice.classList.remove("hidden");
+      if (content) {
+        content.setAttribute("aria-hidden", "true");
+        if ("inert" in content) content.inert = true;
+      }
+      if (continueButton) continueButton.focus();
+    }
+    if (continueButton) continueButton.addEventListener("click", closeNotice);
+    if (notice) {
+      notice.addEventListener("click", function (event) {
+        if (event.target === notice) closeNotice();
+      });
+    }
+    doc.addEventListener("keydown", function (event) {
+      if (!notice || notice.classList.contains("hidden")) return;
+      if (event.key === "Escape") {
+        closeNotice();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      var focusable = notice.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])');
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (event.shiftKey && (doc.activeElement === first || !notice.contains(doc.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (doc.activeElement === last || !notice.contains(doc.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+
+    var dateInput = doc.getElementById("seatmapDate");
+    if (dateInput && !dateInput.value) {
+      var tomorrow = new Date(Date.now() + 86400000);
+      dateInput.value = tomorrow.toISOString().slice(0, 10);
+    }
+
+    var quickButtons = doc.querySelectorAll("[data-seatmap-example]");
+    Array.prototype.forEach.call(quickButtons, function (button) {
+      button.addEventListener("click", function () {
+        var flight = doc.getElementById("seatmapFlightNumber");
+        var origin = doc.getElementById("seatmapOrigin");
+        var destination = doc.getElementById("seatmapDestination");
+        var aircraft = doc.getElementById("seatmapAircraft");
+        if (flight) flight.value = button.getAttribute("data-flight");
+        if (origin) origin.value = button.getAttribute("data-origin");
+        if (destination) destination.value = button.getAttribute("data-destination");
+        if (aircraft) aircraft.value = button.getAttribute("data-aircraft");
+        setNotice(doc, "SAMPLE FLIGHT DETAILS FILLED — STILL SIMULATED DATA", false);
+      });
+    });
+
+    if (form) form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var input;
+      try {
+        input = {
+          flightNumber: doc.getElementById("seatmapFlightNumber").value,
+          origin: doc.getElementById("seatmapOrigin").value,
+          destination: doc.getElementById("seatmapDestination").value,
+          date: doc.getElementById("seatmapDate").value,
+          aircraftCode: doc.getElementById("seatmapAircraft").value
+        };
+        input.flightNumber = normalizeFlightNumber(input.flightNumber);
+        input.origin = normalizeAirport(input.origin, "Origin");
+        input.destination = normalizeAirport(input.destination, "Destination");
+        input.date = normalizeDate(input.date);
+        if (!AIRCRAFT_LAYOUTS[input.aircraftCode]) throw new TypeError("Choose a sample aircraft layout.");
+      } catch (error) {
+        setNotice(doc, error.message, true);
+        return;
+      }
+      state.currentInput = input;
+      state.refreshTick = 0;
+      state.demoSeatId = null;
+      state.selectedSeatId = null;
+      state.zoom = 1;
+      state.panX = 0;
+      state.panY = 0;
+      state.map = createDemoSeatMap(input, state.refreshTick);
+      if (demo) demo.classList.remove("hidden");
+      if (searchButton) searchButton.textContent = "UPDATE SAMPLE MAP";
+      setNotice(doc, "SAMPLE MAP GENERATED LOCALLY — NO AIRLINE INVENTORY REQUESTED", false);
+      renderViewer(doc, state);
+      if (demo) demo.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (state.timer) root.clearInterval(state.timer);
+      state.nextRefreshAt = Date.now() + 30000;
+      state.timer = root.setInterval(function () {
+        if (Date.now() >= state.nextRefreshAt) refreshSample(doc, state);
+        else updateCountdown(doc, state);
+      }, 1000);
+    });
+
+    var canvas = doc.getElementById("seatmapCanvas");
+    var svg = doc.getElementById("seatmapSvg");
+    function updateTransform() {
+      var plane = doc.getElementById("seatmapPlane");
+      if (plane) plane.setAttribute("transform", "translate(" + state.panX.toFixed(1) + " " + state.panY.toFixed(1) + ") scale(" + state.zoom.toFixed(2) + ")");
+    }
+    function setZoom(next) {
+      state.zoom = Math.max(0.55, Math.min(2.3, next));
+      updateTransform();
+      var label = doc.getElementById("seatmapZoomValue");
+      if (label) label.textContent = Math.round(state.zoom * 100) + "%";
+    }
+    function filteredRender() {
+      renderViewer(doc, state);
+      updateTransform();
+    }
+
+    var zoomIn = doc.getElementById("seatmapZoomIn");
+    var zoomOut = doc.getElementById("seatmapZoomOut");
+    var zoomReset = doc.getElementById("seatmapZoomReset");
+    if (zoomIn) zoomIn.addEventListener("click", function () { setZoom(state.zoom + 0.15); });
+    if (zoomOut) zoomOut.addEventListener("click", function () { setZoom(state.zoom - 0.15); });
+    if (zoomReset) zoomReset.addEventListener("click", function () { state.panX = 0; state.panY = 0; setZoom(1); });
+
+    ["availableOnly", "windowOnly", "aisleOnly", "exitOnly"].forEach(function (filterName) {
+      var control = doc.getElementById("seatmapFilter" + filterName.charAt(0).toUpperCase() + filterName.slice(1));
+      if (control) control.addEventListener("change", function () {
+        state.filters[filterName] = control.checked;
+        filteredRender();
+      });
+    });
+    var cabinFilter = doc.getElementById("seatmapFilterCabin");
+    if (cabinFilter) cabinFilter.addEventListener("change", function () {
+      state.filters.cabin = cabinFilter.value;
+      filteredRender();
+    });
+
+    if (svg) {
+      function findSeat(target) { return target && target.closest ? target.closest("[data-seat-id]") : null; }
+      function chooseSeat(seatId) {
+        if (!state.seatsById[seatId]) return;
+        state.selectedSeatId = seatId;
+        filteredRender();
+      }
+      svg.addEventListener("click", function (event) {
+        var seatElement = findSeat(event.target);
+        if (seatElement) chooseSeat(seatElement.getAttribute("data-seat-id"));
+      });
+      svg.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        var seatElement = findSeat(event.target);
+        if (seatElement) {
+          event.preventDefault();
+          chooseSeat(seatElement.getAttribute("data-seat-id"));
+        }
+      });
+      svg.addEventListener("pointerdown", function (event) {
+        if (event.button !== 0 && event.pointerType === "mouse") return;
+        var seatElement = findSeat(event.target);
+        if (seatElement && state.pointers.size === 0) return;
+        state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (svg.setPointerCapture) svg.setPointerCapture(event.pointerId);
+        if (state.pointers.size === 1) {
+          state.drag = { startX: event.clientX, startY: event.clientY, panX: state.panX, panY: state.panY, scale: state.zoom };
+        } else if (state.pointers.size === 2) {
+          var points = Array.from(state.pointers.values());
+          state.drag = { pinchDistance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), scale: state.zoom, panX: state.panX, panY: state.panY };
+        }
+      });
+      svg.addEventListener("pointermove", function (event) {
+        if (state.pointers.has(event.pointerId)) {
+          state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (state.pointers.size === 1 && state.drag && state.drag.startX != null) {
+            var rect = svg.getBoundingClientRect();
+            var unit = rect.width ? geometryUnit(state, rect.width) : 1;
+            state.panX = state.drag.panX + (event.clientX - state.drag.startX) * unit;
+            state.panY = state.drag.panY + (event.clientY - state.drag.startY) * unit;
+            updateTransform();
+          } else if (state.pointers.size === 2 && state.drag && state.drag.pinchDistance) {
+            var points = Array.from(state.pointers.values());
+            var distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+            setZoom(state.drag.scale * (distance / state.drag.pinchDistance));
+          }
+        }
+        var seatElement = findSeat(event.target);
+        var tooltip = doc.getElementById("seatmapTooltip");
+        if (seatElement && tooltip && state.seatsById[seatElement.getAttribute("data-seat-id")]) {
+          var seat = state.seatsById[seatElement.getAttribute("data-seat-id")];
+          tooltip.textContent = seat.id + " · " + statusLabel(seat.status).toUpperCase() + " · " + seat.cabin.toUpperCase();
+          tooltip.classList.remove("hidden");
+          var box = canvas.getBoundingClientRect();
+          tooltip.style.left = Math.max(8, event.clientX - box.left + 12) + "px";
+          tooltip.style.top = Math.max(8, event.clientY - box.top + 12) + "px";
+        } else if (tooltip) {
+          tooltip.classList.add("hidden");
+        }
+      });
+      function pointerEnd(event) {
+        state.pointers.delete(event.pointerId);
+        if (state.pointers.size === 1) {
+          var point = Array.from(state.pointers.values())[0];
+          state.drag = { startX: point.x, startY: point.y, panX: state.panX, panY: state.panY, scale: state.zoom };
+        } else if (state.pointers.size === 0) state.drag = null;
+      }
+      svg.addEventListener("pointerup", pointerEnd);
+      svg.addEventListener("pointercancel", pointerEnd);
+      svg.addEventListener("pointerleave", function () {
+        var tooltip = doc.getElementById("seatmapTooltip");
+        if (tooltip) tooltip.classList.add("hidden");
+      });
+    }
+
+    function geometryUnit(currentState, renderedWidth) {
+      return currentState.geometry && renderedWidth ? currentState.geometry.width / renderedWidth : 1;
+    }
+
+    var action = doc.getElementById("seatmapDemoSelect");
+    if (action) action.addEventListener("click", function () {
+      var seat = state.seatsById[state.selectedSeatId];
+      if (!seat || !isSelectableStatus(seat.status)) return;
+      state.demoSeatId = state.demoSeatId === seat.id ? null : seat.id;
+      renderViewer(doc, state);
+      updateTransform();
+      var message = doc.getElementById("seatmapSelectionStatus");
+      if (message) message.textContent = state.demoSeatId
+        ? "DEMO SELECTION: " + state.demoSeatId + " — NO RESERVATION MADE"
+        : "NO SEAT SELECTED";
+    });
+
+    var refreshButton = doc.getElementById("seatmapRefreshNow");
+    if (refreshButton) refreshButton.addEventListener("click", function () { refreshSample(doc, state); });
+
+    var exportAsciiButton = doc.getElementById("seatmapCopyAscii");
+    if (exportAsciiButton) exportAsciiButton.addEventListener("click", function () {
+      if (!state.map) return;
+      copyText(exportAscii(state.map)).then(function () { setNotice(doc, "SAMPLE MAP COPIED — SIMULATED DATA", false); }, function () { setNotice(doc, "Clipboard unavailable; use an export button instead.", true); });
+    });
+    var exportJsonButton = doc.getElementById("seatmapDownloadJson");
+    if (exportJsonButton) exportJsonButton.addEventListener("click", function () {
+      if (state.map) downloadText(JSON.stringify(state.map, null, 2), "seatmap-demo.json", "application/json;charset=utf-8");
+    });
+    var exportCsvButton = doc.getElementById("seatmapDownloadCsv");
+    if (exportCsvButton) exportCsvButton.addEventListener("click", function () {
+      if (state.map) downloadText(exportCsv(state.map), "seatmap-demo.csv", "text/csv;charset=utf-8");
+    });
+
+    var summary = doc.getElementById("seatmapSummaryDialog");
+    var summaryText = doc.getElementById("seatmapSummaryText");
+    var summaryButton = doc.getElementById("seatmapShowSummary");
+    var summaryClose = doc.getElementById("seatmapSummaryClose");
+    function closeSummary() {
+      if (summary) summary.classList.add("hidden");
+      if (content) {
+        content.removeAttribute("aria-hidden");
+        if ("inert" in content) content.inert = false;
+      }
+      if (summaryButton) summaryButton.focus();
+    }
+    if (summaryButton) summaryButton.addEventListener("click", function () {
+      if (!state.map || !summary || !summaryText) return;
+      summaryText.textContent = exportSummary(state.map);
+      if (content) {
+        content.setAttribute("aria-hidden", "true");
+        if ("inert" in content) content.inert = true;
+      }
+      summary.classList.remove("hidden");
+      if (summaryClose) summaryClose.focus();
+    });
+    if (summaryClose) summaryClose.addEventListener("click", closeSummary);
+    if (summary) {
+      summary.addEventListener("click", function (event) {
+        if (event.target === summary) closeSummary();
+      });
+      doc.addEventListener("keydown", function (event) {
+        if (summary.classList.contains("hidden")) return;
+        if (event.key === "Escape") {
+          closeSummary();
+          return;
+        }
+        if (event.key !== "Tab") return;
+        var focusable = summary.querySelectorAll('button:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])');
+        if (!focusable.length) return;
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (event.shiftKey && (doc.activeElement === first || !summary.contains(doc.activeElement))) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (doc.activeElement === last || !summary.contains(doc.activeElement))) {
+          event.preventDefault();
+          first.focus();
+        }
+      });
+    }
+
+    var backLink = doc.getElementById("seatmapBackLink");
+    if (backLink) backLink.addEventListener("click", function () {
+      if (state.timer) root.clearInterval(state.timer);
+    });
+  }
+
+  if (root.document) {
+    if (root.document.readyState === "loading") {
+      root.document.addEventListener("DOMContentLoaded", function () { initializeSeatMapPage(root.document); }, { once: true });
+    } else {
+      initializeSeatMapPage(root.document);
+    }
+  }
+})(typeof window !== "undefined" ? window : null);
 </script>
 </body>
 </html>
