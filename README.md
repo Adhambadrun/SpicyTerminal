@@ -76,14 +76,17 @@ hallucinations, no re-rolling the dice.
   Weekly Report / Seat Map / Report a bug`) and opens a dialog that says what the engine does, what it
   deliberately refuses to do, and who built it — no marketing, no fluff, `Esc` closes it and
   focus goes back where it was.
-- **Flight-number booking search**: a `BOOKING LINK` control sits next to About and lights green
-  only for one complete, certain Alaska Airlines segment with valid route, date, flight number,
-  and times. Alaska's `F1` handoff includes the flight number, origin, destination, and date;
-  flight times and cabin are not prefilled, so the airline site must be checked for availability.
-  Other airlines stay disabled until an exact-flight search URL is verified—there is no Google
-  Flights fallback. One click copies the URL and opens an external one-way search for one
-  adult and no children in one tab; it does not book or purchase, and stays disabled for
-  multi-segment, partial, invalid, uncertain, unsupported, or stale input.
+- **Booking checkout links**: a `BOOKING LINK` control sits next to About and lights green for a
+  complete, certain itinerary on one bookable airline — American, Delta, Alaska, United or
+  British Airways, one or several legs — using `spicy_links.js`, the link engine ported from the
+  production Spicy Link Generator. American links pin every flight through aa.com metasearch;
+  Delta trip summaries and Alaska planbook links carry every leg (plus an estimated price);
+  United and British Airways links carry the route(s) and dates without pinning exact flights.
+  A mixed-airline itinerary links only when exactly one of its airlines is bookable, and the
+  disclosure says that only that airline's legs are linked. One click copies the URL and opens
+  the external search or prefilled summary for one adult in one tab; it never books or
+  purchases, and stays disabled for partial, invalid, uncertain, unsupported, mixed-bookable,
+  or stale input. There is no Google Flights fallback.
 - **Seat Map preview**: the status-row link sits between Weekly Report and Report a bug, deliberately dimmed while the feature is under development — it only opens `/seatmap` (with the under-development notice) after ten consecutive clicks, and a slower click restarts the count. The viewer uses static aircraft layouts and browser-generated sample availability; the 30-second refresh is simulated, no airline API is called, and selecting a seat never reserves it.
 - **Terminal boot animation**: the workspace panes slide in with a quick scanline sweep, the
   ready indicator gently pulses, and the motion automatically turns off for reduced-motion users.
@@ -105,7 +108,7 @@ hallucinations, no re-rolling the dice.
   terminal green, on a dark track (the INPUT textarea used to keep whatever bar the browser
   ships). Both bars are always drawn: there is no switch to hide them, and scrolling itself
   is plain native behaviour — wheel, arrow keys, PageUp/PageDown, drag-select and touch.
-- Conversion and screenshot OCR run in the browser. A `BOOKING LINK` click opens one Alaska Airlines search and shares the selected flight number, origin, destination, and departure date with that external site; it does not prefill times/cabin or book automatically.
+- Conversion and screenshot OCR run in the browser. A `BOOKING LINK` click opens an external airline search or prefilled summary for one adult and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.
 
@@ -136,6 +139,7 @@ files and archives are never shipped.
 | `app.js` | UI logic (offline image parser, auto-convert, AI mistake detector & self-learning) |
 | `seatmap.js` / `seatmap.css` | local Seat Map preview; static aircraft layouts and visibly simulated seat statuses, inlined by the build |
 | `spicy_engine.js` | the conversion engine |
+| `spicy_links.js` | booking checkout link engine (AA / DL / AS / UA / BA), ported from the Spicy Link Generator; feeds the BOOKING LINK button |
 | `spicy_data.js` | airports / airlines / aircraft data |
 | `index_template.html` | page template |
 | `wordmark_alpha.png` | transparent-background wordmark (header + welcome) |
@@ -152,7 +156,7 @@ files and archives are never shipped.
 | `test_lax_man.js` | LAX–MAN round-trip regression (no phantom TO 105, Manchester is MAN not MHT) — `node test_lax_man.js` |
 | `test_mistake_learner.js` | self-learning safety + GDS re-paste regression for the 2026-09-07 weekly report — `node test_mistake_learner.js` |
 | `test_about_dialog.js` | About dialog: exact `About` label, focus trap, ESC/backdrop close, and that opening it cannot disturb a conversion — `node test_about_dialog.js` |
-| `test_booking_link.js` | exact-flight URL details, unsupported-carrier gating, stale-input/warning protections, and one-tab/one-copy behavior — `node test_booking_link.js` |
+| `test_booking_link.js` | per-airline checkout handoffs (AA / DL / AS / UA / BA), multi-leg and mixed-airline gating, unsupported-carrier refusals, stale-input/warning protections, and one-tab/one-copy behavior — `node test_booking_link.js` |
 | `test_seatmap.js` | sample layout counts, deterministic simulated availability, accessibility/disclosure markup, `/seatmap` route, and local exports — `node test_seatmap.js` |
 | `test_seatmap_gate.js` | the dimmed Seat Map button only opens after ten consecutive clicks: countdown copy, gap reset, unlock reset, and the gate/dim shipping in the built pages — `node test_seatmap_gate.js` |
 | `test_ai_fix_label.js` | the AI FIX label is on the button and in every user-facing hint, with no legacy name left in the chrome, and the id stays `btnAi` — `node test_ai_fix_label.js` |
@@ -163,8 +167,9 @@ files and archives are never shipped.
 
 No accounts, no cookies, no tracking. Text conversion and screenshot OCR run in the browser;
 those inputs are not uploaded by the local conversion path. A `BOOKING LINK` click explicitly
-opens an Alaska Airlines one-way search for one adult and no children, and shares that flight's
-number, origin, destination, and departure date with the external site. The link does not prefill
-flight times or cabin and does not book or purchase automatically. The AI fallback sends the user-selected content only when
+opens an external airline search or prefilled summary for one adult and shares the itinerary
+details with that site — flight numbers, routes and dates (American, Delta and Alaska links;
+Delta and Alaska also carry an estimated price), or routes and dates only (United, British
+Airways). The links never book or purchase automatically. The AI fallback sends the user-selected content only when
 the user explicitly provides and uses their own Gemini key. Weekly reports and bug reports open
 in the user's email client to `adhambadraan@gmail.com`. The Seat Map is an in-development preview: it calls no airline API, and layouts, seat statuses, and 30-second refreshes are simulated locally. Selecting a sample seat never reserves or books anything.

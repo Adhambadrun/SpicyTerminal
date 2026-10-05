@@ -1,13 +1,16 @@
 "use strict";
-/* test_booking_link.js — a booking link is offered only for one complete
- * converted flight segment, and it opens the matching supported booking site.
- * The tests execute the real BOOKING_LINK block from app.js and use the real
- * SpicyEngine parser/renderer so no parser stub can make an invalid row green.
+/* test_booking_link.js — a booking link is offered only for a complete,
+ * certain itinerary on one bookable airline (AA / DL / AS / UA / BA, one or
+ * several legs), and it opens that airline's own checkout handoff built by
+ * the real spicy_links.js engine. The tests execute the real BOOKING_LINK
+ * block from app.js and use the real SpicyEngine parser/renderer so no parser
+ * stub can make an invalid row green.
  */
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 const Engine = require("./spicy_engine.js");
+const Links = require("./spicy_links.js");
 
 const APP = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
 const TEMPLATE = fs.readFileSync(path.join(__dirname, "index_template.html"), "utf8");
@@ -39,7 +42,15 @@ function makeOutput(carrier, date, flight, origin, destination, depTime, arrTime
   if (!parsed[0].length) throw new Error("fixture did not parse: " + row + " / " + parsed[1].join("; "));
   return { text: Engine.renderItinerary(parsed[0]), segments: parsed[0], warnings: parsed[1] };
 }
-function makeSandbox() {
+function makeMultiOutput(rows) {
+  const parsed = Engine.parse(rows);
+  if (parsed[0].length !== rows.trim().split(/\r?\n/).length) {
+    throw new Error("fixture rows did not all parse: " + parsed[1].join("; "));
+  }
+  return { text: Engine.renderItinerary(parsed[0]), segments: parsed[0], warnings: parsed[1] };
+}
+function makeSandbox(withLinks) {
+  if (withLinks === undefined) withLinks = true;
   const classes = new Set();
   const attrs = {};
   const button = {
@@ -66,6 +77,7 @@ function makeSandbox() {
       return null;
     }
   };
+  if (withLinks) win.SpicyLinks = Links;
   const document = {
     body: { appendChild() {}, removeChild() {} },
     createElement() { return { style: {}, value: "", select() {}, remove() {} }; },
@@ -107,7 +119,9 @@ assert(BUILT.includes('id="btnBookingLink"') && BUILT.includes("function openBoo
        "the generated index contains both markup and behavior");
 assert(BUILT === BUILT_APP && embeddedBookingBlock(BUILT) === BOOKING_SRC && embeddedBookingBlock(BUILT_APP) === BOOKING_SRC,
        "index.html and app.html both contain the current source booking behavior");
-assert(/shares the flight number, origin, destination, and departure date/i.test(TEMPLATE) &&
+assert(/window\.SpicyLinks/.test(BUILT) && BUILT.indexOf("function linkFor(engineSegs, nowMs)") >= 0,
+       "the built page inlines the spicy_links.js checkout engine ahead of the app");
+assert(/shares the itinerary details/i.test(TEMPLATE) &&
        /never books or purchases a ticket automatically/i.test(TEMPLATE),
        "the About disclosure names the shared itinerary details and says no booking is automatic");
 assert(!BOOKING_SRC.includes("google.com/travel/flights"),
@@ -168,72 +182,132 @@ assert(/if \(currentText !== text\)[\s\S]{0,260}refreshBookingLinkButton/.test(A
 assert(/bookingSourceWarnings = \[\];\s*bookingSourceDirty = false;\s*setOut\(""\)/.test(APP),
        "clear resets warning and dirty state before emptying the result");
 
-section("4. only an airline URL carrying an exact flight remains supported")
+section("4. each bookable airline gets its own checkout handoff, described honestly");
 const sample = makeOutput("AS", "10OCT", "100", "SEA", "LHR");
-const carrierLink = env.sandbox.buildSingleSegmentBookingLink(sample.segments[0], "2026-10-10");
-const alaskaUrl = new URL(carrierLink.url);
+const asDetails = env.sandbox.bookingLinkFromOutput(sample.text, sample.warnings, NOW);
+assert(asDetails.eligible && asDetails.site === "Alaska Airlines" && asDetails.carrier === "AS",
+       "one complete Alaska segment qualifies");
+const alaskaUrl = new URL(asDetails.url);
 const f1 = alaskaUrl.searchParams.get("F1").split("|");
 assert(alaskaUrl.hostname === "www.alaskaair.com" && alaskaUrl.pathname === "/planbook/shoppingstart",
-       "the supported link opens Alaska's booking-search handoff");
+       "the Alaska link opens Alaska's booking-search handoff");
 assert(f1.join("|") === "SEA|LHR|10/10/2026|100|f" && alaskaUrl.searchParams.get("DEST") === "LHR",
        "Alaska's F1 field carries the exact flight number, origin, destination, and travel date");
 assert(alaskaUrl.searchParams.get("FT") === "ow" && alaskaUrl.searchParams.get("A") === "1" &&
        alaskaUrl.searchParams.get("C") === "0",
-       "the external search defaults disclosed to the user are one-way, one adult, and no children");
-assert(carrierLink.site === "Alaska Airlines" && carrierLink.carrier === "AS" &&
-       carrierLink.sharedFields.join(",") === "flight number,origin,destination,departure date",
-       "the link metadata accurately reports the airline and details passed to it");
-assert(!alaskaUrl.searchParams.has("departureTime") && !alaskaUrl.searchParams.has("arrivalTime") &&
-       !alaskaUrl.searchParams.has("cabin"),
-       "unverified time and cabin parameters are not appended or claimed as prefilled");
-assert(!/[?&](?:FARE|price)=/i.test(carrierLink.url),
-       "the flight-search link contains no estimated fare or fabricated price");
-for (const carrier of ["AA", "BA", "DL", "UA", "ZZ"]) {
-  const segment = Object.assign({}, sample.segments[0], { airline: carrier });
-  const unsupported = env.sandbox.buildSingleSegmentBookingLink(segment, "2026-10-10");
-  assert(!unsupported.eligible && !unsupported.url,
-         carrier + " is not misrepresented by a generic route/date link");
-}
+       "the Alaska search defaults disclosed to the user are one-way, one adult, and no children");
+assert(/^\d+(\.\d+)?$/.test(alaskaUrl.searchParams.get("FARE") || ""),
+       "the Alaska handoff carries an estimated total, disclosed as an estimate");
+assert(!alaskaUrl.searchParams.has("departureTime") && !alaskaUrl.searchParams.has("cabin"),
+       "unverified time and cabin parameters are still not appended or claimed as prefilled");
+assert(asDetails.exact === true && asDetails.sharedFields.join(",").includes("flight numbers"),
+       "the Alaska metadata reports the airline and the details it shares");
 
-section("5. one complete, fully-read Alaska segment qualifies; uncertain and unsupported itineraries do not")
-const eligible = env.sandbox.bookingLinkFromOutput(sample.text, sample.warnings, NOW);
-assert(eligible.eligible && eligible.site === "Alaska Airlines" && eligible.carrier === "AS",
-       "one complete Alaska segment qualifies");
-assert(new URL(eligible.url).searchParams.get("F1") === "SEA|LHR|10/10/2026|100|f",
-       "the eligible URL identifies the flight, route, and exact departure date together");
+const aaOutput = makeOutput("AA", "10OCT", "123", "JFK", "LAX");
+const aaDetails = env.sandbox.bookingLinkFromOutput(aaOutput.text, aaOutput.warnings, NOW);
+assert(aaDetails.eligible && aaDetails.site === "American Airlines", "a complete American segment qualifies");
+const aaUrl = new URL(aaDetails.url);
+const iten = decodeURIComponent(aaUrl.searchParams.get("ITEN") || "");
+assert(aaUrl.hostname === "www.aa.com" && aaUrl.pathname === "/goto/metasearch",
+       "the American link opens aa.com metasearch");
+assert(iten.includes("#AA|123|Y|JFK|LAX|") && iten.includes("#JFK|LAX|0|0|"),
+       "the ITEN payload pins the exact American flight, route and departure stamp");
+
+const dlOutput = makeOutput("DL", "10OCT", "456", "JFK", "LAX");
+const dlDetails = env.sandbox.bookingLinkFromOutput(dlOutput.text, dlOutput.warnings, NOW);
+assert(dlDetails.eligible && dlDetails.site === "Delta", "a complete Delta segment qualifies");
+const dlUrl = new URL(dlDetails.url);
+assert(dlUrl.hostname === "www.delta.com" && dlUrl.pathname === "/completepurchase/trip-summary",
+       "the Delta link opens Delta's trip summary");
+assert((dlUrl.searchParams.get("itinSegment[0]") || "").includes("JFK:LAX:DL:456"),
+       "the Delta summary carries the exact flight");
+assert(/^\d+(\.\d+)?$/.test(dlUrl.searchParams.get("price") || ""),
+       "the Delta summary's price parameter is a disclosed estimate");
+
+const uaOutput = makeOutput("UA", "10OCT", "789", "SFO", "ORD");
+const uaDetails = env.sandbox.bookingLinkFromOutput(uaOutput.text, uaOutput.warnings, NOW);
+assert(uaDetails.eligible && uaDetails.site === "United", "a complete United segment qualifies");
+const uaUrl = new URL(uaDetails.url);
+assert(uaUrl.hostname === "www.united.com" && uaUrl.searchParams.get("f") === "SFO" &&
+       uaUrl.searchParams.get("t") === "ORD" && uaUrl.searchParams.get("d") === "2026-10-10",
+       "the United link searches the first leg and date");
+assert(uaDetails.exact === false, "the United disclosure admits exact flights are not pinned");
+
+const baOutput = makeOutput("BA", "10OCT", "117", "LHR", "JFK");
+const baDetails = env.sandbox.bookingLinkFromOutput(baOutput.text, baOutput.warnings, NOW);
+assert(baDetails.eligible && baDetails.site === "British Airways", "a complete British Airways segment qualifies");
+const baUrl = new URL(baDetails.url);
+assert(baUrl.hostname === "www.britishairways.com" &&
+       (baUrl.searchParams.get("onds") || "").startsWith("LHR-JFK_2026-10-10"),
+       "the BA link carries the route and date");
+assert(baDetails.exact === false, "the BA disclosure admits exact flights are not pinned");
+
+const tkOutput = makeOutput("TK", "10OCT", "615", "IST", "JFK");
+const tkDetails = env.sandbox.bookingLinkFromOutput(tkOutput.text, tkOutput.warnings, NOW);
+assert(!tkDetails.eligible && /isn't bookable here/.test(tkDetails.reason),
+       "an unsupported airline stays disabled with a plain reason");
+const noLinks = makeSandbox(false);
+const engineGone = noLinks.sandbox.bookingLinkFromOutput(sample.text, sample.warnings, NOW);
+assert(!engineGone.eligible && /engine is unavailable/.test(engineGone.reason),
+       "a missing link engine degrades to a clear refusal instead of a fake link");
+
+section("5. multi-leg trips on one bookable airline qualify; mixed bookable airlines do not");
+const multi = makeMultiOutput(
+  "1 AS 100 10OCT SEA LHR 730A 800P Y 77W 9.30 4800 N\n" +
+  "2 AS 200 12OCT LHR SEA 900A 1200P Y 77W 9.30 4800 N");
+const multiDetails = env.sandbox.bookingLinkFromOutput(multi.text, multi.warnings, NOW);
+assert(multiDetails.eligible && multiDetails.carrier === "AS" && multiDetails.legs === 2,
+       "a two-leg Alaska round trip qualifies as one checkout");
+const multiUrl = new URL(multiDetails.url);
+assert(multiUrl.searchParams.get("FT") === "rt" &&
+       multiUrl.searchParams.get("F2") === "LHR|SEA|10/12/2026|200|f",
+       "both legs ride in the Alaska handoff (F1 + F2, round trip)");
+assert(multiDetails.flight === "AS 100, AS 200", "the disclosure lists every linked flight");
+
+const mixed = makeMultiOutput(
+  "1 AA 100 10OCT JFK LAX 730A 1100A Y 321 5.30 2475 N\n" +
+  "2 DL 456 12OCT LAX JFK 900A 530P Y 321 5.30 2475 N");
+const mixedDetails = env.sandbox.bookingLinkFromOutput(mixed.text, mixed.warnings, NOW);
+assert(!mixedDetails.eligible && /Mixed bookable airlines/.test(mixedDetails.reason),
+       "two bookable airlines in one itinerary cannot share a checkout");
+
+const mixedOne = makeMultiOutput(
+  "1 TK 615 10OCT IST JFK 900A 1100A Y 77W 10.10 5000 N\n" +
+  "2 BA 178 15OCT JFK LHR 700P 700A J 77W 6.50 3450 N");
+const mixedOneDetails = env.sandbox.bookingLinkFromOutput(mixedOne.text, mixedOne.warnings, NOW);
+assert(mixedOneDetails.eligible && mixedOneDetails.carrier === "BA" && mixedOneDetails.flight === "BA 178",
+       "a mixed itinerary with exactly one bookable airline links that airline's legs only");
+assert(/BA segments only/.test(mixedOneDetails.note || ""),
+       "the disclosure says only the BA legs are linked");
+
 assert(!env.sandbox.bookingLinkFromOutput(sample.text, ["flight row(s) NOT read"], NOW).eligible,
        "a conversion warning about a dropped segment blocks booking");
 assert(!env.sandbox.bookingLinkFromOutput(sample.text, ["unknown airport code(s) XXX"], NOW).eligible,
        "an unknown airport blocks booking");
 assert(!env.sandbox.bookingLinkFromOutput(sample.text, ["hidden stop EWR — same flight continues"], NOW).eligible,
-       "a hidden stop that represents another leg blocks the single-leg action");
+       "a hidden stop that represents another leg blocks the action");
 assert(!env.sandbox.bookingLinkFromOutput(sample.text, ["departure time missing"], NOW).eligible,
        "an incomplete itinerary warning blocks booking");
-const unsupportedOutput = makeOutput("AA");
-assert(!env.sandbox.bookingLinkFromOutput(unsupportedOutput.text, unsupportedOutput.warnings, NOW).eligible,
-       "a complete flight on an unsupported airline remains ineligible");
-const multiRaw = "1 AS 100 10OCT SEA LHR 730A 800P Y 77W 9.30 4800 N\n" +
-                 "2 AS 200 12OCT LHR SEA 900A 1200P Y 77W 9.30 4800 N";
-const multiParsed = Engine.parse(multiRaw);
-const multiOutput = Engine.renderItinerary(multiParsed[0]);
-assert(!env.sandbox.bookingLinkFromOutput(multiOutput, multiParsed[1], NOW).eligible,
-       "two flight segments remain ineligible even when both parse");
 const invalidOutput = sample.text.replace("730A 800P", "???? ????");
 assert(!env.sandbox.bookingLinkFromOutput(invalidOutput, [], NOW).eligible,
        "a visible placeholder cannot enable the button");
 assert(!env.sandbox.bookingLinkFromOutput("", [], NOW).eligible,
        "an empty output cannot enable the button");
 
-section("6. the green state follows fresh input; one click opens and copies one whole-itinerary search")
+section("6. the green state follows fresh input; one click opens and copies one whole-itinerary search");
 const ui = makeSandbox();
 ui.out.textContent = sample.text;
 ui.sandbox.refreshBookingLinkButton(sample.text);
 assert(!ui.button.disabled && ui.button._classes.has("booking-link-ready") && ui.button._attrs["aria-disabled"] === "false",
        "a qualified output enables and lights the existing green button");
-assert(/one-way search for one adult and no children/i.test(ui.button.title) && /Alaska Airlines/.test(ui.button.title) &&
-       /sharing flight number 100/.test(ui.button.title) && /No booking or purchase is made/.test(ui.button.title),
+assert(/alaskaair\.com search/i.test(ui.button.title) &&
+       /route, date and flight number/i.test(ui.button.title) &&
+       /No booking or purchase is made/i.test(ui.button.title),
        "the enabled-button disclosure names the external site, shared details, and no-purchase behavior");
-assert(/flight number 100/.test(ui.button._attrs["aria-description"]),
+assert(/AS 100/.test(ui.button._attrs["aria-label"]) && /SEA to LHR/.test(ui.button._attrs["aria-label"]) &&
+       /2026-10-10/.test(ui.button._attrs["aria-label"]),
+       "the button label names the linked flight, route and date");
+assert(/route, date and flight number/.test(ui.button._attrs["aria-description"]),
        "the itinerary-sharing disclosure is also available to assistive technology");
 ui.sandbox.invalidateBookingLinkButton();
 assert(ui.button.disabled && !ui.button._classes.has("booking-link-ready"),
@@ -250,10 +324,10 @@ assert(ui.copied.length === 1,
 const openedInfo = ui.sandbox.bookingLinkFromOutput(sample.text, [], NOW);
 assert(ui.opened[0].finalUrl === ui.copied[0] && ui.copied[0] === openedInfo.url &&
        new URL(ui.copied[0]).searchParams.get("F1") === "SEA|LHR|10/10/2026|100|f",
-       "the single copied/opened URL is the exact flight link for the entire one-segment itinerary");
+       "the single copied/opened URL is the exact flight link for the entire itinerary");
 assert(ui.opened[0].finalUrl.indexOf("/planbook/shoppingstart") >= 0 &&
        !/checkout|purchase|payment/i.test(ui.opened[0].finalUrl),
-       "the click opens a search only and never submits a purchase");
+       "the Alaska click opens a search only and never submits a purchase");
 assert(ui.statuses[ui.statuses.length - 1].message.includes("FLIGHT DETAILS SHARED") &&
        ui.statuses[ui.statuses.length - 1].message.includes("NO BOOKING OR PURCHASE MADE"),
        "the open status confirms data sharing and that no booking was made");

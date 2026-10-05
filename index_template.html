@@ -297,7 +297,7 @@ __SEATMAP_CSS__
 <div class="status">
   <span id="st">READY</span>
   <button id="btnAbout" class="linkbtn" type="button" aria-haspopup="dialog" aria-controls="aboutModal" title="What SpicyTerminal does, what it refuses to do, and who built it">About</button>
-  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert one complete Alaska Airlines flight to enable its flight-number search link. Clicking opens an external search and shares supported flight details; no booking or purchase is made.">BOOKING LINK</button>
+  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert a complete American, Delta, Alaska, United or British Airways itinerary to enable its checkout link. Mixed-airline trips (more than one bookable airline), unsupported airlines and uncertain conversions keep it off. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made.">BOOKING LINK</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
   <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
   <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Seat Map preview">Seat Map</a>
@@ -363,7 +363,7 @@ __SEATMAP_CSS__
     </div>
 
     <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS ready to copy format to paste into Backoffice.</b>
-      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK is enabled only for a complete, single-segment Alaska Airlines itinerary with a flight-number search URL. Clicking opens an external one-way search for one adult and no children and shares the flight number, origin, destination, and departure date with Alaska Airlines. Flight times and cabin are not prefilled by this link; unsupported airlines and uncertain or multi-segment itineraries stay disabled. Check flight availability on the external site; it never books or purchases a ticket automatically.</p>
+      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK lights up for a complete, certain itinerary on one bookable airline — American, Delta, Alaska, United or British Airways, one or several legs — using the same link engine as the production Spicy Link Generator. American links pin every flight via aa.com metasearch; Delta and Alaska links carry every leg (with an estimated price); United and British Airways links carry the route(s) and dates without pinning exact flights. A mixed-airline itinerary links only when exactly one of its airlines is bookable, and then covers that airline's legs. Clicking opens an external search or prefilled summary for one adult and shares the itinerary details with that site; unsupported airlines and uncertain conversions stay disabled. Check availability and price on the airline site — it never books or purchases a ticket automatically.</p>
 
     <ul class="about-stats">
       <li><b>0</b> accounts · cookies · trackers</li>
@@ -381,7 +381,7 @@ __SEATMAP_CSS__
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3.2l1.7 4.7 4.7 1.7-4.7 1.7L11 16l-1.7-4.7L4.6 9.6l4.7-1.7z"/><path d="M18.4 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></svg></span>
             <span><b><code>AI FIX</code>.</b> When a first read cannot see the flights, it re-reads and repairs the output. Your key, your call.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
-            <span><b>Private.</b> Conversion stays in this tab. Clicking BOOKING LINK opens an external Alaska Airlines one-way search for one adult and no children, and shares the flight number, origin, destination, and departure date. This link does not prefill flight times or cabin, and it never books or purchases automatically. Other carriers stay unavailable unless an exact-flight search URL is verified.</span></li>
+            <span><b>Private.</b> Conversion stays in this tab. Clicking BOOKING LINK opens an external airline search or prefilled summary for one adult and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically; you always finish on the airline site.</span></li>
         </ul>
       </section>
 
@@ -622,6 +622,7 @@ __SEATMAP_CSS__
 <script id="ocradSource" type="text/plain">__OCRAD_JS__</script>
 <script>__SPICY_DATA__</script>
 <script>__SPICY_ENGINE__</script>
+<script>__SPICY_LINKS__</script>
 <script>__APP_JS__</script>
 <script>__SEATMAP_JS__</script>
 </body>

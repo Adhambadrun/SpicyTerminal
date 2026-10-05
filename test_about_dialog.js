@@ -63,8 +63,8 @@ assert(/>BOOKING LINK<\/button>/.test(bookingBtn) && /class="linkbtn"/.test(book
        "the booking-link action sits beside About and shares its quiet status-row styling");
 assert(/type="button"/.test(bookingBtn) && /disabled/.test(bookingBtn) && /aria-disabled="true"/.test(bookingBtn),
        "booking links start unavailable until a qualified itinerary is converted");
-assert(/title="[^"]*one complete Alaska Airlines flight[^"]*flight-number search link[^"]*"/.test(bookingBtn),
-       "the disabled button explains its supported flight-number eligibility rule");
+assert(/title="[^"]*American, Delta, Alaska, United or British Airways[^"]*checkout link[^"]*"/.test(bookingBtn),
+       "the disabled button explains its supported checkout eligibility rule");
 assert((TPL.match(/id="btnBookingLink"/g) || []).length === 1, "the booking link is declared exactly once");
 const seatMapLink = (SB.match(/<a[^>]*id="btnSeatMap"[\s\S]*?<\/a>/) || [""])[0];
 assert(/href="\/seatmap"/.test(seatMapLink) && /class="linkbtn"/.test(seatMapLink) && />Seat Map<\/a>/.test(seatMapLink),
@@ -92,9 +92,9 @@ assert(/aria-labelledby="aboutTitle"/.test(DLG) && /aria-describedby="aboutTagli
        "dialog is labelled and described for screen readers");
 assert(DLG.includes("to paste into Backoffice"), "dialog opens with a one-line summary of what the app does");
 assert(!/offline/i.test(DLG), "the About dialog never says 'offline'");
-assert(/Clicking BOOKING LINK opens an external Alaska Airlines one-way search for one adult and no children, and shares the flight number, origin, destination, and departure date/i.test(DLG) &&
+assert(/Clicking BOOKING LINK opens an external airline search or prefilled summary for one adult and shares the itinerary details/i.test(DLG) &&
        /never books or purchases automatically/i.test(DLG),
-       "the privacy copy discloses shared flight details and confirms no automatic booking");
+       "the privacy copy discloses shared itinerary details and confirms no automatic booking");
 assert(!/about-live/.test(TPL), "the OFFLINE ENGINE pill — and its CSS — is gone from the template");
 for (const topic of [/Copy-ready GDS output/i, /Text or screenshots/i, /AI FIX/, /Private/i]) {
   assert(topic.test(DLG), "feature blurb covers " + topic);
