@@ -36,28 +36,37 @@ function assert(cond, msg) {
 }
 function section(t) { console.log("\n=== " + t + " ==="); }
 
-/* ---------- 1. the trigger in the header ---------- */
-section("1. About trigger: first control of the status row group");
+/* ---------- 1. the trigger and new booking action in the status row ---------- */
+section("1. About and Booking Link controls in the status row");
 const HEADER = (TPL.match(/<header>[\s\S]*?<\/header>/) || [""])[0];
 assert(/<div class="credit">made by Adham Badran<\/div>/.test(HEADER), "the header keeps the 'made by Adham Badran' credit");
 assert(!/btnAbout/.test(HEADER), "About is no longer in the header (it moved to the status row)");
 
 const SB_START = TPL.indexOf('<div class="status">');
 const SB = TPL.slice(SB_START, TPL.indexOf('</div>', SB_START));
-const ORDER_IDS = ["btnAbout", "genKey", "btnWeeklyReport", "report"];
+const ORDER_IDS = ["btnAbout", "btnBookingLink", "genKey", "btnWeeklyReport", "report"];
 const AT = ORDER_IDS.map(id => SB.indexOf('id="' + id + '"'));
-assert(AT.every(i => i >= 0), "all four status controls are present");
+assert(AT.every(i => i >= 0), "all five status controls are present");
 assert(String(AT) === String(AT.slice().sort((a, b) => a - b)),
-       "order is About / Generate Api / Weekly Report / Report a bug (found: " +
+       "order is About / Booking Link / Generate Api / Weekly Report / Report a bug (found: " +
        ORDER_IDS.slice().sort((a, b) => AT[ORDER_IDS.indexOf(a)] - AT[ORDER_IDS.indexOf(b)]).join(" / ") + ")");
 const btnTag = (SB.match(/<button[^>]*id="btnAbout"[\s\S]*?<\/button>/) || [""])[0];
 assert(/>About<\/button>/.test(btnTag), "the button label is exactly 'About'");
-assert(/class="linkbtn"/.test(btnTag), "About is a .linkbtn like its three neighbours, not a competing button");
+assert(/class="linkbtn"/.test(btnTag), "About is a .linkbtn like its status-row neighbours, not a competing button");
 assert((SB.match(/>About</g) || []).length === 1, "About appears once in the row");
 assert((TPL.match(/id="btnAbout"/g) || []).length === 1, "About is declared exactly once in the whole page");
 assert(/aria-haspopup="dialog"/.test(btnTag) && /aria-controls="aboutModal"/.test(btnTag),
        "trigger announces a dialog it controls (aria-haspopup/aria-controls)");
 assert(/title="[^"]{20,}"/.test(btnTag), "the trigger explains itself on hover, since the word 'About' alone does not");
+const bookingBtn = (SB.match(/<button[^>]*id="btnBookingLink"[\s\S]*?<\/button>/) || [""])[0];
+assert(/>BOOKING LINK<\/button>/.test(bookingBtn) && /class="linkbtn"/.test(bookingBtn),
+       "the booking-link action sits beside About and shares its quiet status-row styling");
+assert(/type="button"/.test(bookingBtn) && /disabled/.test(bookingBtn) && /aria-disabled="true"/.test(bookingBtn),
+       "booking links start unavailable until a qualified itinerary is converted");
+assert(/title="[^"]*one complete flight segment[^"]*"/.test(bookingBtn),
+       "the disabled button explains its single-segment eligibility rule");
+assert((TPL.match(/id="btnBookingLink"/g) || []).length === 1, "the booking link is declared exactly once");
+
 
 const CSS0 = TPL.slice(TPL.indexOf("<style>"), TPL.indexOf("</style>"));
 assert(/#btnAbout\{margin-left:auto\}/.test(CSS0) && !/#genKey\{[^}]*margin-left:auto/.test(CSS0),
@@ -80,6 +89,8 @@ assert(/aria-labelledby="aboutTitle"/.test(DLG) && /aria-describedby="aboutTagli
        "dialog is labelled and described for screen readers");
 assert(DLG.includes("to paste into Backoffice"), "dialog opens with a one-line summary of what the app does");
 assert(!/offline/i.test(DLG), "the About dialog never says 'offline'");
+assert(/booking.link click sends the route and date/i.test(DLG) && /flight number for Alaska/i.test(DLG),
+       "the privacy copy discloses what an explicit booking-link click shares");
 assert(!/about-live/.test(TPL), "the OFFLINE ENGINE pill — and its CSS — is gone from the template");
 for (const topic of [/Copy-ready GDS output/i, /Text or screenshots/i, /AI FIX/, /Private/i]) {
   assert(topic.test(DLG), "feature blurb covers " + topic);

@@ -139,8 +139,8 @@ section("3. every OUTPUT repaint animates (setOut is the single writer)");
 const rawWrites = APP.match(/out\.textContent\s*=(?!=)/g) || [];
 assert(rawWrites.length === 1 && /function setOut\(text\)/.test(APP),
        "app.js has exactly one raw out.textContent write, inside setOut()");
-assert(/if \(out\.textContent === text\) return;/.test(APP),
-       "setOut animates only when the output text actually changed");
+assert(/if \(out\.textContent === text\) \{\s*if \(typeof refreshBookingLinkButton === "function"\) refreshBookingLinkButton\(text\);\s*return;\s*\}/.test(APP),
+       "setOut refreshes booking eligibility but animates only when the output text actually changed");
 assert(/out\.textContent = text;\s*\n\s*flashPane\(outPane\);/.test(APP),
        "setOut flashes the OUTPUT pane right after writing it");
 const setOutCalls = (APP.match(/[^n]setOut\(/g) || []).length;
