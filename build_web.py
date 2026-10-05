@@ -8,7 +8,7 @@ Repo layout:
   wordmark_alpha.png            -> transparent-bg wordmark (header + welcome)
   index_template.html           -> page template with __PLACEHOLDER__ slots
   ocrad.js                      -> pure offline OCR engine
-  spicy_data.js / spicy_engine.js / app.js / seatmap.js -> inlined scripts
+  spicy_data.js / spicy_engine.js / spicy_links.js / app.js / seatmap.js -> inlined scripts
   seatmap.css                    -> inlined Seat Map route styles
 
 Run from anywhere:  python3 build_web.py
@@ -63,6 +63,7 @@ tpl = (SRC / "index_template.html").read_text(encoding="utf-8")
 ocrad = (SRC / "ocrad.js").read_text(encoding="utf-8") if (SRC / "ocrad.js").exists() else ""
 data = (SRC / "spicy_data.js").read_text(encoding="utf-8")
 engine = (SRC / "spicy_engine.js").read_text(encoding="utf-8")
+links = (SRC / "spicy_links.js").read_text(encoding="utf-8")
 app = (SRC / "app.js").read_text(encoding="utf-8")
 seatmap_css = (SRC / "seatmap.css").read_text(encoding="utf-8")
 seatmap_js = (SRC / "seatmap.js").read_text(encoding="utf-8")
@@ -71,6 +72,7 @@ html = (tpl.replace("__LOGO_MARK_B64__", mark)
            .replace("__OCRAD_JS__", ocrad)
            .replace("__SPICY_DATA__", data)
            .replace("__SPICY_ENGINE__", engine)
+           .replace("__SPICY_LINKS__", links)
            .replace("__APP_JS__", app)
            .replace("__SEATMAP_CSS__", seatmap_css)
            .replace("__SEATMAP_JS__", seatmap_js))
