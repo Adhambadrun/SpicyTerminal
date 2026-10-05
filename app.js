@@ -3250,6 +3250,45 @@ if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) 
 });
 /* ABOUT:END */
 
+/* SEATMAP_GATE:BEGIN */
+/*
+ * The Seat Map preview is still under development, so its status-row link is
+ * dimmed and does not open on an ordinary click. Only ten consecutive clicks
+ * — each within SEATMAP_GATE_GAP_MS of the previous one — unlock it and
+ * navigate to /seatmap. A slower click restarts the count, and the countdown
+ * is reported on the status line (like the Android developer-mode taps), so
+ * the button never looks dead to whoever is meant to know the knock.
+ */
+var SEATMAP_GATE_REQUIRED = 10;
+var SEATMAP_GATE_GAP_MS = 1500;
+var seatmapGateClicks = 0;
+var seatmapGateLastAt = 0;
+function seatmapGate(event, now, required, gapMs) {
+  var need = (typeof required === "number" && required > 0) ? required : SEATMAP_GATE_REQUIRED;
+  var gap = (typeof gapMs === "number" && gapMs > 0) ? gapMs : SEATMAP_GATE_GAP_MS;
+  var stamp = (typeof now === "number") ? now : Date.now();
+  if (seatmapGateLastAt === 0 || stamp - seatmapGateLastAt > gap) seatmapGateClicks = 0;
+  seatmapGateLastAt = stamp;
+  seatmapGateClicks++;
+  if (seatmapGateClicks >= need) {
+    seatmapGateClicks = 0;
+    seatmapGateLastAt = 0;
+    setStatus("SEAT MAP UNLOCKED — OPENING PREVIEW");
+    return true; // tenth consecutive click: allow the navigation to /seatmap
+  }
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  var left = need - seatmapGateClicks;
+  setStatus("SEAT MAP PREVIEW — " + left + (left === 1 ? " MORE CLICK" : " MORE CLICKS") + " TO OPEN");
+  return false;
+}
+function wireSeatMapGate() {
+  var btn = $("btnSeatMap");
+  if (!btn || typeof btn.addEventListener !== "function") return;
+  btn.addEventListener("click", function (event) { seatmapGate(event); });
+}
+wireSeatMapGate();
+/* SEATMAP_GATE:END */
+
 /* ---------- UI events ---------- */
 if ($("btnBookingLink")) $("btnBookingLink").addEventListener("click", openBookingLink);
 $("btnAttach").addEventListener("click", function() { $("filePick").click(); });

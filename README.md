@@ -84,7 +84,7 @@ hallucinations, no re-rolling the dice.
   Flights fallback. One click copies the URL and opens an external one-way search for one
   adult and no children in one tab; it does not book or purchase, and stays disabled for
   multi-segment, partial, invalid, uncertain, unsupported, or stale input.
-- **Seat Map preview**: the status-row link sits between Weekly Report and Report a bug and opens `/seatmap` with an under-development notice. The viewer uses static aircraft layouts and browser-generated sample availability; the 30-second refresh is simulated, no airline API is called, and selecting a seat never reserves it.
+- **Seat Map preview**: the status-row link sits between Weekly Report and Report a bug, deliberately dimmed while the feature is under development — it only opens `/seatmap` (with the under-development notice) after ten consecutive clicks, and a slower click restarts the count. The viewer uses static aircraft layouts and browser-generated sample availability; the 30-second refresh is simulated, no airline API is called, and selecting a seat never reserves it.
 - **Terminal boot animation**: the workspace panes slide in with a quick scanline sweep, the
   ready indicator gently pulses, and the motion automatically turns off for reduced-motion users.
 - **Per-line glow bars**: both windows light up line by line — every visible line of INPUT
@@ -154,6 +154,7 @@ files and archives are never shipped.
 | `test_about_dialog.js` | About dialog: exact `About` label, focus trap, ESC/backdrop close, and that opening it cannot disturb a conversion — `node test_about_dialog.js` |
 | `test_booking_link.js` | exact-flight URL details, unsupported-carrier gating, stale-input/warning protections, and one-tab/one-copy behavior — `node test_booking_link.js` |
 | `test_seatmap.js` | sample layout counts, deterministic simulated availability, accessibility/disclosure markup, `/seatmap` route, and local exports — `node test_seatmap.js` |
+| `test_seatmap_gate.js` | the dimmed Seat Map button only opens after ten consecutive clicks: countdown copy, gap reset, unlock reset, and the gate/dim shipping in the built pages — `node test_seatmap_gate.js` |
 | `test_ai_fix_label.js` | the AI FIX label is on the button and in every user-facing hint, with no legacy name left in the chrome, and the id stays `btnAi` — `node test_ai_fix_label.js` |
 | `test_jro_kilimanjaro.js` | TK AMS–IST–JRO–IST–AMS GDS re-paste regression (2026-09-10 report): Kilimanjaro `JRO` overlay, glued `¥1` marker, `7M8` equipment, and unknown-code numbered table rows surviving instead of being mangled — `node test_jro_kilimanjaro.js` |
 | `test_weekly_report.js` | weekly-report counters: week rollover, what counts as a conversion, blocked pop-up — `node test_weekly_report.js` |

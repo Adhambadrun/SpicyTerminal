@@ -213,6 +213,11 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 #btnBookingLink.booking-link-ready{padding:4px 9px;color:#72f39b;text-decoration:none;font-weight:700;letter-spacing:.45px;background:rgba(31,157,85,.13);border:1px solid rgba(83,217,119,.6);box-shadow:0 0 11px rgba(83,217,119,.2),inset 0 0 8px rgba(83,217,119,.08);text-shadow:0 0 8px rgba(83,217,119,.42)}
 #btnBookingLink.booking-link-ready:hover{color:#eaffef;background:rgba(31,157,85,.24);border-color:#8af5a8;box-shadow:0 0 16px rgba(83,217,119,.36),inset 0 0 9px rgba(83,217,119,.14);filter:none}
 #btnBookingLink:focus-visible{outline:2px solid #53d977;outline-offset:3px}
+/* Seat Map is an unfinished preview: its status-row link is deliberately dimmed
+   and only opens after ten consecutive clicks (the gate lives in app.js under
+   the SEATMAP_GATE markers), so casual visitors never land on it by accident. */
+#btnSeatMap{opacity:.35;transition:opacity .18s ease}
+#btnSeatMap:hover,#btnSeatMap:focus-visible{opacity:.6}
 .about-modal{z-index:56;padding:16px;align-items:flex-start}
 .about-card{position:relative;width:min(880px,100%);max-height:calc(100dvh - 32px);overflow:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(180deg,#0d141a,#080c11);border:1px solid #1e2b34;border-radius:16px;padding:26px 26px 20px;box-shadow:0 30px 90px rgba(0,0,0,.72);animation:aboutIn .2s ease-out}
 .about-card::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:16px 16px 0 0;background:linear-gradient(90deg,transparent,rgba(83,217,119,.55) 30%,#e2574b 72%,transparent);opacity:.6;pointer-events:none}
@@ -295,7 +300,7 @@ __SEATMAP_CSS__
   <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert one complete Alaska Airlines flight to enable its flight-number search link. Clicking opens an external search and shares supported flight details; no booking or purchase is made.">BOOKING LINK</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
   <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
-  <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Open the Seat Map preview; live seat data is not connected">Seat Map</a>
+  <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Seat Map preview">Seat Map</a>
   <button id="report" class="linkbtn">Report a bug</button>
 </div>
 
