@@ -54,12 +54,16 @@ function setOut(text) {
 }
 
 /* BOOKING_LINK:BEGIN */
-/* A booking search is available only for one fully parsed, future, non-placeholder
-   segment. Known carriers go to their own search page; other carriers use the
-   Google Flights search fallback from SpicyLinkGenerator. No estimated fare or
-   pricing data is ever added to the generated URL. */
+/*
+ * Offer one booking search only when the carrier URL carries an exact flight
+ * identity. Of the existing carrier URLs, only Alaska's F1 handoff carries the
+ * route, date, and flight number together; AA/BA/DL/UA links were only broad
+ * route/date searches and are intentionally not presented as exact-flight
+ * links. The current F1 handoff has no verified time or cabin fields, so those
+ * are not added or claimed. This only opens a search; it never submits a booking.
+ */
 var BOOKING_LINK_MONTHS = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
-var BOOKING_LINK_CARRIERS = {AA:"American Airlines",BA:"British Airways",DL:"Delta Air Lines",UA:"United Airlines",AS:"Alaska Airlines"};
+var BOOKING_LINK_CARRIERS = {AS:"Alaska Airlines"};
 function bookingLinkDateYmd(ddmmm, now) {
   var m = /^(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/.exec(String(ddmmm || "").trim().toUpperCase());
   if (!m) return "";
@@ -82,50 +86,40 @@ function bookingClockValid(value) {
   if ((mark === "N" || mark === "M") && (hour !== 12 || minute !== 0)) return false;
   return true;
 }
-function bookingLinkCabin(segment) {
-  var cabin = String((segment && segment.cabin) || "").toUpperCase();
-  if (cabin.indexOf("FIRST") >= 0) return "FIRST";
-  if (cabin.indexOf("BUSINESS") >= 0) return "BUSINESS";
-  if (cabin.indexOf("PREMIUM") >= 0) return "PREMIUM_ECONOMY";
-  return "COACH";
-}
 function buildSingleSegmentBookingLink(segment, dateYmd) {
   var carrier = String(segment.airline || "").trim().toUpperCase();
+  if (!Object.prototype.hasOwnProperty.call(BOOKING_LINK_CARRIERS, carrier)) {
+    return {eligible:false, reason:"No verified exact-flight booking search is available for this airline."};
+  }
+
   var flight = String(segment.flight_no || "").trim();
   var origin = String(segment.orig || "").trim().toUpperCase();
   var destination = String(segment.dest || "").trim().toUpperCase();
-  var cabin = bookingLinkCabin(segment);
-  var enc = encodeURIComponent;
-  var url, site = BOOKING_LINK_CARRIERS[carrier] || "Google Flights";
-
-  if (carrier === "AA") {
-    var aa = ["tripType=oneWay", "searchType=Revenue", "cabinType=" + cabin, "carriers=ALL", "adult=1", "child=0", "infantInLap=0"];
-    [["slices[0].origin", origin], ["slices[0].destination", destination], ["slices[0].departureDate", dateYmd], ["slices[0].departureTime", "ANYTIME"]].forEach(function (pair) {
-      aa.push(enc(pair[0]) + "=" + enc(pair[1]));
-    });
-    url = "https://www.aa.com/booking/find-flights?" + aa.join("&");
-  } else if (carrier === "BA") {
-    var baCabin = cabin === "FIRST" ? "F" : cabin === "BUSINESS" ? "C" : cabin === "PREMIUM_ECONOMY" ? "W" : "M";
-    url = "https://www.britishairways.com/travel/book/public/en_gb/processOffer?onds=" +
-      enc(origin + "-" + destination + "_" + dateYmd) + "&ad=1&yad=0&ch=0&inf=0&cabin=" + baCabin + "&flex=LOWEST&ond=1";
-  } else if (carrier === "DL") {
-    url = "https://www.delta.com/flight-search/book-a-flight?tripType=ONE_WAY&originCity=" + enc(origin) +
-      "&destinationCity=" + enc(destination) + "&departureDate=" + enc(dateYmd) + "&paxCount=1";
-  } else if (carrier === "UA") {
-    var unitedCabin = cabin === "FIRST" ? 7 : cabin === "BUSINESS" ? 4 : 1;
-    url = "https://www.united.com/en/us/fsr/choose-flights?f=" + enc(origin) + "&t=" + enc(destination) +
-      "&d=" + enc(dateYmd) + "&tt=1&at=1&sc=" + unitedCabin + "&px=1";
-  } else if (carrier === "AS") {
-    var parts = dateYmd.split("-");
-    var alaskaDate = parts[1] + "/" + parts[2] + "/" + parts[0];
-    var alaskaFlight = enc(origin + "|" + destination + "|" + alaskaDate + "|" + flight + "|f");
-    url = "https://www.alaskaair.com/planbook/shoppingstart?A=1&C=0&FT=ow&F1=" + alaskaFlight +
-      "&DEST=" + enc(destination) + "&frm=cart&META=GOO_CS";
-  } else {
-    var query = "Flights from " + origin + " to " + destination + " on " + dateYmd;
-    url = "https://www.google.com/travel/flights?q=" + enc(query) + "&curr=USD";
+  var parts = String(dateYmd || "").split("-");
+  if (parts.length !== 3 || !/^\d{4}$/.test(parts[0]) || !/^\d{2}$/.test(parts[1]) || !/^\d{2}$/.test(parts[2])) {
+    return {eligible:false, reason:"A valid future departure date is required."};
   }
-  return {url:url, site:site, carrier:carrier, flight:flight, origin:origin, destination:destination, date:dateYmd};
+
+  // Alaska's booking handoff serializes one flight in F1 as
+  // origin|destination|MM/DD/YYYY|flight number|f. The route is the Alaska site
+  // itself; F1 carries the specific flight number as well as its route/date.
+  // Do not add departure/arrival times or cabin: no current F1 fields for those
+  // values have been verified. Other carrier URLs remain disabled until an
+  // equivalent exact-flight handoff is verified.
+  var alaskaDate = parts[1] + "/" + parts[2] + "/" + parts[0];
+  var alaskaFlight = encodeURIComponent([origin, destination, alaskaDate, flight, "f"].join("|"));
+  var url = "https://www.alaskaair.com/planbook/shoppingstart?A=1&C=0&FT=ow&F1=" + alaskaFlight +
+    "&DEST=" + encodeURIComponent(destination) + "&frm=cart&META=GOO_CS";
+  return {
+    url:url,
+    site:BOOKING_LINK_CARRIERS[carrier],
+    carrier:carrier,
+    flight:flight,
+    origin:origin,
+    destination:destination,
+    date:dateYmd,
+    sharedFields:["flight number", "origin", "destination", "departure date"]
+  };
 }
 function bookingGdsRowCount(text) {
   var head = String(text || "").split(/^\s*<--additional-->\s*$/im)[0];
@@ -136,7 +130,7 @@ function bookingGdsRowCount(text) {
 }
 function bookingLinkWarningsBlock(warnings) {
   for (var i = 0; i < (warnings || []).length; i++) {
-    if (/NOT read|missing|unknown|route reversed|repeat the same route|duplicat/i.test(String(warnings[i]))) return true;
+    if (/NOT read|missing|unknown|route reversed|repeat the same route|duplicat|hidden[ -]?stop|uncertain|ambiguous|incomplete/i.test(String(warnings[i]))) return true;
   }
   return false;
 }
@@ -168,6 +162,9 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
   if (!/^[A-Z0-9]{2}$/.test(airline) || !/^\d{1,6}$/.test(flight)) {
     return {eligible:false, reason:"A valid airline code and flight number are required."};
   }
+  if (!Object.prototype.hasOwnProperty.call(BOOKING_LINK_CARRIERS, airline)) {
+    return {eligible:false, reason:"No verified exact-flight booking search is available for this airline."};
+  }
   if (!/^[A-Z]{3}$/.test(origin) || !/^[A-Z]{3}$/.test(destination) || origin === destination) {
     return {eligible:false, reason:"A valid origin and destination are required."};
   }
@@ -177,19 +174,29 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
   var dateYmd = bookingLinkDateYmd(segment.date_ddmmm, now);
   if (!dateYmd) return {eligible:false, reason:"A valid future departure date is required."};
   var details = buildSingleSegmentBookingLink(segment, dateYmd);
+  if (!details || !details.url) return details || {eligible:false, reason:"No verified exact-flight booking search is available."};
   details.eligible = true;
   return details;
+}
+function bookingLinkCurrentDetails(text) {
+  return bookingSourceDirty
+    ? {eligible:false, reason:"Input changed — convert it before opening a booking link."}
+    : bookingLinkFromOutput(text, bookingSourceWarnings);
 }
 function invalidateBookingLinkButton() {
   bookingSourceDirty = true;
   refreshBookingLinkButton("");
 }
-function refreshBookingLinkButton(text) {
+function bookingLinkDisclosure(details) {
+  return "Opens a one-way search for one adult and no children on " + details.site +
+    ", sharing flight number " + details.flight + ", origin " + details.origin +
+    ", destination " + details.destination + ", and departure date " + details.date +
+    " with that external site. Flight times and cabin are not prefilled; verify flight availability on the airline site. No booking or purchase is made.";
+}
+function refreshBookingLinkButton(text, knownDetails) {
   var button = $("btnBookingLink");
   if (!button) return;
-  var details = bookingSourceDirty
-    ? {eligible:false, reason:"Input changed — convert it before opening a booking link."}
-    : bookingLinkFromOutput(text, bookingSourceWarnings);
+  var details = knownDetails || bookingLinkCurrentDetails(text);
   button.disabled = !details.eligible;
   if (button.classList) {
     if (typeof button.classList.toggle === "function") button.classList.toggle("booking-link-ready", !!details.eligible);
@@ -198,9 +205,12 @@ function refreshBookingLinkButton(text) {
   }
   if (button.setAttribute) {
     button.setAttribute("aria-disabled", details.eligible ? "false" : "true");
-    button.setAttribute("aria-label", details.eligible ? "Open " + details.site + " booking search for " + details.origin + " to " + details.destination : "Booking link unavailable: " + details.reason);
+    button.setAttribute("aria-label", details.eligible
+      ? "Open " + details.site + " search for " + details.carrier + " " + details.flight + ", " + details.origin + " to " + details.destination + " on " + details.date
+      : "Booking link unavailable: " + details.reason);
+    button.setAttribute("aria-description", details.eligible ? bookingLinkDisclosure(details) : details.reason);
   }
-  button.title = details.eligible ? "Open " + details.site + " booking search for " + details.origin + " to " + details.destination + " on " + details.date + ". Verify flight availability and fare on the booking site." : details.reason;
+  button.title = details.eligible ? bookingLinkDisclosure(details) : details.reason;
 }
 function copyBookingUrl(url) {
   function fallbackCopy() {
@@ -221,8 +231,9 @@ function copyBookingUrl(url) {
   return fallbackCopy();
 }
 function openBookingLink() {
-  var details = bookingLinkFromOutput(out ? out.textContent : "", bookingSourceWarnings);
-  refreshBookingLinkButton(out ? out.textContent : "");
+  var text = out ? out.textContent : "";
+  var details = bookingLinkCurrentDetails(text);
+  refreshBookingLinkButton(text, details);
   if (!details.eligible) {
     setStatus("BOOKING LINK NOT AVAILABLE — " + details.reason, true);
     return false;
@@ -231,7 +242,7 @@ function openBookingLink() {
   var tab = null;
   try { tab = window.open("about:blank", "_blank"); } catch (e) { tab = null; }
   if (!tab) {
-    setStatus("POP-UP BLOCKED — booking link copied if clipboard access is available", true);
+    setStatus("POP-UP BLOCKED — flight-search link copied if clipboard access is available; no booking was made", true);
     return false;
   }
   try { tab.opener = null; } catch (e) {}
@@ -241,7 +252,7 @@ function openBookingLink() {
   } catch (e) {
     try { tab.location.href = details.url; } catch (ignored) {}
   }
-  setStatus("OPENED " + details.site.toUpperCase() + " BOOKING SEARCH — " + details.origin + " → " + details.destination);
+  setStatus("OPENED " + details.site.toUpperCase() + " BOOKING SEARCH — FLIGHT DETAILS SHARED; NO BOOKING OR PURCHASE MADE");
   return true;
 }
 /* BOOKING_LINK:END */

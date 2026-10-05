@@ -158,7 +158,7 @@ button:focus-visible{outline:2px solid var(--green);outline-offset:3px}
 #st.warn{color:#f0a35c}
 #st.warn::before{box-shadow:0 0 0 0 rgba(240,163,92,.42)}
 @keyframes status-pulse{0%{box-shadow:0 0 0 0 currentColor;opacity:.95}65%{box-shadow:0 0 0 7px transparent;opacity:.72}100%{box-shadow:0 0 0 0 transparent;opacity:.95}}
-#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnAbout:hover{color:#8fa6b2}
+#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnSeatMap:hover,#btnAbout:hover{color:#8fa6b2}
 .linkbtn{color:#3e4f59;font-size:11px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono);font-weight:400;flex:none;white-space:nowrap;min-height:auto}
 #btnWeeklyReport{margin-right:12px}
 /* welcome — small card, app visible behind (translucent backdrop) */
@@ -260,6 +260,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
    wordmark looked worse than a quiet header. */
 @media (max-width:560px){.status{gap:6px 10px}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}}
+__SEATMAP_CSS__
 </style>
 </head>
 <body>
@@ -291,9 +292,10 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 <div class="status">
   <span id="st">READY</span>
   <button id="btnAbout" class="linkbtn" type="button" aria-haspopup="dialog" aria-controls="aboutModal" title="What SpicyTerminal does, what it refuses to do, and who built it">About</button>
-  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert one complete flight segment to enable its booking link">BOOKING LINK</button>
+  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert one complete Alaska Airlines flight to enable its flight-number search link. Clicking opens an external search and shares supported flight details; no booking or purchase is made.">BOOKING LINK</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
   <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
+  <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Open the Seat Map preview; live seat data is not connected">Seat Map</a>
   <button id="report" class="linkbtn">Report a bug</button>
 </div>
 
@@ -356,7 +358,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
     </div>
 
     <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS ready to copy format to paste into Backoffice.</b>
-      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. If you click BOOKING LINK, the selected booking site receives that segment's route and date (and its flight number for Alaska) to prefill a search.</p>
+      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK is enabled only for a complete, single-segment Alaska Airlines itinerary with a flight-number search URL. Clicking opens an external one-way search for one adult and no children and shares the flight number, origin, destination, and departure date with Alaska Airlines. Flight times and cabin are not prefilled by this link; unsupported airlines and uncertain or multi-segment itineraries stay disabled. Check flight availability on the external site; it never books or purchases a ticket automatically.</p>
 
     <ul class="about-stats">
       <li><b>0</b> accounts · cookies · trackers</li>
@@ -374,7 +376,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3.2l1.7 4.7 4.7 1.7-4.7 1.7L11 16l-1.7-4.7L4.6 9.6l4.7-1.7z"/><path d="M18.4 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></svg></span>
             <span><b><code>AI FIX</code>.</b> When a first read cannot see the flights, it re-reads and repairs the output. Your key, your call.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
-            <span><b>Private.</b> Conversion stays in this tab. A booking-link click sends the route and date (and flight number for Alaska) only to the selected booking site.</span></li>
+            <span><b>Private.</b> Conversion stays in this tab. Clicking BOOKING LINK opens an external Alaska Airlines one-way search for one adult and no children, and shares the flight number, origin, destination, and departure date. This link does not prefill flight times or cabin, and it never books or purchases automatically. Other carriers stay unavailable unless an exact-flight search URL is verified.</span></li>
         </ul>
       </section>
 
@@ -405,6 +407,193 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
   </div>
 </div>
 
+<!-- Seat Map is a separate static route. Its data is a local illustration, not airline inventory. -->
+<div class="seatmap-page hidden" id="seatmapPage">
+  <div class="seatmap-topbar">
+    <a class="seatmap-back" id="seatmapBackLink" href="/" aria-label="Return to SpicyTerminal">← SPICYTERMINAL</a>
+    <span class="seatmap-wordmark">SEAT MAP VIEWER</span>
+    <span class="seatmap-top-tag">FEATURE PREVIEW</span>
+  </div>
+  <div class="seatmap-main" id="seatmapContent">
+    <div class="seatmap-title-row">
+      <div>
+        <h1 class="seatmap-title" id="seatmapPageTitle">SEAT MAP</h1>
+        <p class="seatmap-subtitle">Explore an aircraft layout and seat-level details in a local demo. No airline seat map or availability provider is connected.</p>
+      </div>
+    </div>
+    <div class="seatmap-dev-banner" role="status">
+      <span class="seatmap-dev-mark">IN DEVELOPMENT</span>
+      <span><strong>Demo only.</strong> Layouts, seat statuses, and refreshes below are simulated in this browser. They are not live airline data and must not be used to choose or book a real seat.</span>
+    </div>
+
+    <section class="seatmap-card" aria-labelledby="seatmapSearchTitle">
+      <h2 class="seatmap-panel-title" id="seatmapSearchTitle" style="padding:0 0 11px;border:0">SAMPLE FLIGHT DETAILS</h2>
+      <form class="seatmap-form" id="seatmapForm" novalidate>
+        <div class="seatmap-field">
+          <label for="seatmapFlightNumber">Flight number</label>
+          <input id="seatmapFlightNumber" name="flightNumber" type="text" value="AS100" inputmode="text" autocomplete="off" spellcheck="false" maxlength="8" aria-describedby="seatmapFormStatus">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapOrigin">Origin</label>
+          <input id="seatmapOrigin" name="origin" type="text" value="SEA" autocomplete="off" spellcheck="false" maxlength="3">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapDestination">Destination</label>
+          <input id="seatmapDestination" name="destination" type="text" value="LAX" autocomplete="off" spellcheck="false" maxlength="3">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapDate">Departure date</label>
+          <input id="seatmapDate" name="date" type="date" autocomplete="off">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapAircraft">Aircraft layout · sample</label>
+          <select id="seatmapAircraft" name="aircraftCode">
+            <option value="738">Boeing 737-800 · 738</option>
+            <option value="320">Airbus A320 · 320</option>
+            <option value="77W">Boeing 777-300ER · 77W</option>
+          </select>
+        </div>
+        <button class="seatmap-btn seatmap-btn-primary" id="seatmapSearchButton" type="submit">GENERATE SAMPLE MAP</button>
+      </form>
+      <div class="seatmap-examples" aria-label="Example sample flights">
+        <span class="seatmap-examples-label">QUICK EXAMPLES</span>
+        <button class="seatmap-example" type="button" data-seatmap-example data-flight="AS100" data-origin="SEA" data-destination="LAX" data-aircraft="738">AS100 · 738</button>
+        <button class="seatmap-example" type="button" data-seatmap-example data-flight="BA117" data-origin="LHR" data-destination="JFK" data-aircraft="77W">BA117 · 77W</button>
+        <button class="seatmap-example" type="button" data-seatmap-example data-flight="DL2305" data-origin="JFK" data-destination="BOS" data-aircraft="320">DL2305 · 320</button>
+      </div>
+      <div class="seatmap-form-status" id="seatmapFormStatus" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="seatmap-demo hidden" id="seatmapDemo" aria-labelledby="seatmapFlightName">
+      <div class="seatmap-flight-heading">
+        <div>
+          <h2 class="seatmap-flight-name" id="seatmapFlightName">SAMPLE FLIGHT</h2>
+          <p class="seatmap-flight-meta" id="seatmapFlightMeta"></p>
+        </div>
+        <span class="seatmap-source-pill">SIMULATED<br>NOT LIVE</span>
+      </div>
+      <div class="seatmap-toolbar">
+        <div class="seatmap-toolbar-group" aria-label="Map zoom controls">
+          <button class="seatmap-btn" id="seatmapZoomOut" type="button" aria-label="Zoom out">−</button>
+          <span class="seatmap-zoom-value" id="seatmapZoomValue">100%</span>
+          <button class="seatmap-btn" id="seatmapZoomIn" type="button" aria-label="Zoom in">+</button>
+          <button class="seatmap-btn" id="seatmapZoomReset" type="button">RESET VIEW</button>
+        </div>
+        <div class="seatmap-toolbar-group">
+          <span class="seatmap-refresh-info" id="seatmapRefreshCountdown">NEXT SIMULATED UPDATE —</span>
+          <button class="seatmap-btn" id="seatmapRefreshNow" type="button">REFRESH SAMPLE</button>
+        </div>
+      </div>
+
+      <div class="seatmap-demo-layout">
+        <aside class="seatmap-side-panel seatmap-side-panel-left" aria-label="Seat map filters and legend">
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">FILTER SEATS</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-filter-list">
+                <label class="seatmap-filter"><input id="seatmapFilterAvailableOnly" type="checkbox"><span>Selectable sample seats</span></label>
+                <label class="seatmap-filter"><input id="seatmapFilterWindowOnly" type="checkbox"><span>Window seats</span></label>
+                <label class="seatmap-filter"><input id="seatmapFilterAisleOnly" type="checkbox"><span>Aisle seats</span></label>
+                <label class="seatmap-filter"><input id="seatmapFilterExitOnly" type="checkbox"><span>Exit-row seats</span></label>
+              </div>
+              <label class="seatmap-overline" for="seatmapFilterCabin" style="display:block;margin-top:13px">Cabin</label>
+              <select class="seatmap-filter-select" id="seatmapFilterCabin">
+                <option value="all">All cabins</option>
+                <option value="first">First</option>
+                <option value="business">Business</option>
+                <option value="premium_economy">Premium Economy</option>
+                <option value="economy">Economy</option>
+              </select>
+            </div>
+          </section>
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">SAMPLE STATUS KEY</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-legend">
+                <div class="seatmap-legend-item"><span class="seatmap-swatch available"></span>Available</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch occupied"></span>Occupied</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch blocked"></span>Unavailable</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch premium"></span>Premium</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch extra-legroom"></span>Extra legroom</div>
+                <div class="seatmap-legend-item"><span class="seatmap-swatch exit-row"></span>Exit row</div>
+              </div>
+              <div class="seatmap-availability-summary" id="seatmapStatusCounts" aria-live="polite">Generate a sample map to view counts.</div>
+            </div>
+          </section>
+        </aside>
+
+        <div>
+          <div class="seatmap-canvas-wrap">
+            <div class="seatmap-canvas" id="seatmapCanvas" aria-label="Scrollable interactive sample seat map">
+              <svg class="seatmap-svg" id="seatmapSvg" role="group" aria-label="Interactive simulated seat map"></svg>
+            </div>
+            <div class="seatmap-tooltip hidden" id="seatmapTooltip" role="status"></div>
+          </div>
+          <div class="seatmap-map-foot">
+            <span>Click a seat for sample details · drag to pan · use controls to zoom</span>
+            <span id="seatmapLastUpdated">NO SAMPLE GENERATED</span>
+          </div>
+        </div>
+
+        <aside class="seatmap-side-panel seatmap-side-panel-right" aria-label="Selected seat details and exports">
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">SEAT DETAILS</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-details" id="seatmapSeatDetails" aria-live="polite"><p class="seatmap-empty-detail">Choose a seat to inspect its sample status and layout features.</p></div>
+              <button class="seatmap-btn" id="seatmapDemoSelect" type="button" disabled>SELECT A SAMPLE SEAT</button>
+              <p class="seatmap-selection-status" id="seatmapSelectionStatus">NO SEAT SELECTED</p>
+            </div>
+          </section>
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">SAMPLE COUNTS</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-count" id="seatmapAvailableCount">—</div>
+              <p class="seatmap-count-caption">SELECTABLE SAMPLE SEATS</p>
+              <p class="seatmap-count-caption"><span id="seatmapTotalCount">—</span> seats in this illustrative layout. Counts are not inventory.</p>
+            </div>
+          </section>
+          <section class="seatmap-panel">
+            <h3 class="seatmap-panel-title">LOCAL EXPORTS</h3>
+            <div class="seatmap-panel-body">
+              <div class="seatmap-export-row">
+                <button class="seatmap-btn" id="seatmapCopyAscii" type="button">COPY TEXT MAP</button>
+                <button class="seatmap-btn" id="seatmapDownloadCsv" type="button">CSV</button>
+                <button class="seatmap-btn" id="seatmapDownloadJson" type="button">JSON</button>
+                <button class="seatmap-btn" id="seatmapShowSummary" type="button" aria-haspopup="dialog" aria-controls="seatmapSummaryDialog">SUMMARY</button>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+      <p class="seatmap-disclaimer" id="seatmapRefreshStatus" role="status" aria-live="polite"><strong>SIMULATED REFRESH:</strong> the 30-second refresh changes sample statuses locally. It does not check a flight, contact an airline, reserve a seat, or confirm availability.</p>
+    </section>
+  </div>
+
+  <div class="seatmap-notice" id="seatmapNotice" role="dialog" aria-modal="true" aria-labelledby="seatmapNoticeTitle" aria-describedby="seatmapNoticeBody">
+    <div class="seatmap-notice-card">
+      <div class="seatmap-notice-kicker">FEATURE STATUS · IN DEVELOPMENT</div>
+      <h2 id="seatmapNoticeTitle">Seat Map is still under development</h2>
+      <div id="seatmapNoticeBody">
+        <p>The live airline seat-inventory connection has not been implemented. This preview uses static aircraft layouts and <strong>simulated seat availability</strong> generated in your browser.</p>
+        <p>Refreshes, seat counts, cabin details, and availability are sample-only—not current flight data, pricing, or a reservation. Do not use this demo to choose or book a real seat.</p>
+        <p>No airline API is called and no API key is required.</p>
+      </div>
+      <div class="seatmap-notice-actions">
+        <a href="/" id="seatmapNoticeBack">BACK TO SPICYTERMINAL</a>
+        <button class="seatmap-btn seatmap-btn-primary" id="seatmapNoticeContinue" type="button">CONTINUE TO SAMPLE VIEWER</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="seatmap-summary-dialog hidden" id="seatmapSummaryDialog" role="dialog" aria-modal="true" aria-labelledby="seatmapSummaryTitle">
+    <div class="seatmap-summary-card">
+      <h2 id="seatmapSummaryTitle">SAMPLE FLIGHT SUMMARY</h2>
+      <pre id="seatmapSummaryText"></pre>
+      <div class="seatmap-summary-actions"><button class="seatmap-btn" id="seatmapSummaryClose" type="button">CLOSE</button></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal hidden attachment-review-modal" id="attachmentReviewModal" role="dialog" aria-modal="true" aria-labelledby="attachmentReviewTitle">
   <div class="card">
     <div class="attachment-review-header">
@@ -429,5 +618,6 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 <script>__SPICY_DATA__</script>
 <script>__SPICY_ENGINE__</script>
 <script>__APP_JS__</script>
+<script>__SEATMAP_JS__</script>
 </body>
 </html>

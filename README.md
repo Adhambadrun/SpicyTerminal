@@ -73,14 +73,18 @@ hallucinations, no re-rolling the dice.
 - **Text and PDF attachments**: `.txt`, `.eml`, `.csv`, `.json`, `.html`, `.ics`, and similar text exports are read instantly; PDFs are passed to AI only when the user explicitly supplies a Gemini key.
 - **Weekly report**: One-click weekly performance and enhancement reports sent to `adhambadraan@gmail.com` to improve and enhance the tool to the max. Each report covers one week (Monday 00:00 UTC → now), compares it with the previous week, and keeps a separate lifetime total — a closed week is archived, never mixed into the current one. A *conversion* is a result shown to the user: live re-renders while typing and AI replies the direct read beat are counted as neither.
 - **About, in one click**: the `About` link leads the status row (`About / Booking Link / Generate Api /
-  Weekly Report / Report a bug`) and opens a dialog that says what the engine does, what it
+  Weekly Report / Seat Map / Report a bug`) and opens a dialog that says what the engine does, what it
   deliberately refuses to do, and who built it — no marketing, no fluff, `Esc` closes it and
   focus goes back where it was.
-- **Single-segment booking link**: a `BOOKING LINK` control sits next to About and lights green
-  only after the current conversion contains one complete, certain flight segment with valid
-  route, date, and times. Clicking opens the matching AA, BA, Delta, United, or Alaska booking
-  search; other carriers use a Google Flights route/date search. It copies the link as a fallback,
-  never invents a fare, and stays disabled for multi-segment, partial, invalid, or stale input.
+- **Flight-number booking search**: a `BOOKING LINK` control sits next to About and lights green
+  only for one complete, certain Alaska Airlines segment with valid route, date, flight number,
+  and times. Alaska's `F1` handoff includes the flight number, origin, destination, and date;
+  flight times and cabin are not prefilled, so the airline site must be checked for availability.
+  Other airlines stay disabled until an exact-flight search URL is verified—there is no Google
+  Flights fallback. One click copies the URL and opens an external one-way search for one
+  adult and no children in one tab; it does not book or purchase, and stays disabled for
+  multi-segment, partial, invalid, uncertain, unsupported, or stale input.
+- **Seat Map preview**: the status-row link sits between Weekly Report and Report a bug and opens `/seatmap` with an under-development notice. The viewer uses static aircraft layouts and browser-generated sample availability; the 30-second refresh is simulated, no airline API is called, and selecting a seat never reserves it.
 - **Terminal boot animation**: the workspace panes slide in with a quick scanline sweep, the
   ready indicator gently pulses, and the motion automatically turns off for reduced-motion users.
 - **Per-line glow bars**: both windows light up line by line — every visible line of INPUT
@@ -101,20 +105,21 @@ hallucinations, no re-rolling the dice.
   terminal green, on a dark track (the INPUT textarea used to keep whatever bar the browser
   ships). Both bars are always drawn: there is no switch to hide them, and scrolling itself
   is plain native behaviour — wheel, arrow keys, PageUp/PageDown, drag-select and touch.
-- Conversion and screenshot OCR run in the browser. A `BOOKING LINK` click sends the selected segment's route/date (and its flight number for Alaska) to the chosen external search site.
+- Conversion and screenshot OCR run in the browser. A `BOOKING LINK` click opens one Alaska Airlines search and shares the selected flight number, origin, destination, and departure date with that external site; it does not prefill times/cabin or book automatically.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.
 
 ## Deploy
 
-The whole app is one static file, built by `npm run build` into
-`public/index.html` (an offline copy is also written to the repo root).
+The app remains static and is built by `npm run build` into self-contained
+`public/index.html` and `public/seatmap.html` pages (`index.html` and `app.html`
+are also written to the repo root). The `/seatmap` rewrite is configured for Vercel and Netlify. For a local preview, run `npm run build && npm run dev`; the lightweight Python server mirrors the same route.
 
 - **Vercel**: import this repo — `vercel.json` already sets the build command
   and output directory, so every `git push` to `main` deploys automatically.
 - **Netlify from Git**: connect this repo — `netlify.toml` builds and
   publishes `public/`.
-- **Netlify Drop**: drag the generated `index.html` onto <https://app.netlify.com/drop>
+- **Netlify Drop**: drag the generated `public/` folder onto <https://app.netlify.com/drop> to include both pages and the `/seatmap` route.
 
 Only the self-contained app pages are deployed; repository screenshots, source
 files and archives are never shipped.
@@ -123,17 +128,19 @@ files and archives are never shipped.
 
 | file | role |
 |---|---|
-| `index.html` | the app (everything inlined, offline build artifact) |
-| `public/` | deploy output (built, git-ignored) |
+| `index.html` | main app (everything inlined, generated build artifact) |
+| `public/` | deploy output (`index.html`, `app.html`, and `seatmap.html`; built, git-ignored) |
 | `vercel.json` | Vercel build + output-directory config |
 | `netlify.toml` | Netlify build + publish config |
 | `ocrad.js` | pure offline OCR engine bundled locally |
 | `app.js` | UI logic (offline image parser, auto-convert, AI mistake detector & self-learning) |
+| `seatmap.js` / `seatmap.css` | local Seat Map preview; static aircraft layouts and visibly simulated seat statuses, inlined by the build |
 | `spicy_engine.js` | the conversion engine |
 | `spicy_data.js` | airports / airlines / aircraft data |
 | `index_template.html` | page template |
 | `wordmark_alpha.png` | transparent-background wordmark (header + welcome) |
-| `build_web.py` | assembles `index.html` from the sources above — `python3 build_web.py` |
+| `build_web.py` | assembles the self-contained app pages from the sources above — `python3 build_web.py` |
+| `preview_server.py` | dependency-free local static preview with a `/seatmap` rewrite — `npm run dev` |
 | `test_engine.js` + `goldens.json` | parity tests vs the reference outputs — `node test_engine.js` (distances are the WGS-84 geodesic miles described above) |
 | `test_route_direction.js` | route-direction + distance regression suite for the JFK/DUB bug report — `node test_route_direction.js` |
 | `test_accent_routes.js` | accented-city regression suite for the MIA/BOG bug report (Bogotá, Zürich, São Paulo…) — `node test_accent_routes.js` |
@@ -145,7 +152,8 @@ files and archives are never shipped.
 | `test_lax_man.js` | LAX–MAN round-trip regression (no phantom TO 105, Manchester is MAN not MHT) — `node test_lax_man.js` |
 | `test_mistake_learner.js` | self-learning safety + GDS re-paste regression for the 2026-09-07 weekly report — `node test_mistake_learner.js` |
 | `test_about_dialog.js` | About dialog: exact `About` label, focus trap, ESC/backdrop close, and that opening it cannot disturb a conversion — `node test_about_dialog.js` |
-| `test_booking_link.js` | one-segment booking-link eligibility, supported booking websites, stale-input gating, and popup/copy behavior — `node test_booking_link.js` |
+| `test_booking_link.js` | exact-flight URL details, unsupported-carrier gating, stale-input/warning protections, and one-tab/one-copy behavior — `node test_booking_link.js` |
+| `test_seatmap.js` | sample layout counts, deterministic simulated availability, accessibility/disclosure markup, `/seatmap` route, and local exports — `node test_seatmap.js` |
 | `test_ai_fix_label.js` | the AI FIX label is on the button and in every user-facing hint, with no legacy name left in the chrome, and the id stays `btnAi` — `node test_ai_fix_label.js` |
 | `test_jro_kilimanjaro.js` | TK AMS–IST–JRO–IST–AMS GDS re-paste regression (2026-09-10 report): Kilimanjaro `JRO` overlay, glued `¥1` marker, `7M8` equipment, and unknown-code numbered table rows surviving instead of being mangled — `node test_jro_kilimanjaro.js` |
 | `test_weekly_report.js` | weekly-report counters: week rollover, what counts as a conversion, blocked pop-up — `node test_weekly_report.js` |
@@ -154,7 +162,8 @@ files and archives are never shipped.
 
 No accounts, no cookies, no tracking. Text conversion and screenshot OCR run in the browser;
 those inputs are not uploaded by the local conversion path. A `BOOKING LINK` click explicitly
-opens a third-party search with the one segment's route/date (and its flight number for Alaska).
-The AI fallback sends the user-selected content only when the user explicitly provides and uses
-their own Gemini key. Weekly reports and bug reports open in the user's email client to
-`adhambadraan@gmail.com`.
+opens an Alaska Airlines one-way search for one adult and no children, and shares that flight's
+number, origin, destination, and departure date with the external site. The link does not prefill
+flight times or cabin and does not book or purchase automatically. The AI fallback sends the user-selected content only when
+the user explicitly provides and uses their own Gemini key. Weekly reports and bug reports open
+in the user's email client to `adhambadraan@gmail.com`. The Seat Map is an in-development preview: it calls no airline API, and layouts, seat statuses, and 30-second refreshes are simulated locally. Selecting a sample seat never reserves or books anything.

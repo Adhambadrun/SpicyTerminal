@@ -3,7 +3,7 @@
  *
  * A pretty dialog is easy to ship and easy to break. What this pins down:
  *   - the trigger is labelled exactly `About`, sits at the head of the status row
- *     (About / Generate Api / Weekly Report / Report a bug) and appears once;
+ *     (About / Booking Link / Generate Api / Weekly Report / Seat Map / Report a bug) and appears once;
  *   - opening it closes nothing else and must not disturb conversion state
  *     (no attachment batch invalidation, no AI request cancelled);
  *   - ESC, the × button and a click on the dimmed backdrop all close it, while
@@ -36,19 +36,19 @@ function assert(cond, msg) {
 }
 function section(t) { console.log("\n=== " + t + " ==="); }
 
-/* ---------- 1. the trigger and new booking action in the status row ---------- */
-section("1. About and Booking Link controls in the status row");
+/* ---------- 1. the trigger, booking action, and Seat Map route ---------- */
+section("1. About, Booking Link, and Seat Map controls in the status row");
 const HEADER = (TPL.match(/<header>[\s\S]*?<\/header>/) || [""])[0];
 assert(/<div class="credit">made by Adham Badran<\/div>/.test(HEADER), "the header keeps the 'made by Adham Badran' credit");
 assert(!/btnAbout/.test(HEADER), "About is no longer in the header (it moved to the status row)");
 
 const SB_START = TPL.indexOf('<div class="status">');
 const SB = TPL.slice(SB_START, TPL.indexOf('</div>', SB_START));
-const ORDER_IDS = ["btnAbout", "btnBookingLink", "genKey", "btnWeeklyReport", "report"];
+const ORDER_IDS = ["btnAbout", "btnBookingLink", "genKey", "btnWeeklyReport", "btnSeatMap", "report"];
 const AT = ORDER_IDS.map(id => SB.indexOf('id="' + id + '"'));
-assert(AT.every(i => i >= 0), "all five status controls are present");
+assert(AT.every(i => i >= 0), "all six status controls are present");
 assert(String(AT) === String(AT.slice().sort((a, b) => a - b)),
-       "order is About / Booking Link / Generate Api / Weekly Report / Report a bug (found: " +
+       "order is About / Booking Link / Generate Api / Weekly Report / Seat Map / Report a bug (found: " +
        ORDER_IDS.slice().sort((a, b) => AT[ORDER_IDS.indexOf(a)] - AT[ORDER_IDS.indexOf(b)]).join(" / ") + ")");
 const btnTag = (SB.match(/<button[^>]*id="btnAbout"[\s\S]*?<\/button>/) || [""])[0];
 assert(/>About<\/button>/.test(btnTag), "the button label is exactly 'About'");
@@ -63,24 +63,27 @@ assert(/>BOOKING LINK<\/button>/.test(bookingBtn) && /class="linkbtn"/.test(book
        "the booking-link action sits beside About and shares its quiet status-row styling");
 assert(/type="button"/.test(bookingBtn) && /disabled/.test(bookingBtn) && /aria-disabled="true"/.test(bookingBtn),
        "booking links start unavailable until a qualified itinerary is converted");
-assert(/title="[^"]*one complete flight segment[^"]*"/.test(bookingBtn),
-       "the disabled button explains its single-segment eligibility rule");
+assert(/title="[^"]*one complete Alaska Airlines flight[^"]*flight-number search link[^"]*"/.test(bookingBtn),
+       "the disabled button explains its supported flight-number eligibility rule");
 assert((TPL.match(/id="btnBookingLink"/g) || []).length === 1, "the booking link is declared exactly once");
-
+const seatMapLink = (SB.match(/<a[^>]*id="btnSeatMap"[\s\S]*?<\/a>/) || [""])[0];
+assert(/href="\/seatmap"/.test(seatMapLink) && /class="linkbtn"/.test(seatMapLink) && />Seat Map<\/a>/.test(seatMapLink),
+       "Seat Map is a /seatmap link using the exact existing .linkbtn treatment");
+assert((TPL.match(/id="btnSeatMap"/g) || []).length === 1, "Seat Map is declared exactly once");
 
 const CSS0 = TPL.slice(TPL.indexOf("<style>"), TPL.indexOf("</style>"));
 assert(/#btnAbout\{margin-left:auto\}/.test(CSS0) && !/#genKey\{[^}]*margin-left:auto/.test(CSS0),
        "the right-alignment moved with the group: About owns margin-left:auto, Generate Api no longer does");
 assert(/#genKey\{margin-right:12px\}/.test(CSS0) && /#btnWeeklyReport\{margin-right:12px\}/.test(CSS0),
        "the row keeps its 12px separators between the links");
-assert(/#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnAbout:hover\{/.test(CSS0),
+assert(/#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnSeatMap:hover,#btnAbout:hover\{/.test(CSS0),
        "About shares the row's single hover rule instead of inventing a bespoke one");
 assert(!/\.about-btn/.test(CSS0), "no leftover header-pill styling behind");
 
 /* ---------- 2. the dialog markup ---------- */
 section("2. About dialog markup");
 const dlgStart = TPL.indexOf('id="aboutModal"');
-const dlgEnd = TPL.indexOf('<div class="modal hidden attachment-review-modal"');
+const dlgEnd = TPL.indexOf('<!-- Seat Map is a separate static route', dlgStart);
 assert(dlgStart > 0 && dlgEnd > dlgStart, "About dialog is present in the template");
 const DLG = TPL.slice(dlgStart, dlgEnd);
 assert(/class="modal hidden about-modal"/.test(TPL), "dialog starts hidden via .hidden");
@@ -89,8 +92,9 @@ assert(/aria-labelledby="aboutTitle"/.test(DLG) && /aria-describedby="aboutTagli
        "dialog is labelled and described for screen readers");
 assert(DLG.includes("to paste into Backoffice"), "dialog opens with a one-line summary of what the app does");
 assert(!/offline/i.test(DLG), "the About dialog never says 'offline'");
-assert(/booking.link click sends the route and date/i.test(DLG) && /flight number for Alaska/i.test(DLG),
-       "the privacy copy discloses what an explicit booking-link click shares");
+assert(/Clicking BOOKING LINK opens an external Alaska Airlines one-way search for one adult and no children, and shares the flight number, origin, destination, and departure date/i.test(DLG) &&
+       /never books or purchases automatically/i.test(DLG),
+       "the privacy copy discloses shared flight details and confirms no automatic booking");
 assert(!/about-live/.test(TPL), "the OFFLINE ENGINE pill — and its CSS — is gone from the template");
 for (const topic of [/Copy-ready GDS output/i, /Text or screenshots/i, /AI FIX/, /Private/i]) {
   assert(topic.test(DLG), "feature blurb covers " + topic);

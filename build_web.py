@@ -8,7 +8,8 @@ Repo layout:
   wordmark_alpha.png            -> transparent-bg wordmark (header + welcome)
   index_template.html           -> page template with __PLACEHOLDER__ slots
   ocrad.js                      -> pure offline OCR engine
-  spicy_data.js / spicy_engine.js / app.js -> inlined scripts
+  spicy_data.js / spicy_engine.js / app.js / seatmap.js -> inlined scripts
+  seatmap.css                    -> inlined Seat Map route styles
 
 Run from anywhere:  python3 build_web.py
 """
@@ -63,12 +64,16 @@ ocrad = (SRC / "ocrad.js").read_text(encoding="utf-8") if (SRC / "ocrad.js").exi
 data = (SRC / "spicy_data.js").read_text(encoding="utf-8")
 engine = (SRC / "spicy_engine.js").read_text(encoding="utf-8")
 app = (SRC / "app.js").read_text(encoding="utf-8")
+seatmap_css = (SRC / "seatmap.css").read_text(encoding="utf-8")
+seatmap_js = (SRC / "seatmap.js").read_text(encoding="utf-8")
 html = (tpl.replace("__LOGO_MARK_B64__", mark)
            .replace("__LOGO_FULL_B64__", full)
            .replace("__OCRAD_JS__", ocrad)
            .replace("__SPICY_DATA__", data)
            .replace("__SPICY_ENGINE__", engine)
-           .replace("__APP_JS__", app))
+           .replace("__APP_JS__", app)
+           .replace("__SEATMAP_CSS__", seatmap_css)
+           .replace("__SEATMAP_JS__", seatmap_js))
 
 # Keep both historical entry points in sync: index.html is the deploy root;
 # app.html remains a friendly direct URL for existing bookmarks.
@@ -82,7 +87,7 @@ for name in ("index.html", "app.html"):
 # never the repo's screenshots, source files or archives.
 pub = SRC / "public"
 pub.mkdir(exist_ok=True)
-for name in ("index.html", "app.html"):
+for name in ("index.html", "app.html", "seatmap.html"):
     dst = pub / name
     dst.write_text(html, encoding="utf-8")
     print(f"Built {dst}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
