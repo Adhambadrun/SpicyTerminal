@@ -87,7 +87,7 @@ hallucinations, no re-rolling the dice.
   the external search or prefilled summary for one adult in one tab; it never books or
   purchases, and stays disabled for partial, invalid, uncertain, unsupported, mixed-bookable,
   or stale input. There is no Google Flights fallback.
-- **Seat Map preview**: the status-row link sits between Weekly Report and Report a bug, deliberately dimmed while the feature is under development — it only opens `/seatmap` (with the under-development notice) after ten consecutive clicks, and a slower click restarts the count. The viewer uses static aircraft layouts and browser-generated sample availability; the 30-second refresh is simulated, no airline API is called, and selecting a seat never reserves it.
+- **Seat Map preview**: the status-row link sits between Weekly Report and Report a bug, deliberately dimmed while the feature is under development — it opens `/seatmap` (with the under-development notice) after ten consecutive clicks, without displaying a countdown; a slower click silently restarts the count. The viewer uses static aircraft layouts and browser-generated sample availability; the 30-second refresh is simulated, no airline API is called, and selecting a seat never reserves it.
 - **Terminal boot animation**: the workspace panes slide in with a quick scanline sweep, the
   ready indicator gently pulses, and the motion automatically turns off for reduced-motion users.
 - **Per-line glow bars**: both windows light up line by line — every visible line of INPUT

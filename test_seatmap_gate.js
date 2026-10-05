@@ -67,10 +67,8 @@ section("ten consecutive clicks open the seat map");
   }
   assert(unlockedAt === 10, "only the 10th consecutive click unlocks the navigation");
   assert(gate.prevented.length === 9, "the first nine clicks each prevent the default navigation");
-  const countdowns = gate.statuses.slice(0, 9).map(s => s.msg);
-  assert(countdowns[0] === "SEAT MAP PREVIEW — 9 MORE CLICKS TO OPEN", "first click counts down from 9");
-  assert(countdowns[8] === "SEAT MAP PREVIEW — 1 MORE CLICK TO OPEN", "ninth click reports the singular last click");
-  assert(gate.statuses[9].msg === "SEAT MAP UNLOCKED — OPENING PREVIEW", "tenth click announces the unlock");
+  assert(gate.statuses.length === 1, "the first nine clicks leave the status line unchanged");
+  assert(gate.statuses[0].msg === "SEAT MAP UNLOCKED — OPENING PREVIEW", "the tenth click announces the unlock");
 })();
 
 section("a slow click restarts the count");
@@ -81,8 +79,7 @@ section("a slow click restarts the count");
   let unlocked = false;
   for (let i = 1; i <= 8; i++) { unlocked = gate.click(1000 + 9 * 100 + 5000 + i * 100).unlocked || unlocked; }
   assert(!unlocked, "after the pause eight more clicks are not enough (the count restarted)");
-  const last = gate.statuses[gate.statuses.length - 1];
-  assert(last.msg === "SEAT MAP PREVIEW — 1 MORE CLICK TO OPEN", "the countdown restarts from the paused click");
+  assert(gate.statuses.length === 0, "blocked clicks stay silent when the count restarts after a pause");
 })();
 
 section("the unlock itself resets the knock");
@@ -91,8 +88,7 @@ section("the unlock itself resets the knock");
   for (let i = 1; i <= 10; i++) gate.click(1000 + (i - 1) * 100);
   const again = gate.click(1000 + 10 * 100);
   assert(!again.unlocked, "the click after an unlock starts a fresh count");
-  assert(gate.statuses[gate.statuses.length - 1].msg === "SEAT MAP PREVIEW — 9 MORE CLICKS TO OPEN",
-    "the fresh count reports nine clicks to open");
+  assert(gate.statuses.length === 1, "the fresh count does not publish a countdown");
 })();
 
 section("clicks at the edge of the gap stay consecutive");
@@ -117,13 +113,14 @@ section("the button is dimmed and still routes to /seatmap");
   assert(/id="btnSeatMap"[^>]*title="Seat Map preview"/.test(TEMPLATE), "the tooltip no longer invites a normal open");
 })();
 
-section("the built pages ship the gate and the dim");
+section("the built pages ship the gate without a countdown");
 (function () {
+  assert(!GATE_SRC.includes("SEAT MAP PREVIEW — "), "the gate source contains no countdown copy");
   for (const [name, html] of [["index.html", BUILT], ["app.html", BUILT_APP]]) {
     assert(embeddedGateBlock(html) === GATE_SRC, name + " embeds the identical SEATMAP_GATE block");
     assert(/#btnSeatMap\{opacity:\.35/.test(html), name + " ships the dimmed Seat Map style");
-    assert(html.indexOf('SEAT MAP PREVIEW — ') >= 0 && html.indexOf(' MORE CLICKS') >= 0,
-      name + " ships the countdown copy");
+    assert(!html.includes("SEAT MAP PREVIEW — ") && !html.includes(" MORE CLICKS"),
+      name + " does not ship the hidden countdown copy");
     assert(html.indexOf("SEAT MAP UNLOCKED — OPENING PREVIEW") >= 0, name + " ships the unlock copy");
   }
   const publicIndex = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8");
