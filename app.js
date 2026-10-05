@@ -40,12 +40,211 @@ var inpPane = paneOf(inp), outPane = paneOf(out);
 // paste flash from the input listener further below.
 function flashInput() { flashPane(inpPane); }
 // The single writer of the OUTPUT pane: animates it exactly when text changes.
+var bookingSourceWarnings = [];
+var bookingSourceDirty = false;
 function setOut(text) {
   text = text == null ? "" : text;
-  if (out.textContent === text) return;
+  if (out.textContent === text) {
+    if (typeof refreshBookingLinkButton === "function") refreshBookingLinkButton(text);
+    return;
+  }
   out.textContent = text;
   flashPane(outPane);
+  if (typeof refreshBookingLinkButton === "function") refreshBookingLinkButton(text);
 }
+
+/* BOOKING_LINK:BEGIN */
+/* A booking search is available only for one fully parsed, future, non-placeholder
+   segment. Known carriers go to their own search page; other carriers use the
+   Google Flights search fallback from SpicyLinkGenerator. No estimated fare or
+   pricing data is ever added to the generated URL. */
+var BOOKING_LINK_MONTHS = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
+var BOOKING_LINK_CARRIERS = {AA:"American Airlines",BA:"British Airways",DL:"Delta Air Lines",UA:"United Airlines",AS:"Alaska Airlines"};
+function bookingLinkDateYmd(ddmmm, now) {
+  var m = /^(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/.exec(String(ddmmm || "").trim().toUpperCase());
+  if (!m) return "";
+  var clock = (now && typeof now.getFullYear === "function") ? now : new Date();
+  var day = parseInt(m[1], 10), month = BOOKING_LINK_MONTHS[m[2]] - 1;
+  var today = new Date(clock.getFullYear(), clock.getMonth(), clock.getDate());
+  for (var year = clock.getFullYear(); year <= clock.getFullYear() + 8; year++) {
+    var date = new Date(year, month, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) continue;
+    if (date < today) continue;
+    return String(year).padStart(4, "0") + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+  }
+  return "";
+}
+function bookingClockValid(value) {
+  var m = /^(\d{1,2})(\d{2})([APNM])$/.exec(String(value || "").trim().toUpperCase());
+  if (!m) return false;
+  var hour = parseInt(m[1], 10), minute = parseInt(m[2], 10), mark = m[3];
+  if (hour < 1 || hour > 12 || minute > 59) return false;
+  if ((mark === "N" || mark === "M") && (hour !== 12 || minute !== 0)) return false;
+  return true;
+}
+function bookingLinkCabin(segment) {
+  var cabin = String((segment && segment.cabin) || "").toUpperCase();
+  if (cabin.indexOf("FIRST") >= 0) return "FIRST";
+  if (cabin.indexOf("BUSINESS") >= 0) return "BUSINESS";
+  if (cabin.indexOf("PREMIUM") >= 0) return "PREMIUM_ECONOMY";
+  return "COACH";
+}
+function buildSingleSegmentBookingLink(segment, dateYmd) {
+  var carrier = String(segment.airline || "").trim().toUpperCase();
+  var flight = String(segment.flight_no || "").trim();
+  var origin = String(segment.orig || "").trim().toUpperCase();
+  var destination = String(segment.dest || "").trim().toUpperCase();
+  var cabin = bookingLinkCabin(segment);
+  var enc = encodeURIComponent;
+  var url, site = BOOKING_LINK_CARRIERS[carrier] || "Google Flights";
+
+  if (carrier === "AA") {
+    var aa = ["tripType=oneWay", "searchType=Revenue", "cabinType=" + cabin, "carriers=ALL", "adult=1", "child=0", "infantInLap=0"];
+    [["slices[0].origin", origin], ["slices[0].destination", destination], ["slices[0].departureDate", dateYmd], ["slices[0].departureTime", "ANYTIME"]].forEach(function (pair) {
+      aa.push(enc(pair[0]) + "=" + enc(pair[1]));
+    });
+    url = "https://www.aa.com/booking/find-flights?" + aa.join("&");
+  } else if (carrier === "BA") {
+    var baCabin = cabin === "FIRST" ? "F" : cabin === "BUSINESS" ? "C" : cabin === "PREMIUM_ECONOMY" ? "W" : "M";
+    url = "https://www.britishairways.com/travel/book/public/en_gb/processOffer?onds=" +
+      enc(origin + "-" + destination + "_" + dateYmd) + "&ad=1&yad=0&ch=0&inf=0&cabin=" + baCabin + "&flex=LOWEST&ond=1";
+  } else if (carrier === "DL") {
+    url = "https://www.delta.com/flight-search/book-a-flight?tripType=ONE_WAY&originCity=" + enc(origin) +
+      "&destinationCity=" + enc(destination) + "&departureDate=" + enc(dateYmd) + "&paxCount=1";
+  } else if (carrier === "UA") {
+    var unitedCabin = cabin === "FIRST" ? 7 : cabin === "BUSINESS" ? 4 : 1;
+    url = "https://www.united.com/en/us/fsr/choose-flights?f=" + enc(origin) + "&t=" + enc(destination) +
+      "&d=" + enc(dateYmd) + "&tt=1&at=1&sc=" + unitedCabin + "&px=1";
+  } else if (carrier === "AS") {
+    var parts = dateYmd.split("-");
+    var alaskaDate = parts[1] + "/" + parts[2] + "/" + parts[0];
+    var alaskaFlight = enc(origin + "|" + destination + "|" + alaskaDate + "|" + flight + "|f");
+    url = "https://www.alaskaair.com/planbook/shoppingstart?A=1&C=0&FT=ow&F1=" + alaskaFlight +
+      "&DEST=" + enc(destination) + "&frm=cart&META=GOO_CS";
+  } else {
+    var query = "Flights from " + origin + " to " + destination + " on " + dateYmd;
+    url = "https://www.google.com/travel/flights?q=" + enc(query) + "&curr=USD";
+  }
+  return {url:url, site:site, carrier:carrier, flight:flight, origin:origin, destination:destination, date:dateYmd};
+}
+function bookingGdsRowCount(text) {
+  var head = String(text || "").split(/^\s*<--additional-->\s*$/im)[0];
+  var lines = head.split(/\r?\n/), count = 0;
+  var row = /^\s*\d+\s+[A-Z0-9]{2}\s+\d{1,6}\s+\d{1,2}[A-Z]{3}\s+[A-Z]{3}\s+[A-Z]{3}\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+N\s*$/i;
+  for (var i = 0; i < lines.length; i++) if (row.test(lines[i])) count++;
+  return count;
+}
+function bookingLinkWarningsBlock(warnings) {
+  for (var i = 0; i < (warnings || []).length; i++) {
+    if (/NOT read|missing|unknown|route reversed|repeat the same route|duplicat/i.test(String(warnings[i]))) return true;
+  }
+  return false;
+}
+function bookingLinkFromOutput(text, sourceWarnings, now) {
+  text = String(text || "");
+  if (!text.trim()) return {eligible:false, reason:"Convert a complete one-segment flight first."};
+  var read;
+  try {
+    if (!window.SpicyEngine || typeof window.SpicyEngine.parse !== "function") throw new Error("parser unavailable");
+    read = window.SpicyEngine.parse(text);
+  } catch (e) {
+    return {eligible:false, reason:"The current conversion could not be checked. Convert it again first."};
+  }
+  var segments = read && Array.isArray(read[0]) ? read[0] : [];
+  var warnings = (sourceWarnings || []).concat(read && Array.isArray(read[1]) ? read[1] : []);
+  if (segments[0] && Array.isArray(segments[0].warnings)) warnings = warnings.concat(segments[0].warnings);
+  if (bookingLinkWarningsBlock(warnings)) {
+    return {eligible:false, reason:"Flight data is incomplete or uncertain. Correct the conversion before opening a booking link."};
+  }
+  var rows = bookingGdsRowCount(text);
+  if (rows > 1 || segments.length > 1) return {eligible:false, reason:"Booking links are enabled for one segment only."};
+  if (rows !== 1 || segments.length !== 1) return {eligible:false, reason:"No complete flight segment is ready for a booking link."};
+
+  var segment = segments[0];
+  var airline = String(segment.airline || "").trim().toUpperCase();
+  var flight = String(segment.flight_no || "").trim();
+  var origin = String(segment.orig || "").trim().toUpperCase();
+  var destination = String(segment.dest || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{2}$/.test(airline) || !/^\d{1,6}$/.test(flight)) {
+    return {eligible:false, reason:"A valid airline code and flight number are required."};
+  }
+  if (!/^[A-Z]{3}$/.test(origin) || !/^[A-Z]{3}$/.test(destination) || origin === destination) {
+    return {eligible:false, reason:"A valid origin and destination are required."};
+  }
+  if (!bookingClockValid(segment.dep_time) || !bookingClockValid(segment.arr_time)) {
+    return {eligible:false, reason:"Departure and arrival times must be readable before booking."};
+  }
+  var dateYmd = bookingLinkDateYmd(segment.date_ddmmm, now);
+  if (!dateYmd) return {eligible:false, reason:"A valid future departure date is required."};
+  var details = buildSingleSegmentBookingLink(segment, dateYmd);
+  details.eligible = true;
+  return details;
+}
+function invalidateBookingLinkButton() {
+  bookingSourceDirty = true;
+  refreshBookingLinkButton("");
+}
+function refreshBookingLinkButton(text) {
+  var button = $("btnBookingLink");
+  if (!button) return;
+  var details = bookingSourceDirty
+    ? {eligible:false, reason:"Input changed — convert it before opening a booking link."}
+    : bookingLinkFromOutput(text, bookingSourceWarnings);
+  button.disabled = !details.eligible;
+  if (button.classList) {
+    if (typeof button.classList.toggle === "function") button.classList.toggle("booking-link-ready", !!details.eligible);
+    else if (details.eligible && typeof button.classList.add === "function") button.classList.add("booking-link-ready");
+    else if (!details.eligible && typeof button.classList.remove === "function") button.classList.remove("booking-link-ready");
+  }
+  if (button.setAttribute) {
+    button.setAttribute("aria-disabled", details.eligible ? "false" : "true");
+    button.setAttribute("aria-label", details.eligible ? "Open " + details.site + " booking search for " + details.origin + " to " + details.destination : "Booking link unavailable: " + details.reason);
+  }
+  button.title = details.eligible ? "Open " + details.site + " booking search for " + details.origin + " to " + details.destination + " on " + details.date + ". Verify flight availability and fare on the booking site." : details.reason;
+}
+function copyBookingUrl(url) {
+  function fallbackCopy() {
+    var field = document.createElement("textarea");
+    field.value = url;
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.appendChild(field);
+    field.select();
+    var copied = false;
+    try { copied = !!document.execCommand("copy"); } catch (e) {}
+    field.remove();
+    return copied;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try { navigator.clipboard.writeText(url).catch(fallbackCopy); return true; } catch (e) {}
+  }
+  return fallbackCopy();
+}
+function openBookingLink() {
+  var details = bookingLinkFromOutput(out ? out.textContent : "", bookingSourceWarnings);
+  refreshBookingLinkButton(out ? out.textContent : "");
+  if (!details.eligible) {
+    setStatus("BOOKING LINK NOT AVAILABLE — " + details.reason, true);
+    return false;
+  }
+  copyBookingUrl(details.url);
+  var tab = null;
+  try { tab = window.open("about:blank", "_blank"); } catch (e) { tab = null; }
+  if (!tab) {
+    setStatus("POP-UP BLOCKED — booking link copied if clipboard access is available", true);
+    return false;
+  }
+  try { tab.opener = null; } catch (e) {}
+  try {
+    if (tab.location && typeof tab.location.replace === "function") tab.location.replace(details.url);
+    else tab.location = details.url;
+  } catch (e) {
+    try { tab.location.href = details.url; } catch (ignored) {}
+  }
+  setStatus("OPENED " + details.site.toUpperCase() + " BOOKING SEARCH — " + details.origin + " → " + details.destination);
+  return true;
+}
+/* BOOKING_LINK:END */
 
 /* ---------- per-line glow bars ---------- */
 // The glow is not only the pane's top edge: every visible line of the window
@@ -694,10 +893,10 @@ function learnKnows(text) {
 var TCACHE_KEY = "spicy_text_cache_v2";
 function tCacheAll(){ try{ return JSON.parse(localStorage.getItem(TCACHE_KEY)||"{}"); }catch(e){return{};} }
 function tCacheGet(h){ var c=tCacheAll(); return c[h]||null; }
-function tCacheSet(h, outText){
+function tCacheSet(h, outText, warnings){
   try{
     var c=tCacheAll();
-    c[h]={out: outText.slice(0,3000), when: Date.now()};
+    c[h]={out: outText.slice(0,3000), warnings:Array.isArray(warnings)?warnings.slice(0,30):[], when: Date.now()};
     var keys=Object.keys(c).sort(function(a,b){return c[b].when-c[a].when;});
     var nc={}; for(var i=0;i<Math.min(80,keys.length);i++) nc[keys[i]]=c[keys[i]];
     localStorage.setItem(TCACHE_KEY, JSON.stringify(nc));
@@ -707,10 +906,10 @@ function tCacheSet(h, outText){
 var ICACHE_KEY = "spicy_img_cache_v2";
 function imgCacheAll(){ try{ return JSON.parse(localStorage.getItem(ICACHE_KEY)||"{}"); }catch(e){return{};} }
 function imgCacheGet(hash){ var c=imgCacheAll(); return c[hash]||null; }
-function imgCacheSet(hash, outText){
+function imgCacheSet(hash, outText, warnings){
   try{
     var c=imgCacheAll();
-    c[hash]={out: outText.slice(0,3000), when: Date.now()};
+    c[hash]={out: outText.slice(0,3000), warnings:Array.isArray(warnings)?warnings.slice(0,30):[], when: Date.now()};
     var keys=Object.keys(c).sort(function(a,b){return c[b].when-c[a].when;});
     var nc={}; for(var i=0;i<Math.min(30,keys.length);i++) nc[keys[i]]=c[keys[i]];
     localStorage.setItem(ICACHE_KEY, JSON.stringify(nc));
@@ -2045,6 +2244,8 @@ function removeImage(id) {
   imageParsePromise = null;
   cancelOcrWork();
   invalidateAiForAttachmentChange();
+  bookingSourceWarnings = [];
+  invalidateBookingLinkButton();
   setOut("");
   lastOut = "";
   var remaining = readyImages();
@@ -2201,12 +2402,14 @@ function renderAttachmentResults(results, token, batch, started) {
   });
   if (bled) {
     if (gemKey()) {
+      bookingSourceWarnings = warns.slice();
       setStatus("SEGMENTS LOOK DUPLICATED — re-reading with AI…", true);
       convertAi(true, "duplicated segment guard");
       return;
     }
     warns.push("segments repeat the same route/date — verify legs 2+ (add a Gemini key and press AI FIX for a re-read)");
   }
+  bookingSourceWarnings = warns.slice();
 
   if (allSegs.length) {
     var outText = window.SpicyEngine.renderItinerary(allSegs);
@@ -2217,11 +2420,14 @@ function renderAttachmentResults(results, token, batch, started) {
     // (e.g. only the typed text re-parsed while the image read found nothing).
     if (aiSpeculation.batch === batch && aiSpeculation.painted &&
         (!imgSegs || itineraryHasUnknownFields(outText))) {
+      refreshBookingLinkButton(lastOut);
       setStatus("KEPT AI RESULT — direct re-read was incomplete", true);
       return;
     }
     directPaintedBatch = batch;
     lastOut = outText;
+    bookingSourceWarnings = warns.slice();
+    bookingSourceDirty = false;
     setOut(outText);
     var ms = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - started);
     // An attached PDF cannot be read offline; say so instead of letting the
@@ -2229,7 +2435,9 @@ function renderAttachmentResults(results, token, batch, started) {
     var pdfNote = (readyDocuments().length && !gemKey()) ? "  ·  PDF needs Gemini (AI FIX)" : "";
     setStatus("IMAGE PARSED — " + allSegs.length + " seg(s) (" + ms + "ms)" + (warns.length ? "  ·  " + warns.join(" · ") : "") + pdfNote, warns.length > 0);
     var imgs = readyImages();
-    if (imgs.length === 1 && imgs[0]._hash) imgCacheSet(imgs[0]._hash, outText);
+    if (imgs.length === 1 && imgs[0]._hash && !(inp.value || "").trim() && !readyDocuments().length) {
+      imgCacheSet(imgs[0]._hash, outText, bookingSourceWarnings);
+    }
     recordStat("img_direct", ms);
     // The direct read produced segments but left unreadable placeholder fields
     // behind. That is a partial read, not a result — re-read it with AI in the
@@ -2271,8 +2479,10 @@ function convertImageAttachments(batch) {
   // still include the typed itinerary or PDF.
   if (list.length === 1 && list[0]._hash && !(inp.value || "").trim() && !readyDocuments().length) {
     var cached = imgCacheGet(list[0]._hash);
-    if (cached && cached.out) {
+    if (cached && cached.out && Array.isArray(cached.warnings)) {
       lastOut = cached.out;
+      bookingSourceWarnings = cached.warnings.slice();
+      bookingSourceDirty = false;
       setOut(cached.out);
       setStatus("CACHED IMAGE — instant");
       imageParsePromise = null;
@@ -2399,6 +2609,9 @@ function handleFiles(fileList) {
   aiSpeculationClearTimer();
   // A new attachment is a new conversion request; never leave the previous
   // itinerary copyable while the replacement is being decoded.
+  bookingSourceWarnings = [];
+  lastTextFp = "";
+  invalidateBookingLinkButton();
   setOut("");
   lastOut = "";
   setStatus("CHECKING ATTACHMENTS…");
@@ -2424,6 +2637,8 @@ function renderDirectSync(text, opts){
   var cleaned = cleanOcrText(text, { learned: false });
   var res = window.SpicyEngine.parse(cleaned);
   var segs = res[0], warns = res[1];
+  bookingSourceWarnings = Array.isArray(warns) ? warns.slice() : [];
+  bookingSourceDirty = false;
   if(!segs.length) { lastOut=""; setOut(""); return {segs:segs,warns:warns,out:""}; }
   var outText = window.SpicyEngine.renderItinerary(segs);
   lastOut = outText;
@@ -2431,7 +2646,7 @@ function renderDirectSync(text, opts){
   var msg = "CONVERTED — "+segs.length+" segment(s)";
   if(warns.length) msg+="  ·  "+warns.join(" · ");
   setStatus(msg, warns.length>0);
-  tCacheSet(fp(text), outText);
+  tCacheSet(fp(text), outText, bookingSourceWarnings);
   if (counted) recordStat("text_direct");
   return {segs:segs,warns:warns,out:outText};
 }
@@ -2445,6 +2660,8 @@ function convert(auto) {
   var hasImg = imgs.length > 0;
   var hasAnyAttachment = hasAttachments();
   if (!text.trim() && !hasAnyAttachment) {
+    bookingSourceWarnings = [];
+    bookingSourceDirty = false;
     setOut("");
     lastOut = "";
     setStatus("READY");
@@ -2462,10 +2679,23 @@ function convert(auto) {
   // attached, otherwise the attachment would be silently ignored.
   if (text.trim() && !hasImg && !docs.length) {
     var h = fp(text);
-    if (h === lastTextFp && lastOut) { setStatus("CACHED — instant"); return; }
+    if (h === lastTextFp && lastOut) {
+      bookingSourceDirty = false;
+      refreshBookingLinkButton(lastOut);
+      setStatus("CACHED — instant");
+      return;
+    }
     var tc = tCacheGet(h);
     if (tc && tc.out) {
       lastOut = tc.out;
+      if (Array.isArray(tc.warnings)) bookingSourceWarnings = tc.warnings.slice();
+      else {
+        try {
+          var cachedParse = window.SpicyEngine.parse(cleanOcrText(text, { learned: false }));
+          bookingSourceWarnings = Array.isArray(cachedParse[1]) ? cachedParse[1].slice() : [];
+        } catch (e) { bookingSourceWarnings = ["cached conversion could not be verified"]; }
+      }
+      bookingSourceDirty = false;
       setOut(tc.out);
       lastTextFp = h;
       setStatus("CACHED TEXT — instant — " + (tc.out.split("\n").filter(function(l) { return / N$/.test(l); }).length) + " segs");
@@ -2658,6 +2888,17 @@ function convertAi(fromAuto, reason, specBatch){
   var requestAttachmentBatch=latestAttachmentBatch;
   var requestId=++aiRequestId;
   var aiImages=readyImages(), aiDocuments=readyDocuments();
+  // Keep warnings from the exact text being repaired, and retain the latest
+  // direct attachment warnings when those images/documents are part of the request.
+  var aiInputWarnings = (aiImages.length || aiDocuments.length) && Array.isArray(bookingSourceWarnings)
+    ? bookingSourceWarnings.slice() : [];
+  if (text.trim()) {
+    try {
+      var sourceRead = window.SpicyEngine.parse(cleanOcrText(text, { learned: false }));
+      if (sourceRead && Array.isArray(sourceRead[1])) aiInputWarnings = aiInputWarnings.concat(sourceRead[1]);
+    } catch (e) {}
+  }
+  bookingSourceWarnings = aiInputWarnings.slice();
   converting=true;
   window._aiStartedAt=Date.now();
   setStatus((aiImages.length||aiDocuments.length)?"AI CONVERTING (attachment)…":"AI CONVERTING…");
@@ -2681,6 +2922,13 @@ function convertAi(fromAuto, reason, specBatch){
       setStatus("AI REPLY IGNORED — attachment changed, press AI FIX again", true);
       return;
     }
+    var currentText = (inp.value || "").replace(/\[screenshot attached[^\n]*\]\n?/g, "");
+    if (currentText !== text) {
+      if (specBatch && aiSpeculation.batch === specBatch) { aiSpeculation.done = true; aiSpeculation.painted = false; }
+      refreshBookingLinkButton(out ? out.textContent : "");
+      setStatus("AI REPLY IGNORED — input changed, press AI FIX again", true);
+      return;
+    }
     // The direct engine answered first while this speculative call was in
     // flight: the deterministic itinerary stays, the duplicate reply is
     // dropped (no repaint, no double cache write). A direct result that only
@@ -2696,7 +2944,9 @@ function convertAi(fromAuto, reason, specBatch){
     if(!t) throw new Error((j.error&&j.error.message)||"empty AI reply");
     t=t.replace(/^```[a-z]*\s*/i,"").replace(/```\s*$/,"").trim();
     var rr; try{ rr=window.SpicyEngine.parse(t); }catch(e){ rr=null; }
+    bookingSourceWarnings = aiInputWarnings.concat(rr && Array.isArray(rr[1]) ? rr[1] : []);
     if(rr&&rr[0].length&&rr[0].length >= (t.split("\n").filter(function(l){return / N$/.test(l);}).length)){ t=window.SpicyEngine.renderItinerary(rr[0]); }
+    bookingSourceDirty = false;
     var previousDirect = lastOut;
     lastOut=t; setOut(t);
     // The AI reply is on screen: this is the conversion. (The request itself was
@@ -2714,8 +2964,13 @@ function convertAi(fromAuto, reason, specBatch){
     } else {
       setStatus("AI CONVERTED"+(reason?" ("+reason+")":""));
     }
-    if(aiImages.length===1&&aiDocuments.length===0&&aiImages[0]._hash) imgCacheSet(aiImages[0]._hash, t);
-    if(text.trim()){ tCacheSet(fp(text), t); lastTextFp=fp(text); }
+    if (aiImages.length === 1 && aiDocuments.length === 0 && aiImages[0]._hash && !(text || "").trim()) {
+      imgCacheSet(aiImages[0]._hash, t, bookingSourceWarnings);
+    }
+    if (text.trim() && !aiImages.length && !aiDocuments.length) {
+      tCacheSet(fp(text), t, bookingSourceWarnings);
+      lastTextFp = fp(text);
+    }
     if(reason&&text.trim()) learnRecord(text,t,reason);
 
     // AI Mistake Detection & Self-Learning: detect mistakes and teach tool to fix it
@@ -2907,7 +3162,7 @@ function openWeeklyReport() {
    dialog, and ESC closes it. Opening it must never disturb conversion state — no
    attachment batch is invalidated and no AI request is cancelled, so reading the
    blurb while a screenshot is still parsing is safe. */
-var APP_VERSION = "4.0.0";
+var APP_VERSION = "4.1.0";
 var aboutReturnFocus = null;
 function openAbout() {
   var m = $("aboutModal");
@@ -2985,6 +3240,7 @@ if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) 
 /* ABOUT:END */
 
 /* ---------- UI events ---------- */
+if ($("btnBookingLink")) $("btnBookingLink").addEventListener("click", openBookingLink);
 $("btnAttach").addEventListener("click", function() { $("filePick").click(); });
 $("filePick").addEventListener("change", function() {
   // Copy the FileList before resetting the input.  Resetting first is what
@@ -3068,6 +3324,7 @@ inp.addEventListener("paste", function(e) {
 var typeTimer = null;
 inp.addEventListener("input", function() {
   flashPane(inpPane);
+  invalidateBookingLinkButton();
   if (typeTimer) clearTimeout(typeTimer);
   var len = inp.value.length;
   if (!hasAttachments()) {
@@ -3097,6 +3354,8 @@ $("btnClear").addEventListener("click", function() {
   imageParsePromise = null;
   inp.value = "";
   flashInput();
+  bookingSourceWarnings = [];
+  bookingSourceDirty = false;
   setOut("");
   lastOut = "";
   images = [];
