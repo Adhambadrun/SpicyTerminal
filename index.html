@@ -14519,9 +14519,8 @@ if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) 
  * The Seat Map preview is still under development, so its status-row link is
  * dimmed and does not open on an ordinary click. Only ten consecutive clicks
  * — each within SEATMAP_GATE_GAP_MS of the previous one — unlock it and
- * navigate to /seatmap. A slower click restarts the count, and the countdown
- * is reported on the status line (like the Android developer-mode taps), so
- * the button never looks dead to whoever is meant to know the knock.
+ * navigate to /seatmap. A slower click restarts the count. Blocked clicks are
+ * intentionally silent so the status line does not reveal the click gate.
  */
 var SEATMAP_GATE_REQUIRED = 10;
 var SEATMAP_GATE_GAP_MS = 1500;
@@ -14541,8 +14540,6 @@ function seatmapGate(event, now, required, gapMs) {
     return true; // tenth consecutive click: allow the navigation to /seatmap
   }
   if (event && typeof event.preventDefault === "function") event.preventDefault();
-  var left = need - seatmapGateClicks;
-  setStatus("SEAT MAP PREVIEW — " + left + (left === 1 ? " MORE CLICK" : " MORE CLICKS") + " TO OPEN");
   return false;
 }
 function wireSeatMapGate() {
