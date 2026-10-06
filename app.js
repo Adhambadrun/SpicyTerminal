@@ -15,31 +15,19 @@
 var $ = function (id) { return document.getElementById(id); };
 var inp = $("inp"), out = $("out"), st = $("st");
 
-/* ---------- pane change animations ---------- */
-// INPUT and OUTPUT panes play a moving scan every time their content changes.
-// CSS animations do not restart while the trigger class is still on the
-// element, so flashPane re-adds .changed on each change (remove -> forced
-// reflow -> add) and every edit — keystroke, paste, drop, clear, new result —
-// replays the sweep instead of only the first one animating.
-function flashPane(pane) {
-  if (!pane || !pane.classList) return;
-  pane.classList.remove("changed");
-  void pane.offsetWidth; // forced reflow makes the next add restart the animation
-  pane.classList.add("changed");
-  igniteLineGlow(pane); // the per-line glow bars walk the window on the same change
-  printGlyphs(pane);    // OUTPUT only: the glyph shine, kept off any window that can scroll
-}
+/* ---------- pane content changes ---------- */
+// The UI is deliberately animation-free: a content change simply updates the
+// text. flashPane/flashInput are kept as no-op seams so every existing write
+// path (typing, paste, drop, clear, new result) stays unchanged.
+function flashPane(pane) { /* no animation */ }
 function paneOf(el) {
   if (!el) return null;
   if (el.closest) return el.closest(".pane");
   return el.parentNode || null;
 }
 var inpPane = paneOf(inp), outPane = paneOf(out);
-// INPUT writes done in code (clear, drop, paste, attached text files) do not
-// fire an `input` event, so they flash the pane themselves. Typing and normal
-// paste flash from the input listener further below.
 function flashInput() { flashPane(inpPane); }
-// The single writer of the OUTPUT pane: animates it exactly when text changes.
+// The single writer of the OUTPUT pane.
 var bookingSourceWarnings = [];
 var bookingSourceDirty = false;
 function setOut(text) {
@@ -293,195 +281,12 @@ function openBookingLink() {
 }
 /* BOOKING_LINK:END */
 
-/* ---------- per-line glow bars ---------- */
-// The glow is not only the pane's top edge: every visible line of the window
-// carries its own bar (.lgline), built to the pane's real line-height so each
-// bar sits exactly on a line of text.  flashPane() re-arms the strips on every
-// change, so the light walks the window line by line (INPUT blue, OUTPUT
-// green), and between changes the same strips keep drifting on a slow loop —
-// both panes stay alive instead of going dark once the wave has passed.
-var GLOW_LOOP = 6200;        // idle drift: one soft wave travels the pane per loop
-var GLOW_SPAN = 0.6;         // how much of the loop's phase is spread down the pane
-                             // (0.6 => one soft band, not a full-window stripe grid)
-var GLOW_STEP_FALLBACK = 24; // per-line ignite stagger (ms) if the CSS var is unreadable
-var GLOW_MAX_LINES = 80;     // a very tall window must never build thousands of nodes
-function glowBody(pane) {
-  if (!pane || !pane.querySelector) return null;
-  return pane.querySelector("textarea, pre.out, pre");
-}
-function lineGlowLayer(pane) {
-  return pane && pane.querySelector ? pane.querySelector(".lineglow") : null;
-}
-function glowIgniteStep(layer) {
-  var step = GLOW_STEP_FALLBACK;
-  try {
-    var css = window.getComputedStyle ? parseFloat(window.getComputedStyle(layer).getPropertyValue("--lgstep")) : NaN;
-    if (css && !isNaN(css)) step = css;
-  } catch (e) {}
-  return step;
-}
-function buildLineGlow(pane) {
-  var layer = lineGlowLayer(pane), body = glowBody(pane);
-  if (!layer || !body) return null;
-  var cs = window.getComputedStyle ? window.getComputedStyle(body) : null;
-  if (!cs) return null;
-  var lh = parseFloat(cs.lineHeight);
-  if (!lh || isNaN(lh)) lh = (parseFloat(cs.fontSize) || 14) * 1.55;
-  lh = Math.max(10, Math.round(lh * 100) / 100);
-  var padTop = parseFloat(cs.paddingTop) || 0;
-  var padBottom = parseFloat(cs.paddingBottom) || 0;
-  var bodyTop = body.offsetTop || 0, bodyH = body.offsetHeight || 0;
-  if (!bodyH) return null; // wait for layout; resize/boot refresh will try again
-  var contentH = Math.max(0, (body.clientHeight || bodyH) - padTop - padBottom);
-  var rows = Math.ceil(contentH / lh);
-  if (rows < 1) rows = 1;
-  if (rows > GLOW_MAX_LINES) rows = GLOW_MAX_LINES;
-  // Rebuild only when the pane's geometry actually moved (resize, rotation,
-  // phone keyboard): typing must not thrash the DOM on every keystroke.
-  var sig = [rows, lh, bodyTop, bodyH, padTop, padBottom].join("|");
-  if (layer._sig !== sig) {
-    layer._sig = sig;
-    layer.style.top = bodyTop + "px";
-    layer.style.height = bodyH + "px";
-    var driftStep = GLOW_LOOP * GLOW_SPAN / rows;
-    var igniteStep = glowIgniteStep(layer);
-    while (layer.firstChild) layer.removeChild(layer.firstChild);
-    for (var i = 0; i < rows; i++) {
-      var line = document.createElement("i");
-      line.className = "lgline";
-      // Bake row positions and stagger delays in JS instead of relying on
-      // CSS typed multiplication, which is still missing in some mobile WebViews.
-      line.style.top = (padTop + i * lh).toFixed(2) + "px";
-      line.style.height = lh.toFixed(2) + "px";
-      line.style.setProperty("--lgdrift-delay", (i * driftStep).toFixed(1) + "ms");
-      line.style.setProperty("--lgignite-delay", (i * igniteStep).toFixed(1) + "ms");
-      layer.appendChild(line);
-    }
-    layer._rows = rows;
-  }
-  layer._lh = lh;
-  markGlowLines(pane); // light up the lines that actually carry text
-  return layer;
-}
-// A strip on an empty line stays a faint shimmer (.ghost) so the glow belongs
-// to the words — the wave still travels every line of the window, as asked.
-function markGlowLines(pane) {
-  var layer = lineGlowLayer(pane), body = glowBody(pane);
-  if (!layer || !body || !layer._rows) return;
-  var text = body.value != null ? body.value : (body.textContent || "");
-  var lines = Math.min(text.split("\n").length, layer._rows);
-  if (layer._ghosts === lines) return; // only touch the DOM when the shape changed
-  layer._ghosts = lines;
-  for (var i = 0; i < layer._rows; i++) {
-    var strip = layer.children[i];
-    if (!strip) continue;
-    if (i < lines) strip.classList.remove("ghost");
-    else strip.classList.add("ghost");
-  }
-}
-function igniteLineGlow(pane) {
-  var layer = buildLineGlow(pane);
-  if (!layer) return;
-  layer.classList.remove("lit");
-  void layer.offsetWidth; // forced reflow: line 1 lights again on a back-to-back change
-  layer.classList.add("lit");
-  if (layer._litTimer) clearTimeout(layer._litTimer);
-  var rows = layer._rows || 0, step = glowIgniteStep(layer);
-  layer._litTimer = setTimeout(function () {
-    layer._litTimer = null;
-    layer.classList.remove("lit"); // hand the pane back to the idle drift
-  }, rows * step + 700);
-}
-// The bars stay glued to the real text lines while a pane is scrolled.
-function syncLineGlow(pane) {
-  var layer = lineGlowLayer(pane), body = glowBody(pane);
-  if (!layer || !body || !layer._lh) return;
-  var off = (body.scrollTop || 0) % layer._lh;
-  layer.style.transform = off ? "translateY(" + (-off).toFixed(2) + "px)" : "";
-}
-// Geometry changes (window resize, phone keyboard, rotation) move the lines.
-function refreshLineGlows() {
-  buildLineGlow(inpPane);
-  buildLineGlow(outPane);
-  syncLineGlow(inpPane);
-  syncLineGlow(outPane);
-}
-if (inp && inp.addEventListener) inp.addEventListener("scroll", function () { syncLineGlow(inpPane); });
-if (out && out.addEventListener) out.addEventListener("scroll", function () { syncLineGlow(outPane); });
-if (window.addEventListener) {
-  window.addEventListener("resize", refreshLineGlows);
-  window.addEventListener("orientationchange", refreshLineGlows);
-}
-try {
-  if (window.ResizeObserver) {
-    var glowRO = new window.ResizeObserver(function () { refreshLineGlows(); });
-    if (inpPane) glowRO.observe(inpPane);
-    if (outPane) glowRO.observe(outPane);
-  }
-} catch (e) {}
-setTimeout(refreshLineGlows, 600); // after the boot animation has settled
-
 /* SCROLLBARS:BEGIN */
-/* ---------- the OUTPUT print, and why it can never stop the window scrolling ---------- */
-// The result "prints" with a light streak through its glyphs: the text is
-// painted from a background clipped to the letters (background-clip:text).
-// That is the one effect that can take a window's scrolling with it — a clipped
-// background on a SCROLLING element is the known browser bug behind "the OUTPUT
-// window will not scroll down": the clipped paint does not travel with the
-// text, so once the result is long enough to scroll, the window stops moving.
-// So the print is carried by a short-lived .printing class — and the clipped
-// streak inside it (.printing.shine) only ever runs where it cannot cost the
-// user a scroll:
-//   - .printing is never left on the window: it is dropped on the effect's own
-//     `animationend`, with a timer as the safety net, so what a user scrolls
-//     afterwards is a plain, native scrollport — no clipped paint, no leftover
-//     filter or transform;
-//   - .shine is skipped while the window can scroll (vertically or
-//     horizontally): a long itinerary keeps the fade/rise print, the pane sweep
-//     and the per-line glow bars, none of which clip the text;
-//   - .shine is skipped for a user who asked for reduced motion.
-var PRINT_MS = 900;   // out-shine is .65s; the timer only exists in case animationend never fires
-// .printing  -> the fade/rise print, on every result, off again when it has played
-// .printing.shine -> adds the clipped glyph streak, ONLY where it cannot cost a scroll
-function outCanScroll() {
-  if (!out) return false;
-  var v = out.clientHeight ? out.scrollHeight > out.clientHeight + 2 : false;
-  var h = out.clientWidth ? out.scrollWidth > out.clientWidth + 2 : false;
-  return v || h;
-}
-function prefersReducedMotion() {
-  try {
-    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  } catch (e) { return false; }
-}
-function endPrint() {
-  if (!outPane || !outPane.classList) return;
-  if (outPane._printTimer) { clearTimeout(outPane._printTimer); outPane._printTimer = null; }
-  outPane.classList.remove("printing");
-  outPane.classList.remove("shine");
-}
-function printGlyphs(pane) {
-  if (!pane || !pane.classList || pane !== outPane) return; // INPUT has no clipped text
-  if (pane._printTimer) { clearTimeout(pane._printTimer); pane._printTimer = null; }
-  pane.classList.remove("printing");
-  pane.classList.remove("shine");
-  void pane.offsetWidth; // forced reflow: the print replays on a back-to-back result
-  pane.classList.add("printing");
-  // The clipped streak never runs on a window that can scroll, nor for a user
-  // who asked for reduced motion — they keep the plain fade/rise print.
-  if (!outCanScroll() && !prefersReducedMotion()) pane.classList.add("shine");
-  pane._printTimer = setTimeout(function () {
-    pane._printTimer = null;
-    endPrint();
-  }, PRINT_MS);
-}
-// `animationend` is the honest end of the effect; the timer above is only a
-// fallback for engines that do not fire it on a background-position animation.
-if (out && out.addEventListener) {
-  out.addEventListener("animationend", function (e) {
-    if (e && (e.animationName === "out-shine" || e.animationName === "out-print")) endPrint();
-  });
-}
+/* ---------- the OUTPUT window scrolls natively ---------- */
+// There is no print effect, no clipped background and no leftover transform or
+// filter on the OUTPUT window, so a long itinerary scrolls with the plain
+// native scrollport — which was the whole reason the old effect had to be
+// fenced off in the first place.
 
 /* SCROLLBARS:END */
 
