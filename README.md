@@ -88,22 +88,14 @@ hallucinations, no re-rolling the dice.
   purchases, and stays disabled for partial, invalid, uncertain, unsupported, mixed-bookable,
   or stale input. There is no Google Flights fallback.
 - **Seat Map preview**: the status-row link sits between Weekly Report and Report a bug, deliberately dimmed while the feature is under development — it opens `/seatmap` (with the under-development notice) after ten consecutive clicks, without displaying a countdown; a slower click silently restarts the count. The viewer uses static aircraft layouts and browser-generated sample availability; the 30-second refresh is simulated, no airline API is called, and selecting a seat never reserves it.
-- **Terminal boot animation**: the workspace panes slide in with a quick scanline sweep, the
-  ready indicator gently pulses, and the motion automatically turns off for reduced-motion users.
-- **Per-line glow bars**: both windows light up line by line — every visible line of INPUT
-  carries a cool-blue glowing bar and every line of OUTPUT a terminal-green one. A change
-  (keystroke, paste, drop, new result) ignites them one after another so the light visibly
-  walks the window, and between changes the same bars keep drifting in a slow wave, so the
-  panes stay alive instead of going dark. A strip on an empty line only shimmers, and the
-  bars follow resize, rotation, the phone keyboard and scrolling. Reduced-motion users get
-  a quiet static glow instead of any animated sweep.
+- **No animations**: the interface is completely still. There are no pane entrance effects,
+  change sweeps, per-line glow bars, spinning edge glow, result-print effects, pulsing status
+  dot, blinking cursor or hover transitions — a change simply updates the text. Nothing is
+  left for `prefers-reduced-motion` to switch off, because there is no motion to begin with.
 - **OUTPUT always scrolls**: a long itinerary scrolls inside its own window — wheel, keys,
-  touch and drag-select. The result's print animation used to leave a text-clipped
-  background (`background-clip:text`) on that window, which is the browser bug that can stop
-  a scrolling element dead. The whole print is now carried by a short-lived class that app.js
-  takes off again the moment the effect ends — and the glyph streak inside it is skipped
-  entirely while the window can scroll, and for reduced-motion users — so what you scroll is
-  a plain, native scrollport with no clipped paint or leftover filter on it.
+  touch and drag-select. Nothing clips or animates the text (the old result print painted a
+  `background-clip:text` streak, the browser bug that can stop a scrolling element dead), so
+  what you scroll is a plain, native scrollport with no clipped paint or leftover filter.
 - **INPUT wears the OUTPUT scrollbar**: both windows speak one scrollbar language — thin,
   terminal green, on a dark track (the INPUT textarea used to keep whatever bar the browser
   ships). Both bars are always drawn: there is no switch to hide them, and scrolling itself

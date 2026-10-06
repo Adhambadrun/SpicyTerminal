@@ -144,12 +144,10 @@ assert(/<b>0<\/b> accounts · cookies · trackers/.test(STATS_UL) && /1,600\+/.t
        "stats row claims 0 accounts and the 1,600+ dictionary size");
 assert(!/static file|fuzz/i.test(DLG), "no '1 static file' or fuzz-suite chip remains in the dialog");
 
-/* motion is decoration here, so it must be switch-offable */
+/* the UI is animation-free: nothing here may introduce motion */
 const CSS = TPL.slice(TPL.indexOf("<style>"), TPL.indexOf("</style>"));
-assert(/\.about-card\{[^}]*animation:aboutIn/.test(CSS) &&
-       /prefers-reduced-motion:reduce\)\{[^}]*\.about-card\{animation:none!important/.test(CSS) &&
-       /prefers-reduced-motion:reduce\)\{[^}]*#st::before/.test(CSS),
-       "decorative motion, including the dialog entrance and status pulse, is disabled under prefers-reduced-motion");
+assert(!/animation:|@keyframes|transition:/.test(CSS.slice(0, CSS.indexOf("__SEATMAP_CSS__") + 1 || CSS.length)),
+       "the dialog (and the rest of the page) declares no animation or transition at all");
 assert(/#btnAbout:focus-visible|\.linkbtn\{[^}]*cursor:pointer/.test(CSS),
        "the trigger stays keyboard-visible in the row");
 
