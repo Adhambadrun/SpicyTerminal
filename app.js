@@ -40,7 +40,89 @@ function setOut(text) {
   out.textContent = text;
   flashPane(outPane);
   if (typeof refreshBookingLinkButton === "function") refreshBookingLinkButton(text);
+  if (typeof scheduleLiveBadges === "function") scheduleLiveBadges(text);
 }
+
+/* LIVE_BADGES:BEGIN */
+/*
+ * Free verification badges (spicy_live_free.js). Three rules, in order:
+ *
+ *   1. The conversion is already finished and correct offline. These badges are
+ *      decoration; they never block, never re-render the output, and never turn
+ *      a failure into an error box.
+ *   2. Everything is debounced 800 ms and cached for 10 minutes by the module,
+ *      so pasting twice costs one round of requests and a free quota is never
+ *      hammered. Simulated availability says SIMULATED; only a configured live
+ *      provider may say LIVE, and none is configured by default.
+ *   3. With the module missing or the device offline the strip stays empty and
+ *      the app behaves exactly as it did before this feature existed.
+ */
+var liveBadgeTimer = null;
+function liveFreeApi() {
+  return (typeof window !== "undefined" && window.SpicyLiveFree) ? window.SpicyLiveFree : null;
+}
+function liveBadgeStrip() {
+  var strip = document.getElementById("liveBadges");
+  if (strip) return strip;
+  if (!outPane || !outPane.parentNode) return null;
+  strip = document.createElement("div");
+  strip.className = "live-badges";
+  strip.id = "liveBadges";
+  strip.setAttribute("role", "status");
+  strip.setAttribute("aria-live", "polite");
+  /* Under the OUTPUT pane, not inside it: the pane holds the GDS text byte for
+     byte and nothing else is allowed to touch that. */
+  outPane.parentNode.insertBefore(strip, outPane.nextSibling);
+  return strip;
+}
+function renderLiveBadges(badges) {
+  var strip = liveBadgeStrip();
+  if (!strip) return;
+  strip.innerHTML = "";
+  var api = liveFreeApi();
+  (badges || []).forEach(function (badge) {
+    var chip = document.createElement("span");
+    chip.className = "live-badge" + (badge.failed ? " live-badge-weak" : "") + (badge.live ? " live-badge-live" : "");
+    chip.title = badge.provenance || "";
+    var provenance = document.createElement("b");
+    provenance.textContent = badge.provenance || "";
+    chip.appendChild(provenance);
+    chip.appendChild(document.createTextNode(" " + (badge.text || "")));
+    strip.appendChild(chip);
+  });
+  var note = document.createElement("span");
+  note.className = "live-badge live-badge-note";
+  note.textContent = api ? api.availabilityDisclaimer() : "";
+  strip.appendChild(note);
+}
+function scheduleLiveBadges(text) {
+  var api = liveFreeApi();
+  if (!api || !text) return;
+  var segs = [];
+  try { segs = (window.SpicyEngine.parse(text)[0] || []); } catch (error) { segs = []; }
+  if (!segs.length) { var strip = document.getElementById("liveBadges"); if (strip) strip.innerHTML = ""; return; }
+  if (liveBadgeTimer) clearTimeout(liveBadgeTimer);
+  liveBadgeTimer = setTimeout(function () {
+    liveBadgeTimer = null;
+    var first = segs[0];
+    var distance = 0;
+    try {
+      var p = window.SpicyEngine.parse(text)[0] || [];
+      if (p.length && p[0].orig && p[0].dest) distance = window.SpicyEngine.haversineMiles(p[0].orig, p[0].dest) || 0;
+    } catch (error) { distance = 0; }
+    api.updateBadges(segs, {
+      data: (typeof SPICY_DATA !== "undefined" ? SPICY_DATA : null),
+      cabin: (first.cabin || "").toLowerCase() || null,
+      aircraft: first.aircraft || null,
+      distanceMiles: distance,
+      checkSeatmap: false                  /* the seat map's own page asks for it */
+    }).then(function (badges) {
+      if (out.textContent !== text) return;   /* a newer paste owns the strip */
+      renderLiveBadges(badges);
+    })["catch"](function () { /* a badge failure is never a conversion failure */ });
+  }, api.DEBOUNCE_MS || 800);
+}
+/* LIVE_BADGES:END */
 
 /* BOOKING_LINK:BEGIN */
 /*

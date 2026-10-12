@@ -192,6 +192,13 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
    wordmark looked worse than a quiet header. */
 @media (max-width:560px){.status{gap:6px 10px}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}}
 __SEATMAP_CSS__
+  .live-badges { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 0; }
+  .live-badge { font-size: 11px; line-height: 1.5; padding: 3px 7px; border: 1px solid #2a3441; border-radius: 3px;
+    color: #cbd5e1; background: #0f172a; max-width: 100%; overflow-wrap: anywhere; }
+  .live-badge b { color: #7dd3a0; font-weight: 600; margin-right: 4px; }
+  .live-badge-live b { color: #facc15; }
+  .live-badge-weak { color: #94a3b8; border-color: #334155; }
+  .live-badge-note { color: #94a3b8; border-style: dashed; }
 </style>
 </head>
 <body>
@@ -615,6 +622,7 @@ __SEATMAP_CSS__
 <script>__SPICY_DATA__</script>
 <script>__SPICY_ENGINE__</script>
 <script>__SPICY_LINKS__</script>
+<script>__SPICY_LIVE_FREE__</script>
 <!-- No Seat Map gate ships any more: seatmap_gate.js stays in the repository as
      a retired module, and the open-door wiring lives in app.js (SEATMAP_GATE). -->
 <script>__APP_JS__</script>
