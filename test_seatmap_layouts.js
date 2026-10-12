@@ -175,4 +175,71 @@ test("the registry is versioned and dates its own review", () => {
   assert(/^\d{4}-\d{2}-\d{2}$/.test(Layouts.LAYOUT_UPDATED), "registry carries the date it was last reviewed");
 });
 
+/* ---------- four-class variants: a cabin the aircraft does fly ---------- */
+/* A two-class reference layout is not proof that the type has no First cabin:
+   the same 787-9 flies four cabins at another operator. Drawing "no First" for
+   a First ticket would be a silent lie, so those configurations ship too. */
+
+test("every four-class variant is internally consistent", () => {
+  const codes = Object.keys(Layouts.TYPE_LAYOUT_VARIANTS);
+  assert(codes.length >= 10, "the wide bodies carry a four-class variant, found " + codes.length);
+  codes.forEach(code => {
+    const problems = Layouts.layoutProblems(Layouts.TYPE_LAYOUT_VARIANTS[code], code + "/4-class");
+    assert.deepStrictEqual(problems, [], code + " four-class variant has structural problems");
+  });
+});
+
+test("a variant only exists for a type, and only adds cabins the default lacks", () => {
+  Object.keys(Layouts.TYPE_LAYOUT_VARIANTS).forEach(code => {
+    const variant = Layouts.TYPE_LAYOUT_VARIANTS[code];
+    const base = Layouts.TYPE_LAYOUTS[code];
+    assert(base, code + " variant has no default layout to vary from");
+    assert.strictEqual(variant.name, base.name, code + " variant is the same aircraft");
+    assert.strictEqual(variant.icaoCode, base.icaoCode, code + " variant keeps the same ICAO code");
+    ["first", "premium_economy"].forEach(cabin => {
+      assert(Layouts.hasCabin(variant, cabin), code + " four-class variant carries a " + cabin + " cabin");
+    });
+    assert(!Layouts.hasCabin(variant, "business") === false, code + " four-class variant keeps a business cabin");
+    /* The variant is only ever chosen when the default cannot answer, so it
+       must actually answer something the default cannot. */
+    const adds = ["first", "premium_economy"].filter(cabin => !Layouts.hasCabin(base, cabin));
+    assert(adds.length > 0, code + " variant adds at least one cabin the default layout has not got");
+  });
+});
+
+test("a First or Premium Economy ticket finds the cabin this type flies", () => {
+  const wideBodies = Object.keys(Layouts.TYPE_LAYOUTS).filter(code => Layouts.TYPE_LAYOUTS[code].category === "widebody");
+  assert(wideBodies.length >= 12, "the registry covers the wide bodies, found " + wideBodies.length);
+  wideBodies.forEach(code => {
+    ["first", "premium_economy"].forEach(cabin => {
+      const resolved = Layouts.resolveLayout("", code, SPICY_DATA.aircraftTypes, { cabin: cabin });
+      assert(resolved.tier === Layouts.TIERS.TYPE_REFERENCE, code + "/" + cabin + " still resolves to a reference layout");
+      assert(Layouts.hasCabin(resolved.layout, cabin),
+        code + "/" + cabin + " resolves to a layout that actually has that cabin");
+      if (!Layouts.hasCabin(Layouts.TYPE_LAYOUTS[code], cabin)) {
+        assert(resolved.variantFor === cabin, code + "/" + cabin + " records that a variant was used");
+        assert(/also flies a/.test(resolved.variantNote || ""), code + "/" + cabin + " explains the switch");
+      }
+    });
+  });
+});
+
+test("a cabin the default already has is never swapped for a variant", () => {
+  const defaults = [["77W", "first"], ["738", "economy"], ["763", "business"], ["388", "premium_economy"]];
+  defaults.forEach(([code, cabin]) => {
+    const resolved = Layouts.resolveLayout("", code, SPICY_DATA.aircraftTypes, { cabin: cabin });
+    assert.strictEqual(resolved.layout, Layouts.TYPE_LAYOUTS[code], code + "/" + cabin + " keeps the default layout");
+    assert.strictEqual(resolved.variantFor, undefined, code + "/" + cabin + " records no switch");
+  });
+});
+
+test("no variant is ever presented as an airline's verified configuration", () => {
+  Object.keys(Layouts.TYPE_LAYOUT_VARIANTS).forEach(code => {
+    const resolved = Layouts.resolveLayout("BA", code, SPICY_DATA.aircraftTypes, { cabin: "first" });
+    assert(resolved.tier === Layouts.TIERS.TYPE_REFERENCE, code + " variant stays a reference layout");
+    assert.strictEqual(resolved.sourceName, undefined, code + " variant claims no airline source");
+    assert.strictEqual(resolved.sourceUrl, undefined, code + " variant claims no source document");
+  });
+});
+
 console.log("\nLayout registry checks: " + checks + " passed.");

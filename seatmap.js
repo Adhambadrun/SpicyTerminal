@@ -32,6 +32,12 @@
     ? require("./seatmap_layouts.js")
     : (root && root.SpicySeatMapLayouts) || null;
 
+  /* The local flight lookup (seatmap_flights.js): "which aircraft is BA 117?".
+     Inlined ahead of this file by build_web.py, required directly under Node. */
+  var FLIGHT_API = (typeof module === "object" && module && module.exports)
+    ? require("./seatmap_flights.js")
+    : (root && root.SpicySeatMapFlights) || null;
+
   var TIERS = (LAYOUT_API && LAYOUT_API.TIERS) || {
     AIRLINE_VERIFIED: "airline_verified",
     TYPE_REFERENCE: "type_reference",
@@ -57,6 +63,13 @@
   function aircraftTypes() {
     if (typeof SPICY_DATA !== "undefined" && SPICY_DATA && SPICY_DATA.aircraftTypes) return SPICY_DATA.aircraftTypes;
     if (root && root.SPICY_DATA && root.SPICY_DATA.aircraftTypes) return root.SPICY_DATA.aircraftTypes;
+    return null;
+  }
+
+  /** The whole data file (flight/route/airline equipment tables). */
+  function dataTable() {
+    if (typeof SPICY_DATA !== "undefined" && SPICY_DATA) return SPICY_DATA;
+    if (root && root.SPICY_DATA) return root.SPICY_DATA;
     return null;
   }
 
@@ -253,7 +266,12 @@
       totalSeats: totalSeats,
       ticketedCabin: spec.ticketedCabin || null,
       ticketedCabinLabel: spec.ticketedCabinLabel || null,
-      cabinNote: spec.cabinNote || null
+      cabinShown: spec.cabinShown || null,
+      cabinNote: spec.cabinNote || null,
+      layoutVariantFor: spec.layoutVariantFor || null,
+      layoutConfig: layout.configLabel || null,
+      layoutTier: spec.layoutTier || null,
+      layoutLabel: spec.layoutLabel || null
     };
     if (spec.flight) {
       map.airline = spec.flight.airline;
@@ -268,6 +286,8 @@
       map.distance = spec.flight.distance;
       map.legIndex = spec.flight.legIndex;
       map.legCount = spec.flight.legCount;
+      map.flightSource = spec.flight.flightSource || "converted";
+      map.searchSourceLabel = spec.flight.searchSourceLabel || "";
       map.equipmentSource = spec.flight.equipmentSource;
       map.equipmentNote = spec.flight.equipmentNote;
       map.warnings = (spec.flight.warnings || []).slice();
@@ -290,8 +310,15 @@
     var destination = normalizeAirport(details.destination, "Destination");
     var departureDate = normalizeDate(details.date);
     var aircraftCode = String(details.aircraftCode || "").toUpperCase();
-    var layout = AIRCRAFT_LAYOUTS[aircraftCode];
+    /* Any type the registry can draw is offered, not just the three presets:
+       the manual form is how you look at a type you picked yourself. */
+    var layout = AIRCRAFT_LAYOUTS[aircraftCode] || (LAYOUT_API ? LAYOUT_API.TYPE_LAYOUTS[aircraftCode] : null);
     if (!layout) throw new TypeError("Choose one of the sample aircraft layouts.");
+    var wantedCabin = details.cabinCode || null;
+    if (wantedCabin && LAYOUT_API && !LAYOUT_API.hasCabin(layout, wantedCabin)) {
+      var variant = LAYOUT_API.pickVariant(aircraftCode, wantedCabin);
+      if (variant) layout = variant;
+    }
     return buildSeatMap({
       layout: layout,
       sampleWording: true,
@@ -462,11 +489,11 @@
   }
 
   /** Resolve the layout for one real flight, with its honest tier. */
-  function resolveFlightLayout(airline, equipmentCode) {
+  function resolveFlightLayout(airline, equipmentCode, cabin) {
     if (!LAYOUT_API) {
       return { tier: TIERS.UNKNOWN_TYPE, label: "NO LAYOUT DATA LOADED", layout: null, message: "The aircraft layout data is unavailable." };
     }
-    var resolved = LAYOUT_API.resolveLayout(airline, equipmentCode, aircraftTypes());
+    var resolved = LAYOUT_API.resolveLayout(airline, equipmentCode, aircraftTypes(), cabin ? { cabin: cabin } : null);
     return {
       tier: resolved.tier,
       label: resolved.label,
@@ -475,6 +502,8 @@
       sourceName: resolved.sourceName,
       sourceUrl: resolved.sourceUrl,
       verifiedOn: resolved.verifiedOn,
+      variantFor: resolved.variantFor || null,
+      variantNote: resolved.variantNote || null,
       configLabel: resolved.layout ? resolved.layout.configLabel : null,
       message: resolved.layout
         ? null
@@ -495,15 +524,22 @@
     var destination = normalizeAirport(facts.destination, "Destination");
     var departureDate = normalizeDate(facts.departureDate);
     var equipment = String(facts.equipment || "").toUpperCase();
-    var resolved = resolveFlightLayout(facts.airline, equipment);
+    /* A ticketed cabin is a hard fact; a cabin preference (the box a searcher
+       ticks) only chooses which configuration of this type to draw. Both can
+       ask for a cabin the default reference does not have — and when the type
+       does fly one, the four-class variant answers instead of a shrug. */
+    var ticketed = facts.cabinCode || null;
+    var preference = facts.cabinPreference || ticketed;
+    var resolved = resolveFlightLayout(facts.airline, equipment, preference);
     if (!resolved.layout) throw new TypeError(resolved.message || "No layout is available for this aircraft.");
 
-    var ticketed = facts.cabinCode || null;
     var hasCabin = !ticketed || resolved.layout.cabins.some(function (cabin) { return cabin.code === ticketed; });
     var cabinNote = null;
     if (ticketed && !hasCabin) {
       cabinNote = "This reference layout has no " + (cabinLabel(ticketed) || ticketed) + " cabin, so the whole aircraft is shown.";
       ticketed = null;
+    } else if (resolved.variantNote) {
+      cabinNote = resolved.variantNote;
     }
 
     return buildSeatMap({
@@ -518,7 +554,9 @@
       aircraftCode: equipment,
       ticketedCabin: ticketed,
       ticketedCabinLabel: ticketed ? cabinLabel(ticketed) : null,
+      cabinShown: preference || null,
       cabinNote: cabinNote,
+      layoutVariantFor: resolved.variantFor || null,
       layoutTier: resolved.tier,
       layoutLabel: resolved.label,
       layoutSourceName: resolved.sourceName || null,
@@ -539,6 +577,8 @@
         legCount: facts.legCount == null ? 1 : facts.legCount,
         equipmentSource: facts.equipmentNote || "",
         equipmentNote: facts.equipmentNote || "",
+        flightSource: facts.search ? "search" : "converted",
+        searchSourceLabel: facts.searchSourceLabel || "",
         warnings: facts.warnings || []
       }
     }, refreshIndex);
@@ -748,7 +788,14 @@
     exportAscii: exportAscii,
     exportCsv: exportCsv,
     exportSummary: exportSummary,
-    isSelectableStatus: isSelectableStatus
+    isSelectableStatus: isSelectableStatus,
+    /* the flight lookup and the picker that feeds it */
+    drawableTypes: drawableTypes,
+    populateAircraftSelect: populateAircraftSelect,
+    runFlightSearch: runFlightSearch,
+    renderSearchResults: renderSearchResults,
+    loadSearchedFlight: loadSearchedFlight,
+    loadConvertedRoute: loadConvertedRoute
   };
 
   if (typeof module === "object" && module && module.exports) module.exports = API;
@@ -923,8 +970,11 @@
     var layout = doc.getElementById("seatmapStripLayout");
     var link = doc.getElementById("seatmapStripLink");
     if (source) {
-      source.textContent = "FROM YOUR CONVERTED ITINERARY · LEG " + (map.legIndex + 1) + " OF " + map.legCount
-        + (state.routeStoredAt ? " · CONVERTED " + new Date(state.routeStoredAt).toLocaleString() : "");
+      var searched = map.flightSource === "search";
+      var prefix = searched ? (map.searchSourceLabel || "FROM THE LOCAL FLIGHT TABLE") : "FROM YOUR CONVERTED ITINERARY";
+      var legPart = (!searched && map.legCount > 1) ? " · LEG " + (map.legIndex + 1) + " OF " + map.legCount : "";
+      var when = (!searched && state.routeStoredAt) ? " · CONVERTED " + new Date(state.routeStoredAt).toLocaleString() : "";
+      source.textContent = prefix + legPart + when;
     }
     if (identity) {
       identity.textContent = map.airline + " " + map.flightNumber
@@ -937,10 +987,16 @@
         + " · " + (map.equipmentSource || "provenance unknown");
     }
     if (cabin) {
-      cabin.textContent = "TICKET: " + (map.cabin || "cabin not stated")
-        + (map.bookingClass ? " · CLASS " + map.bookingClass : "")
-        + (map.depTime ? " · DEPARTS " + map.depTime : "")
-        + (map.departureDate ? " · " + map.departureDate + (map.dateYearInferred ? " (year inferred)" : "") : "");
+      if (map.flightSource === "search") {
+        cabin.textContent = "CABIN SHOWN: " + (map.cabinShown ? String(cabinLabel(map.cabinShown) || map.cabinShown).toUpperCase() : "ALL CABINS")
+          + (map.departureDate ? " · " + map.departureDate : "")
+          + " · NO TICKET — SEAT STATUSES BELOW ARE SIMULATED";
+      } else {
+        cabin.textContent = "TICKET: " + (map.cabin || "cabin not stated")
+          + (map.bookingClass ? " · CLASS " + map.bookingClass : "")
+          + (map.depTime ? " · DEPARTS " + map.depTime : "")
+          + (map.departureDate ? " · " + map.departureDate + (map.dateYearInferred ? " (year inferred)" : "") : "");
+      }
     }
     if (layout) {
       layout.textContent = (map.layoutConfig || "") + (map.layoutConfig ? " — " : "") + (map.layoutLabel || "");
@@ -961,7 +1017,10 @@
       if (map.cabinNote) parts.push(map.cabinNote);
       if (map.miles) parts.push("Published distance " + map.miles + " mi.");
       if (map.warnings && map.warnings.length) parts.push(map.warnings.join(" · "));
-      parts.push("The aircraft type comes from your itinerary; the seat statuses below are simulated — no airline inventory is connected.");
+      parts.push(map.flightSource === "search"
+        ? "The aircraft type comes from " + String(map.searchSourceLabel || "the local flight table").toLowerCase()
+          + " — airlines swap aircraft, so check the airline for today's; the seat statuses below are simulated — no airline inventory is connected."
+        : "The aircraft type comes from your itinerary; the seat statuses below are simulated — no airline inventory is connected.");
       note.textContent = parts.join(" ");
     }
   }
@@ -970,7 +1029,7 @@
   function renderLegSwitcher(doc, state) {
     var holder = doc.getElementById("seatmapLegs");
     if (!holder) return;
-    if (!state.legs || state.legs.length < 2) {
+    if (state.searched || !state.legs || state.legs.length < 2) {
       holder.classList.add("hidden");
       holder.innerHTML = "";
       return;
@@ -1006,7 +1065,8 @@
         + " · " + state.map.totalSeats + " seats · " + (state.map.layoutConfig || "");
     } else {
       if (flightName) flightName.textContent = state.map.flightNumber + " · " + state.map.origin + " → " + state.map.destination;
-      if (flightMeta) flightMeta.textContent = state.map.departureDate + " · " + state.map.aircraftName + " (" + state.map.aircraftCode + ") · " + state.map.totalSeats + " seats in static sample layout";
+      if (flightMeta) flightMeta.textContent = state.map.departureDate + " · " + state.map.aircraftName + " (" + state.map.aircraftCode + ") · "
+        + state.map.totalSeats + " seats" + (state.map.layoutConfig ? " · " + state.map.layoutConfig : " in static sample layout");
     }
     var svg = doc.getElementById("seatmapSvg");
     if (svg) renderSvg(state, svg);
@@ -1017,6 +1077,244 @@
     renderDetails(doc, state);
     renderStats(doc, state);
     updateCountdown(doc, state);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Flight search — "which aircraft is BA 117, and what is its cabin?"
+   *
+   * There is no schedule feed here and no airline to ask, so the lookup is
+   * layered and every layer says where its answer came from: the local flight
+   * table, the converter's own table, what we can infer for the airline, or
+   * nothing (and then the user picks the type by hand). The page never
+   * pretends a lookup is an assignment: airlines swap aircraft daily.
+   * ------------------------------------------------------------------ */
+
+  function flightsApi() {
+    if (FLIGHT_API) return FLIGHT_API;
+    return (root && root.SpicySeatMapFlights) || null;
+  }
+
+  /** Every aircraft type this page can actually draw. */
+  function drawableTypes() {
+    return LAYOUT_API ? Object.keys(LAYOUT_API.TYPE_LAYOUTS).sort() : [];
+  }
+
+  function typeLabel(code) {
+    var table = aircraftTypes();
+    var entry = table && table[code];
+    return entry && entry[1] ? entry[1] : String(code);
+  }
+
+  /** Fill the manual aircraft picker with every drawable type. */
+  function populateAircraftSelect(doc, selected) {
+    var select = doc.getElementById("seatmapAircraft");
+    if (!select) return;
+    var markup = ['<option value="">Choose an aircraft type…</option>'];
+    drawableTypes().forEach(function (code) {
+      markup.push('<option value="' + escapeUi(code) + '"' + (code === selected ? " selected" : "") + ">"
+        + escapeUi(code + " · " + typeLabel(code)) + "</option>");
+    });
+    select.innerHTML = markup.join("");
+  }
+
+  /** Where the searched flight's aircraft type came from, in one line. */
+  function sourceLine(result) {
+    return result ? (result.sourceLabel || "LOCAL FLIGHT TABLE") : "LOCAL FLIGHT TABLE";
+  }
+
+  /** Draw a flight the user looked up. No ticket, so no cabin is dimmed: the
+   *  whole aircraft is shown, and the cabin the user asked for — if the type
+   *  flies one — is the configuration drawn. */
+  function loadSearchedFlight(doc, state, flight) {
+    var map;
+    try {
+      map = createFlightSeatMap({
+        airline: flight.airline,
+        flightNumber: flight.number,
+        origin: flight.origin,
+        destination: flight.destination,
+        /* A lookup does not need a date to draw a cabin — the layout is the
+           type's, and no schedule is involved — so an empty date box falls
+           back to today instead of refusing to draw. */
+        departureDate: flight.date || new Date().toISOString().slice(0, 10),
+        equipment: flight.equipment,
+        cabinPreference: flight.cabin || null,
+        airlineName: airlineLabel(flight.airline),
+        originName: airportLabel(flight.origin),
+        destinationName: airportLabel(flight.destination),
+        equipmentNote: sourceLine(flight.result) + " — the type usually assigned, not a live assignment",
+        searchSourceLabel: sourceLine(flight.result),
+        search: true,
+        legIndex: 0,
+        legCount: 1
+      }, 0);
+    } catch (error) {
+      setNotice(doc, error.message + " No cabin is invented to fill the gap.", true);
+      return null;
+    }
+    /* The converted itinerary is kept, not discarded: "back to the flight I
+       converted" has to still work after a lookup. What changes is what the
+       viewer is showing, and the leg switcher stands down while it does. */
+    state.searched = flight;
+    state.currentInput = { manual: false, search: true };
+    state.refreshTick = 0;
+    state.selectedSeatId = null;
+    state.demoSeatId = null;
+    state.zoom = 1;
+    state.panX = 0;
+    state.panY = 0;
+    state.map = map;
+    state.nextRefreshAt = Date.now() + 30000;
+    var demoPanel = doc.getElementById("seatmapDemo");
+    if (demoPanel) demoPanel.classList.remove("hidden");
+    var useConvertedAfterSearch = doc.getElementById("seatmapUseConverted");
+    if (useConvertedAfterSearch && state.legs) useConvertedAfterSearch.classList.remove("hidden");
+    var searchButton = doc.getElementById("seatmapSearchButton");
+    if (searchButton) searchButton.textContent = "DRAW THIS TYPE";
+    var legsHolder = doc.getElementById("seatmapLegs");
+    if (legsHolder) { legsHolder.classList.add("hidden"); legsHolder.innerHTML = ""; }
+    setNotice(doc, map.airline + " " + map.flightNumber + " · " + map.aircraftName + " (" + map.aircraftCode + ") · "
+      + map.totalSeats + " seats · " + sourceLine(flight.result) + " · SEAT STATUSES SIMULATED", false);
+    renderViewer(doc, state);
+    return map;
+  }
+
+  /** Render what a lookup found: the flights themselves, or the honest reason
+   *  nothing was found plus the way forward. */
+  function renderSearchResults(doc, state, result, label) {
+    var holder = doc.getElementById("seatmapSearchResults");
+    if (!holder) return;
+    if (!result) { holder.innerHTML = ""; holder.classList.add("hidden"); return; }
+    holder.classList.remove("hidden");
+    var markup = "";
+
+    if (result.flights && result.flights.length) {
+      markup += '<p class="seatmap-search-note"><span class="seatmap-search-tag">' + escapeUi(result.sourceLabel)
+        + '</span> ' + escapeUi(label) + " — pick one to draw its cabin.</p>";
+      result.flights.forEach(function (entry) {
+        markup += '<button type="button" class="seatmap-result" data-airline="' + escapeUi(entry.airline)
+          + '" data-number="' + escapeUi(entry.number) + '" data-origin="' + escapeUi(entry.origin)
+          + '" data-destination="' + escapeUi(entry.destination) + '" data-aircraft="' + escapeUi(entry.equipment)
+          + '" data-source="' + escapeUi(result.sourceLabel) + '">'
+          + '<span class="seatmap-result-flight">' + escapeUi(entry.airline + " " + entry.number) + '</span>'
+          + '<span class="seatmap-result-route">' + escapeUi(entry.origin + " → " + entry.destination) + '</span>'
+          + '<span class="seatmap-result-aircraft">' + escapeUi(entry.equipment + " · " + typeLabel(entry.equipment)) + '</span>'
+          + "</button>";
+      });
+      markup += '<p class="seatmap-search-foot">The type is the one usually assigned to this flight number. Airlines swap aircraft — check the airline for today’s.</p>';
+      holder.innerHTML = markup;
+      return;
+    }
+
+    if (result.kind === "type-only") {
+      markup += '<p class="seatmap-search-note"><span class="seatmap-search-tag">' + escapeUi(result.sourceLabel)
+        + "</span> " + escapeUi(label) + " is on file as a " + escapeUi(result.equipment + " · " + typeLabel(result.equipment))
+        + ", but no route is. Add the airports (for example " + escapeUi(label.replace(/\s+$/, "") + " LHR JFK") + "), or pick a route and I will draw that type.</p>";
+      markup += '<button type="button" class="seatmap-result" data-aircraft="' + escapeUi(result.equipment)
+        + '" data-source="' + escapeUi(result.sourceLabel) + '" data-airline="' + escapeUi(result.airline || "")
+        + '" data-number="' + escapeUi(result.number || "") + '">'
+        + '<span class="seatmap-result-flight">USE ' + escapeUi(result.equipment) + " IN THE FORM BELOW</span>"
+        + '<span class="seatmap-result-aircraft">' + escapeUi(typeLabel(result.equipment)) + "</span></button>";
+      holder.innerHTML = markup;
+      return;
+    }
+
+    if (result.equipment) {
+      var routeLabel = (result.origin || "") + " → " + (result.destination || "");
+      markup += '<p class="seatmap-search-note"><span class="seatmap-search-tag">' + escapeUi(result.sourceLabel)
+        + "</span> " + escapeUi(label) + " is not in the local flight table. For " + escapeUi(routeLabel)
+        + " I would expect a " + escapeUi((result.equipment || "") + (result.equipment ? " · " + typeLabel(result.equipment) : ""))
+        + " — an inference, not a schedule.</p>";
+      {
+        markup += '<button type="button" class="seatmap-result" data-aircraft="' + escapeUi(result.equipment)
+          + '" data-origin="' + escapeUi(result.origin || "") + '" data-destination="' + escapeUi(result.destination || "")
+          + '" data-airline="' + escapeUi(result.airline || "") + '" data-number="' + escapeUi(result.number || "")
+          + '" data-source="' + escapeUi(result.sourceLabel) + '">'
+          + '<span class="seatmap-result-flight">DRAW ' + escapeUi(result.equipment) + " ON THIS ROUTE</span>"
+          + '<span class="seatmap-result-route">' + escapeUi(routeLabel) + "</span>"
+          + '<span class="seatmap-result-aircraft">' + escapeUi(typeLabel(result.equipment)) + "</span></button>";
+      }
+      holder.innerHTML = markup;
+      return;
+    }
+
+    markup += '<p class="seatmap-search-note"><span class="seatmap-search-tag">NOT IN THE LOCAL TABLES</span> '
+      + escapeUi(label) + " is not in the local flight table — there is no schedule feed in this tab and I will not guess a flight. "
+      + "Give me the route and the aircraft type below and the cabin is drawn from that.</p>";
+    holder.innerHTML = markup;
+  }
+
+  /** Run one lookup and show what it found. */
+  function runFlightSearch(doc, state) {
+    var api = flightsApi();
+    var input = doc.getElementById("seatmapFlightQuery");
+    var raw = input ? input.value : "";
+    var dateInput = doc.getElementById("seatmapFindDate") || doc.getElementById("seatmapDate");
+    var date = dateInput ? dateInput.value : "";
+    var cabinSelect = doc.getElementById("seatmapSearchCabin");
+    var cabin = cabinSelect ? cabinSelect.value : "";
+    if (!api) {
+      setNotice(doc, "The local flight table is unavailable.", true);
+      return null;
+    }
+    var parsed = api.parseQuery(raw);
+    if (!parsed) {
+      setNotice(doc, "Type a flight number (BA117), a flight with its route (BA 117 LHR JFK), or two airports (CAI LHR).", true);
+      renderSearchResults(doc, state, { kind: "unparsed", sourceLabel: "NOTHING TO LOOK UP" }, String(raw || "").trim());
+      return null;
+    }
+
+    if (parsed.kind === "route") {
+      var byRoute = api.searchRoute(parsed.origin, parsed.destination, { data: dataTable() });
+      byRoute.airline = "";
+      renderSearchResults(doc, state, byRoute, parsed.origin + " → " + parsed.destination);
+      setNotice(doc, byRoute.flights.length
+        ? byRoute.flights.length + " flight(s) on " + parsed.origin + " → " + parsed.destination + " in the local table."
+        : "No flight on that route in the local table — here is what I can infer.", false);
+      return byRoute;
+    }
+
+    var result = api.lookup(parsed.airline, parsed.number, {
+      origin: parsed.origin, destination: parsed.destination, data: dataTable()
+    });
+    result.airline = parsed.airline;
+    result.number = parsed.number;
+    renderSearchResults(doc, state, result, parsed.airline + " " + parsed.number);
+
+    if (result.kind === "flight") {
+      var entry = result.flights[0];
+      return loadSearchedFlight(doc, state, {
+        airline: entry.airline, number: entry.number, origin: entry.origin, destination: entry.destination,
+        equipment: entry.equipment, date: date, cabin: cabin, result: result
+      });
+    }
+    if (result.equipment && parsed.origin && parsed.destination) {
+      return loadSearchedFlight(doc, state, {
+        airline: parsed.airline, number: parsed.number, origin: parsed.origin, destination: parsed.destination,
+        equipment: result.equipment, date: date, cabin: cabin, result: result
+      });
+    }
+    if (result.equipment) {
+      populateAircraftSelect(doc, result.equipment);
+      setNotice(doc, parsed.airline + " " + parsed.number + ": type " + result.equipment + " is on file (" + result.sourceLabel
+        + ") but no route is — add the airports and it draws.", false);
+      return result;
+    }
+    setNotice(doc, parsed.airline + " " + parsed.number + " is not in the local tables. No schedule feed here — pick the route and the type below.", true);
+    return result;
+  }
+
+  /** Back to the itinerary the user converted (after looking something up). */
+  function loadConvertedRoute(doc, state) {
+    if (!state.legs || !state.legs.length) {
+      setNotice(doc, "Nothing converted in this tab yet — paste an itinerary on the terminal and it lands here.", true);
+      return null;
+    }
+    state.searched = null;
+    setNotice(doc, "", false);
+    var results = doc.getElementById("seatmapSearchResults");
+    if (results) { results.innerHTML = ""; results.classList.add("hidden"); }
+    return loadLeg(doc, state, state.legIndex || 0);
   }
 
   /** Load one leg of the stored itinerary into the viewer. */
@@ -1078,6 +1376,7 @@
       return null;
     }
     state.legIndex = index;
+    state.searched = null;
     state.currentInput = { manual: false };
     state.refreshTick = 0;
     state.selectedSeatId = null;
@@ -1092,6 +1391,8 @@
     if (search) search.textContent = "GENERATE SAMPLE MAP";
     setNotice(doc, "SEAT MAP LOADED FROM YOUR CONVERTED ITINERARY — LEG " + (index + 1) + " OF " + state.legs.length
       + " · " + map.layoutLabel, false);
+    var backToConverted = doc.getElementById("seatmapUseConverted");
+    if (backToConverted) backToConverted.classList.add("hidden");
     renderViewer(doc, state);
     return map;
   }
@@ -1102,6 +1403,17 @@
   function refreshSample(doc, state) {
     if (!state.currentInput) return;
     state.refreshTick++;
+    if (state.searched) {
+      var refreshedSearch = loadSearchedFlight(doc, state, state.searched);
+      state.map = refreshedSearch || state.map;
+      state.nextRefreshAt = Date.now() + 30000;
+      renderViewer(doc, state);
+      var liveSearch = doc.getElementById("seatmapRefreshStatus");
+      if (liveSearch && state.map) {
+        liveSearch.textContent = "SEAT STATUSES RESAMPLED " + new Date(state.map.generatedAt).toLocaleTimeString() + " — STILL SIMULATED, NO AIRLINE DATA REQUESTED";
+      }
+      return;
+    }
     if (state.currentInput.manual === false && state.legs) {
       var refreshed = loadLeg(doc, state, state.legIndex == null ? 0 : state.legIndex);
       state.map = refreshed || state.map;
@@ -1290,11 +1602,66 @@
       }
     });
 
-    var dateInput = doc.getElementById("seatmapDate");
-    if (dateInput && !dateInput.value) {
-      var tomorrow = new Date(Date.now() + 86400000);
-      dateInput.value = tomorrow.toISOString().slice(0, 10);
-    }
+    ["seatmapDate", "seatmapFindDate"].forEach(function (id) {
+      var field = doc.getElementById(id);
+      if (field && !field.value) {
+        var tomorrow = new Date(Date.now() + 86400000);
+        field.value = tomorrow.toISOString().slice(0, 10);
+      }
+    });
+
+    /* ---------- the flight lookup ---------- */
+    populateAircraftSelect(doc, "");
+
+    var findForm = doc.getElementById("seatmapFindForm");
+    if (findForm) findForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      runFlightSearch(doc, state);
+    });
+    var findButton = doc.getElementById("seatmapFindButton");
+    if (findButton) findButton.addEventListener("click", function (event) {
+      event.preventDefault();
+      runFlightSearch(doc, state);
+    });
+
+    /* Results are buttons: one click draws that flight's cabin. */
+    var resultsHolder = doc.getElementById("seatmapSearchResults");
+    if (resultsHolder) resultsHolder.addEventListener("click", function (event) {
+      var button = event.target && event.target.closest ? event.target.closest(".seatmap-result") : null;
+      if (!button) return;
+      var dateField = doc.getElementById("seatmapDate");
+      var cabinField = doc.getElementById("seatmapSearchCabin");
+      var airline = button.getAttribute("data-airline") || "";
+      var number = button.getAttribute("data-number") || "";
+      var origin = button.getAttribute("data-origin") || "";
+      var destination = button.getAttribute("data-destination") || "";
+      var aircraft = button.getAttribute("data-aircraft") || "";
+      var source = button.getAttribute("data-source") || "LOCAL FLIGHT TABLE";
+      var result = { sourceLabel: source, equipment: aircraft };
+      if (!origin || !destination) {
+        /* No route on file: the type is still useful — offer it in the form. */
+        populateAircraftSelect(doc, aircraft);
+        var query = doc.getElementById("seatmapFlightQuery");
+        if (query && airline && number) query.value = airline + " " + number;
+        setNotice(doc, aircraft + " is selected below — add the two airports and it draws.", false);
+        return;
+      }
+      var flightField = doc.getElementById("seatmapFlightNumber");
+      var originField = doc.getElementById("seatmapOrigin");
+      var destinationField = doc.getElementById("seatmapDestination");
+      if (flightField && airline) flightField.value = airline + number;
+      if (originField) originField.value = origin;
+      if (destinationField) destinationField.value = destination;
+      loadSearchedFlight(doc, state, {
+        airline: airline, number: number, origin: origin, destination: destination,
+        equipment: aircraft, date: dateField ? dateField.value : "",
+        cabin: cabinField ? cabinField.value : "", result: result
+      });
+    });
+
+    /* Back from a lookup to the itinerary the user actually converted. */
+    var useConverted = doc.getElementById("seatmapUseConverted");
+    if (useConverted) useConverted.addEventListener("click", function () { loadConvertedRoute(doc, state); });
 
     var quickButtons = doc.querySelectorAll("[data-seatmap-example]");
     Array.prototype.forEach.call(quickButtons, function (button) {
@@ -1353,13 +1720,14 @@
           origin: doc.getElementById("seatmapOrigin").value,
           destination: doc.getElementById("seatmapDestination").value,
           date: doc.getElementById("seatmapDate").value,
-          aircraftCode: doc.getElementById("seatmapAircraft").value
+          aircraftCode: doc.getElementById("seatmapAircraft").value,
+          cabinCode: (doc.getElementById("seatmapManualCabin") || {}).value || ""
         };
         input.flightNumber = normalizeFlightNumber(input.flightNumber);
         input.origin = normalizeAirport(input.origin, "Origin");
         input.destination = normalizeAirport(input.destination, "Destination");
         input.date = normalizeDate(input.date);
-        if (!AIRCRAFT_LAYOUTS[input.aircraftCode]) throw new TypeError("Choose a sample aircraft layout.");
+        if (!input.aircraftCode) throw new TypeError("Choose an aircraft type to draw.");
       } catch (error) {
         setNotice(doc, error.message, true);
         return;
@@ -1367,6 +1735,7 @@
       state.legs = null;
       state.legIndex = 0;
       state.routeStoredAt = null;
+      state.searched = null;
       input.manual = true;
       state.currentInput = input;
       state.refreshTick = 0;
