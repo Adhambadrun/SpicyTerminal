@@ -135,11 +135,9 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 #btnBookingLink.booking-link-ready{padding:4px 9px;color:#72f39b;text-decoration:none;font-weight:700;letter-spacing:.45px;background:rgba(31,157,85,.13);border:1px solid rgba(83,217,119,.6);box-shadow:0 0 11px rgba(83,217,119,.2),inset 0 0 8px rgba(83,217,119,.08);text-shadow:0 0 8px rgba(83,217,119,.42)}
 #btnBookingLink.booking-link-ready:hover{color:#eaffef;background:rgba(31,157,85,.24);border-color:#8af5a8;box-shadow:0 0 16px rgba(83,217,119,.36),inset 0 0 9px rgba(83,217,119,.14);filter:none}
 #btnBookingLink:focus-visible{outline:2px solid #53d977;outline-offset:3px}
-/* Seat Map is an unfinished preview: its status-row link is deliberately dimmed
-   and only opens after ten consecutive clicks (the gate lives in app.js under
-   the SEATMAP_GATE markers), so casual visitors never land on it by accident. */
-#btnSeatMap{opacity:.35}
-#btnSeatMap:hover,#btnSeatMap:focus-visible{opacity:.6}
+/* The Seat Map link opens on an ordinary click. It carries the flight you
+   just converted; seat availability inside is simulated and says so. */
+#btnSeatMap:hover,#btnSeatMap:focus-visible{opacity:1}
 .about-modal{z-index:56;padding:16px;align-items:flex-start}
 .about-card{position:relative;width:min(880px,100%);max-height:calc(100dvh - 32px);overflow:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(180deg,#0d141a,#080c11);border:1px solid #1e2b34;border-radius:16px;padding:26px 26px 20px;box-shadow:0 30px 90px rgba(0,0,0,.72)}
 .about-card::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:16px 16px 0 0;background:linear-gradient(90deg,transparent,rgba(83,217,119,.55) 30%,#e2574b 72%,transparent);opacity:.6;pointer-events:none}
@@ -220,7 +218,7 @@ __SEATMAP_CSS__
   <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert a complete American, Delta, Alaska, United or British Airways itinerary to enable its checkout link. Mixed-airline trips (more than one bookable airline), unsupported airlines and uncertain conversions keep it off. Select the number of passengers (1–9) beside the link; seat assignment is not included. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made.">BOOKING LINK</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
   <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
-  <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Seat Map preview">Seat Map</a>
+  <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Seat map for the flight you converted — real aircraft type and layout tier, simulated seat statuses (no airline inventory is connected).">Seat Map</a>
   <button id="report" class="linkbtn">Report a bug</button>
 </div>
 
@@ -337,22 +335,23 @@ __SEATMAP_CSS__
   <div class="seatmap-topbar">
     <a class="seatmap-back" id="seatmapBackLink" href="/" aria-label="Return to SpicyTerminal">← SPICYTERMINAL</a>
     <span class="seatmap-wordmark">SEAT MAP VIEWER</span>
-    <span class="seatmap-top-tag">FEATURE PREVIEW</span>
+    <span class="seatmap-top-tag">REAL FLIGHT DATA · SIMULATED SEAT STATUS</span>
   </div>
   <div class="seatmap-main" id="seatmapContent">
     <div class="seatmap-title-row">
       <div>
         <h1 class="seatmap-title" id="seatmapPageTitle">SEAT MAP</h1>
-        <p class="seatmap-subtitle">Explore an aircraft layout and seat-level details in a local demo. No airline seat map or availability provider is connected.</p>
+        <p class="seatmap-subtitle">Your converted itinerary loads automatically: the seat map reads that flight directly — airline, flight number, route, date, cabin and aircraft type — and draws the aircraft's cabin from a layout labelled by how well it is verified. Seat <em>statuses</em> are simulated — no airline seat-availability feed is connected.</p>
+        <p class="seatmap-subtitle" style="margin-top:5px">Nothing converted yet, or want to try a layout by hand? Use the manual entry form below.</p>
       </div>
     </div>
     <div class="seatmap-dev-banner" role="status">
-      <span class="seatmap-dev-mark">IN DEVELOPMENT</span>
-      <span><strong>Demo only.</strong> Layouts, seat statuses, and refreshes below are simulated in this browser. They are not live airline data and must not be used to choose or book a real seat.</span>
+      <span class="seatmap-dev-mark">WHAT IS REAL HERE</span>
+      <span><strong>Flight data is real; seat status is not.</strong> The flight identity and aircraft type come from your converted itinerary, and the cabin layout is labelled by tier: an airline-verified configuration when one has been checked, otherwise a reference layout for that aircraft type. Seat availability is simulated in this browser — never live airline inventory — and selecting a seat reserves nothing.</span>
     </div>
 
     <section class="seatmap-card" aria-labelledby="seatmapSearchTitle">
-      <h2 class="seatmap-panel-title" id="seatmapSearchTitle" style="padding:0 0 11px;border:0">SAMPLE FLIGHT DETAILS</h2>
+      <h2 class="seatmap-panel-title" id="seatmapSearchTitle" style="padding:0 0 11px;border:0">MANUAL ENTRY · SAMPLE VIEWER</h2>
       <form class="seatmap-form" id="seatmapForm" novalidate>
         <div class="seatmap-field">
           <label for="seatmapFlightNumber">Flight number</label>
@@ -395,8 +394,20 @@ __SEATMAP_CSS__
           <h2 class="seatmap-flight-name" id="seatmapFlightName">SAMPLE FLIGHT</h2>
           <p class="seatmap-flight-meta" id="seatmapFlightMeta"></p>
         </div>
-        <span class="seatmap-source-pill">SIMULATED<br>NOT LIVE</span>
+        <span class="seatmap-source-pill">SEAT STATUS<br>SIMULATED</span>
       </div>
+      <div class="seatmap-flight-strip hidden" id="seatmapFlightStrip" role="status" aria-live="polite">
+        <div class="seatmap-strip-source" id="seatmapStripSource"></div>
+        <div class="seatmap-strip-identity" id="seatmapStripIdentity"></div>
+        <div class="seatmap-strip-grid">
+          <div class="seatmap-strip-fact" id="seatmapStripEquipment"></div>
+          <div class="seatmap-strip-fact" id="seatmapStripCabin"></div>
+        </div>
+        <div class="seatmap-strip-layout tier-unknown" id="seatmapStripLayout"></div>
+        <div class="seatmap-strip-note" id="seatmapStripNote"></div>
+        <a class="seatmap-strip-link hidden" id="seatmapStripLink" href="https://www.aa.com/" target="_blank" rel="noopener noreferrer"></a>
+      </div>
+      <div class="seatmap-legs hidden" id="seatmapLegs" role="group" aria-label="Legs in your converted itinerary"></div>
       <div class="seatmap-toolbar">
         <div class="seatmap-toolbar-group" aria-label="Map zoom controls">
           <button class="seatmap-btn" id="seatmapZoomOut" type="button" aria-label="Zoom out">−</button>
@@ -496,16 +507,16 @@ __SEATMAP_CSS__
 
   <div class="seatmap-notice" id="seatmapNotice" role="dialog" aria-modal="true" aria-labelledby="seatmapNoticeTitle" aria-describedby="seatmapNoticeBody">
     <div class="seatmap-notice-card">
-      <div class="seatmap-notice-kicker">FEATURE STATUS · IN DEVELOPMENT</div>
-      <h2 id="seatmapNoticeTitle">Seat Map is still under development</h2>
+      <div class="seatmap-notice-kicker">WHAT THIS PAGE KNOWS · AND WHAT IT DOES NOT</div>
+      <h2 id="seatmapNoticeTitle">Seat Map: real flight, reference layout, simulated seats</h2>
       <div id="seatmapNoticeBody">
-        <p>The live airline seat-inventory connection has not been implemented. This preview uses static aircraft layouts and <strong>simulated seat availability</strong> generated in your browser.</p>
-        <p>Refreshes, seat counts, cabin details, and availability are sample-only—not current flight data, pricing, or a reservation. Do not use this demo to choose or book a real seat.</p>
-        <p>No airline API is called and no API key is required.</p>
+        <p><strong>Real:</strong> the airline, flight number, route, date, cabin, booking class and aircraft type come from the itinerary you converted. The aircraft type's provenance is shown — stated in your itinerary, or inferred by the converter (and how).</p>
+        <p><strong>Layout:</strong> the cabin configuration is labelled by tier. <em>Verified</em> means it was checked against that airline's own seat map; <em>reference</em> means it is the typical configuration for the aircraft type and has not been verified for the airline; <em>generic</em> means only the cabin cross-section is known. The badge on the map says which one you are looking at. Layouts are never invented to fill a gap.</p>
+        <p><strong>Simulated:</strong> seat availability, counts and refreshes are generated in this browser — not live airline data, pricing, or a reservation. Selecting a seat reserves nothing. Nothing is sent to an airline, and no API key is required.</p>
       </div>
       <div class="seatmap-notice-actions">
         <a href="/" id="seatmapNoticeBack">BACK TO SPICYTERMINAL</a>
-        <button class="seatmap-btn seatmap-btn-primary" id="seatmapNoticeContinue" type="button">CONTINUE TO SAMPLE VIEWER</button>
+        <button class="seatmap-btn seatmap-btn-primary" id="seatmapNoticeContinue" type="button">CONTINUE TO THE SEAT MAP</button>
       </div>
     </div>
   </div>
@@ -544,6 +555,7 @@ __SEATMAP_CSS__
 <script>__SPICY_ENGINE__</script>
 <script>__SPICY_LINKS__</script>
 <script>__APP_JS__</script>
+<script>__SEATMAP_LAYOUTS__</script>
 <script>__SEATMAP_JS__</script>
 </body>
 </html>
