@@ -4,20 +4,19 @@
  *
  * Two halves, both about access:
  *
- *   1. THE GATE. The Seat Map is sealed while it is being finished: the
- *      status-row link is dimmed and opens on the tenth click, and the
- *      /seatmap page checks the same count before it draws anything, so the
- *      URL alone is not a way in. The count itself is exercised in
- *      test_seatmap_gate.js; this file checks the wiring — the dim, the
- *      tooltip, the lock card, and that both built pages ship the gate.
+ *   1. THE DOOR IS OPEN. The Seat Map used to be sealed while it was being
+ *      finished: a dimmed link that opened on the tenth click, and a /seatmap
+ *      page that checked the same count before drawing. That lock is retired.
+ *      This file checks the wiring of the open door — the link is an ordinary
+ *      link, nothing dims it, no counter exists, the retired module is not
+ *      shipped, and no shipped page can fail closed on a visitor.
  *
- *   2. THE HANDOFF. Once the door is open, the page reads the itinerary the
- *      user converted (not a retyped copy of it): app.js mirrors the OUTPUT
- *      pane into sessionStorage and the seat map re-parses it with the real
- *      engine, so the two can never disagree. That path must stay correct,
- *      quiet, and unable to leak between tabs or survive a cleared input.
- */
-const assert = require("assert");
+ *   2. THE HANDOFF. The page reads the itinerary the user converted (not a
+ *      retyped copy of it): app.js mirrors the OUTPUT pane into sessionStorage
+ *      and the seat map re-parses it with the real engine, so the two can
+ *      never disagree. That path must stay correct, quiet, and unable to leak
+ *      between tabs or survive a cleared input.
+ */const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
@@ -28,12 +27,17 @@ const SEATMAP = fs.readFileSync(path.join(ROOT, "seatmap.js"), "utf8");
 const TEMPLATE = fs.readFileSync(path.join(ROOT, "index_template.html"), "utf8");
 const BUILT = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 const BUILT_APP = fs.readFileSync(path.join(ROOT, "app.html"), "utf8");
+const BUILT_SEATMAP = fs.readFileSync(path.join(ROOT, "public", "seatmap.html"), "utf8");
+const GATE = fs.readFileSync(path.join(ROOT, "seatmap_gate.js"), "utf8");
 
 let PASS = 0, FAIL = 0;
 /** Everything the gate sets as the link's title, for tooltip assertions. */
 function seatMapLinkText(source) {
-  const block = source.slice(source.indexOf("/* SEATMAP_GATE:BEGIN */"), source.indexOf("/* SEATMAP_GATE:END */"));
-  return block;
+  /* The whole open-door block, markers included — the same slice the built
+     page has to embed identically. */
+  const start = source.indexOf("/* SEATMAP_GATE:BEGIN */");
+  const end = source.indexOf("/* SEATMAP_GATE:END */", start);
+  return start < 0 || end < start ? "" : source.slice(start, end + "/* SEATMAP_GATE:END */".length);
 }
 function assertTrue(cond, message) {
   if (cond) { PASS++; console.log("PASS:", message); }
@@ -41,40 +45,45 @@ function assertTrue(cond, message) {
 }
 function section(title) { console.log("\n=== " + title + " ==="); }
 
-/* ---------- 1. the Seat Map is sealed: dimmed link, ten clicks, both pages ---------- */
-section("1. the ten-click gate is in place");
+/* ---------- 1. the Seat Map is open: an ordinary link, no count at all ---------- */
+section("1. the door is open");
 assertTrue(/SEATMAP_GATE:BEGIN/.test(APP) && /SEATMAP_GATE:END/.test(APP),
-  "app.js carries the gate block");
-assertTrue(/function seatMapKnock\(event\)/.test(APP), "the link has its own click counter");
-assertTrue(/gate\.knock\(\)/.test(APP), "the counter is the shared gate's, not a private copy");
-assertTrue(/SEAT MAP UNLOCKED/.test(APP), "the tenth click says so in the status row");
-assertTrue(/SEAT MAP LOCKED/.test(APP), "and the clicks before it count down out loud");
-assertTrue(/is-unlocked/.test(APP), "an opened link is painted like an ordinary one");
-assertTrue((TEMPLATE.match(/__SEATMAP_GATE__/g) || []).length === 1, "the template inlines the gate exactly once");
-assertTrue(!/SpicySeatMapGate/.test(TEMPLATE), "and ships no gate logic of its own");
-assertTrue(/SEATMAP_GATE/.test(BUILT) && /SEATMAP_GATE/.test(BUILT_APP), "the built pages ship the gate");
-assertTrue(/SpicySeatMapGate/.test(BUILT) && /SpicySeatMapGate/.test(BUILT_APP),
-  "the built pages ship the gate module itself");
+  "app.js carries the (now open) block");
+assertTrue(/function paintSeatMapLink\(\)/.test(APP), "the link is painted once, plainly");
+assertTrue(!/seatMapKnock|gate\.knock\(|SEAT MAP LOCKED|SEAT MAP UNLOCKED/.test(APP),
+  "no click counter, no countdown line, no unlock announcement");
+assertTrue(!/SpicySeatMapGate/.test(APP) && !/SpicySeatMapGate/.test(SEATMAP),
+  "neither app.js nor seatmap.js consults a gate");
+assertTrue(/id="btnSeatMap"/.test(TEMPLATE) && /href="\/seatmap"/.test(TEMPLATE),
+  "the status-row link points straight at the route");
+assertTrue(/View seat map|Seat map for the flight you converted/.test(TEMPLATE),
+  "and says what it opens, in plain words");
 
-section("2. the link is dimmed until the tenth click");
-assertTrue(/#btnSeatMap\{opacity:\.35/.test(TEMPLATE), "the template dims the Seat Map link");
-assertTrue(/#btnSeatMap\{opacity:\.35/.test(BUILT), "the built page dims the Seat Map link");
-assertTrue(/#btnSeatMap:hover,#btnSeatMap:focus-visible\{opacity:1\}/.test(TEMPLATE),
-  "hover and focus keep the link fully readable while it is sealed");
-assertTrue(/#btnSeatMap\.is-unlocked\{opacity:1\}/.test(TEMPLATE),
-  "an opened link drops the dim for the rest of the tab");
-assertTrue(seatMapLinkText(APP).indexOf("no account and no password") >= 0,
-  "the sealed tooltip says plainly what the lock is not");
+section("2. nothing dims the link and nothing ships the lock");
+assertTrue(!/#btnSeatMap\{opacity/.test(TEMPLATE), "the template does not dim the Seat Map link");
+assertTrue(!/#btnSeatMap\{opacity/.test(BUILT), "the built page does not dim it either");
+assertTrue(!/is-unlocked/.test(APP) && !/is-unlocked/.test(TEMPLATE),
+  "no collapsed/'opened' styling pair survives the lock it belonged to");
+assertTrue(seatMapLinkText(APP).indexOf("SEAT MAP LOCKED") < 0,
+  "the open-door block holds no locked copy");
+assertTrue(!/__SEATMAP_GATE__/.test(TEMPLATE), "the template has no gate slot");
+assertTrue(!/SpicySeatMapGate/.test(BUILT) && !/SpicySeatMapGate/.test(BUILT_APP),
+  "the built pages ship no gate module");
+assertTrue(!/spicy_seatmap_gate/.test(BUILT) && !/spicy_seatmap_gate/.test(BUILT_APP),
+  "and no gate storage key is written by any shipped page");
 
-section("3. the /seatmap URL honours the same lock");
-assertTrue(/id="seatmapLock"/.test(TEMPLATE) && /id="seatmapLock"/.test(BUILT),
-  "the page ships a sealed card to show instead of the map");
-assertTrue(/SEALED · NOT FINISHED/.test(TEMPLATE), "the sealed card says the page is not finished");
-assertTrue(/function lockSeatMapPage\(doc\)/.test(SEATMAP), "the page can lock itself");
-assertTrue(/!api \|\| !api\.isUnlocked\(\)/.test(SEATMAP),
-  "and it fails closed: a missing gate module leaves the map locked");
-assertTrue(SEATMAP.indexOf("lockSeatMapPage(doc); return;") > 0,
-  "a locked tab never reaches the map code at all");
+section("3. the /seatmap URL draws for everyone");
+assertTrue(!/id="seatmapLock"/.test(TEMPLATE) && !/id="seatmapLock"/.test(BUILT),
+  "no sealed card ships, so no visitor can land on one");
+assertTrue(!/lockSeatMapPage/.test(SEATMAP), "the page has no lock path to take");
+assertTrue(!/!api \|\| !api\.isUnlocked\(\)/.test(SEATMAP),
+  "and it never fails closed when a module is missing");
+assertTrue(/\.classList\.add\("seatmap-active"\)/.test(SEATMAP),
+  "arriving at /seatmap takes the screen and draws");
+assertTrue(!/SEAT MAP LOCKED/.test(BUILT_SEATMAP) && !/SEALED · NOT FINISHED/.test(BUILT_SEATMAP),
+  "the shipped route carries none of the sealed copy");
+assertTrue(GATE.indexOf("RETIRED") >= 0, "seatmap_gate.js says out loud that it is retired");
+assertTrue(!/SpicySeatMapGate/.test(BUILT_SEATMAP), "the shipped route loads no gate module");
 
 /* ---------- 4. setOut is what hands the itinerary over ---------- */
 section("4. the converted itinerary reaches the seat map");
@@ -159,7 +168,10 @@ function embeddedBlock(html, name) {
 [["index.html", BUILT], ["app.html", BUILT_APP]].forEach(([name, html]) => {
   assertTrue(embeddedBlock(html, "SEATMAP_ROUTE") === BLOCK, name + " embeds the identical handoff block");
   assertTrue(html.indexOf("spicy_seatmap_route") >= 0, name + " ships the storage key");
-  assertTrue(html.indexOf("SEAT MAP UNLOCKED") >= 0, name + " ships the unlock copy");
+  assertTrue(embeddedBlock(html, "SEATMAP_GATE") === seatMapLinkText(APP),
+    name + " embeds the open-door block, byte for byte");
+  assertTrue(html.indexOf("SEAT MAP LOCKED") < 0 && html.indexOf("SEAT MAP UNLOCKED") < 0,
+    name + " ships no locked or unlocking copy at all");
 });
 const publicIndex = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8");
 assertTrue(publicIndex === BUILT, "public/index.html matches the built page");

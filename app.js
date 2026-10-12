@@ -3112,60 +3112,31 @@ if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) 
 
 /* SEATMAP_GATE:BEGIN */
 /*
- * Seat Map is sealed while it is still being finished. The status-row link is
- * dimmed and only opens on the tenth click — an annoyance for anyone who
- * stumbles onto it, and a clear "not public yet" sign, nothing more. It is not
- * a password and it is not security; the honest description of this lock lives
- * in seatmap_gate.js.
+ * THE DOOR IS OPEN.
  *
- * The knock itself lives in seatmap_gate.js (window.SpicySeatMapGate) because
- * two places must agree on it: this link, and the /seatmap page, which checks
- * the same count before it draws anything (a URL that opens the map anyway is
- * not a gate). The count is kept in sessionStorage, so it survives a reload in
- * this tab and a fresh tab starts over.
+ * The Seat Map used to be sealed behind a ten-click knock while it was still
+ * being finished. That lock is retired: the status-row link is never dimmed,
+ * a click navigates straight to /seatmap, and the page draws the map on
+ * arrival. There is no count to hear and no "still building" card to land on.
+ *
+ * seatmap_gate.js is still in the repository — it is a small, tested counter
+ * and someone may want a private door again — but nothing in this app calls
+ * it and build_web.py no longer inlines it, so no code path can re-seal the
+ * page by accident. Failing closed was right for a locked door and is wrong
+ * for an open one: with the gate absent the map simply draws.
+ *
+ * The link's tooltip stays honest about what the page is: the flight and the
+ * aircraft type are real, the seat colours are simulated, and nothing is
+ * reserved.
  */
-function seatMapGate() {
-  return (window.SpicySeatMapGate && typeof window.SpicySeatMapGate.isUnlocked === "function")
-    ? window.SpicySeatMapGate
-    : null;
-}
-/* Paint the link the way the gate currently stands: dimmed while sealed,
-   ordinary once the tenth click has landed (so coming back from /seatmap
-   doesn't re-dim a door you already opened). */
 function paintSeatMapLink() {
   var link = $("btnSeatMap");
   if (!link) return;
-  var gate = seatMapGate();
-  var open = !gate || gate.isUnlocked();
-  var cls = link.classList;
-  if (cls && cls.add && cls.remove) {
-    /* add/remove rather than toggle(name, force): the same paint runs in the
-       headless test sandboxes, whose classList has no toggle. */
-    if (open) cls.add("is-unlocked"); else cls.remove("is-unlocked");
-  }
-  var title = open
-    ? "Seat map for the flight you converted — real aircraft type and layout tier, simulated seat statuses (no airline inventory is connected)."
-    : "Seat Map is sealed while it is being finished. Click it ten times to open it — this tab only, no account and no password.";
+  var title = "Seat map for the flight you converted \u2014 real aircraft type and layout tier, "
+    + "simulated seat statuses (no airline inventory is connected).";
   if (link.setAttribute) link.setAttribute("title", title);
   else link.title = title;
 }
-function seatMapKnock(event) {
-  var gate = seatMapGate();
-  if (!gate) return;                     /* no gate shipped: the plain link wins */
-  if (gate.isUnlocked()) return;         /* ordinary click, ordinary navigation */
-  if (event && event.preventDefault) event.preventDefault();
-  var result = gate.knock();
-  if (!result.unlocked) {
-    setStatus("SEAT MAP LOCKED — " + result.remaining + " MORE CLICK" + (result.remaining === 1 ? "" : "S") +
-              " (" + result.clicks + "/" + gate.CLICKS_REQUIRED + ")", true);
-    return;
-  }
-  paintSeatMapLink();
-  setStatus("SEAT MAP UNLOCKED — OPENING IT");
-  var link = $("btnSeatMap");
-  window.location.assign(link && link.href ? link.href : "/seatmap");
-}
-if ($("btnSeatMap")) $("btnSeatMap").addEventListener("click", seatMapKnock);
 paintSeatMapLink();
 /* SEATMAP_GATE:END */
 

@@ -1,17 +1,21 @@
 "use strict";
-/* test_seatmap_gate.js — the Seat Map's ten-click lock, executed rather than
- * grepped.
+/* test_seatmap_gate.js — the retired ten-click lock: still a working counter,
+ * and provably not wired into anything a visitor loads.
  *
- * The gate is the thing standing between a half-finished Seat Map and the
- * whole internet, so it is worth testing like a lock and not like a comment:
+ * THE DOOR IS OPEN. seatmap_gate.js used to seal the Seat Map: a dimmed link,
+ * ten clicks to open it, and a /seatmap page that refused to draw until the
+ * same count was heard. That is over. This file now checks two separate
+ * things:
  *
- *   - a fresh tab is sealed, and nine clicks do not open it,
- *   - the tenth click does, and it stays open for the rest of the tab,
- *   - a new tab starts over, because the count lives in sessionStorage,
- *   - blocked, full or absent storage degrades to memory instead of
- *     throwing or (worse) opening the door,
- *   - a corrupted stored flag locks rather than unlocks,
- *   - the stored payload carries a count and nothing else.
+ *   1. THE MODULE STILL WORKS, so a private door can be re-hung later. A
+ *      fresh tab is sealed, nine clicks do not open it, the tenth does, a
+ *      new tab starts over, damaged storage locks rather than opens, and the
+ *      payload carries a count and nothing else. Every one of those runs
+ *      against the real module, not against a copy of it.
+ *
+ *   2. NOTHING SHIPS IT. No CLICKS_REQUIRED, no knockout handler, no dimmed
+ *      link, no sealed card, no gate module in the built pages, and no code
+ *      path that can fail closed on a visitor. The map draws for everyone.
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -24,6 +28,8 @@ const APP = fs.readFileSync(path.join(ROOT, "app.js"), "utf8");
 const TEMPLATE = fs.readFileSync(path.join(ROOT, "index_template.html"), "utf8");
 const BUILT = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 const BUILT_APP = fs.readFileSync(path.join(ROOT, "app.html"), "utf8");
+const BUILT_SEATMAP = fs.readFileSync(path.join(ROOT, "public", "seatmap.html"), "utf8");
+const SEATMAP = fs.readFileSync(path.join(ROOT, "seatmap.js"), "utf8");
 
 let PASS = 0, FAIL = 0;
 function assertTrue(cond, message) {
@@ -178,22 +184,36 @@ section("8. the stored payload carries a count and nothing else");
   assertTrue(!/passenger|name|seat|flight|@/i.test(raw), "no itinerary, passenger or seat data is written");
 }
 
-/* ---------- 9. the gate ships, and asks nothing of the network ---------- */
-section("9. the gate ships with the built pages and calls nothing");
+/* ---------- 9. the retired gate asks nothing of the network ---------- */
+section("9. the module is self-contained: no network, no key, no cookie");
 assertTrue(!/fetch\s*\(|XMLHttpRequest|WebSocket|EventSource/.test(GATE_JS), "the gate makes no network request");
 assertTrue(!/api[_-]?key|secret|token/i.test(GATE_JS), "and holds no credential-shaped string");
 assertTrue(!/localStorage|document\.cookie/.test(GATE_JS), "the flag is per-tab: no localStorage, no cookie");
 assertTrue(/CLICKS_REQUIRED = 10/.test(GATE_JS), "the requirement is written in the source, not inferred");
-["index.html", "app.html"].forEach((name, index) => {
-  const html = index === 0 ? BUILT : BUILT_APP;
-  assertTrue(html.indexOf("SpicySeatMapGate") >= 0, name + " ships the gate");
-  assertTrue(html.indexOf("spicy_seatmap_gate") >= 0, name + " ships the gate's storage key");
+
+/* ---------- 10. the door is open: nothing ships the lock ---------- */
+section("10. nothing shipped can re-seal the Seat Map");
+[["app.js", APP], ["seatmap.js", SEATMAP], ["index_template.html", TEMPLATE],
+ ["index.html", BUILT], ["app.html", BUILT_APP], ["public/seatmap.html", BUILT_SEATMAP]].forEach(pair => {
+  assertTrue(pair[1].indexOf("SEAT MAP LOCKED") < 0, pair[0] + " never says SEAT MAP LOCKED");
+  assertTrue(pair[1].indexOf('id="seatmapLock"') < 0, pair[0] + " ships no sealed card");
 });
-assertTrue(TEMPLATE.indexOf("__SEATMAP_GATE__") >= 0, "the template has the gate's slot");
-assertTrue(!BUILT.includes("__SEATMAP_GATE__"), "the built page filled that slot in");
-assertTrue(/id="seatmapLock"/.test(TEMPLATE) && /id="seatmapLock"/.test(BUILT), "the sealed card ships with the page");
-assertTrue(/SEATMAP_GATE:BEGIN/.test(APP) && /SEATMAP_GATE:END/.test(APP), "app.js keeps its gate block");
-assertTrue(/SEAT MAP UNLOCKED/.test(APP), "the unlock is announced in the status row");
+assertTrue(!/SpicySeatMapGate/.test(TEMPLATE), "the template ships no gate logic");
+assertTrue(TEMPLATE.indexOf("__SEATMAP_GATE__") < 0, "and has no gate slot left to fill");
+assertTrue(!/SpicySeatMapGate/.test(APP), "app.js never calls the gate");
+assertTrue(!/SpicySeatMapGate/.test(SEATMAP), "seatmap.js never calls the gate");
+assertTrue(!/SpicySeatMapGate/.test(BUILT) && !/SpicySeatMapGate/.test(BUILT_APP),
+  "the built pages do not carry the gate module at all");
+assertTrue(BUILT.indexOf("spicy_seatmap_gate") < 0 && BUILT_APP.indexOf("spicy_seatmap_gate") < 0,
+  "nor the gate's storage key");
+assertTrue(!/lockSeatMapPage/.test(SEATMAP), "the page has no lock card to paint");
+assertTrue(/SEATMAP_GATE:BEGIN/.test(APP) && /SEATMAP_GATE:END/.test(APP),
+  "app.js keeps the block's markers, so the two call sites stay findable");
+assertTrue(!/gate\.knock\(|seatMapKnock/.test(APP), "and the block holds no counter");
+assertTrue(!/#btnSeatMap\{opacity/.test(TEMPLATE) && !/#btnSeatMap\{opacity/.test(BUILT),
+  "the Seat Map link is never dimmed");
+assertTrue(/paintSeatMapLink\(\)/.test(APP), "app.js paints the link once, plainly");
+assertTrue(/function paintSeatMapLink\(\)/.test(APP), "and the paint is a plain ordinary-link paint");
 
 console.log("\n=== SUMMARY: " + PASS + " passed, " + FAIL + " failed ===");
 if (FAIL > 0) process.exit(1);
