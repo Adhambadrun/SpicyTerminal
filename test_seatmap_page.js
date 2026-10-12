@@ -20,6 +20,7 @@ const ROOT = __dirname;
 const TEMPLATE = fs.readFileSync(path.join(ROOT, "index_template.html"), "utf8");
 const SEATMAP_JS = fs.readFileSync(path.join(ROOT, "seatmap.js"), "utf8");
 const FLIGHTS_JS = fs.readFileSync(path.join(ROOT, "seatmap_flights.js"), "utf8");
+const CALENDAR_JS = fs.readFileSync(path.join(ROOT, "seatmap_calendar.js"), "utf8");
 const LAYOUTS_JS = fs.readFileSync(path.join(ROOT, "seatmap_layouts.js"), "utf8");
 const DATA_JS = fs.readFileSync(path.join(ROOT, "spicy_data.js"), "utf8");
 const Engine = require("./spicy_engine.js");
@@ -189,6 +190,7 @@ function openPage(options) {
   vm.runInContext(FLIGHTS_JS, sandbox, { filename: "seatmap_flights.js" });
   vm.runInContext(DATA_JS, sandbox, { filename: "spicy_data.js" });
   vm.runInContext(LAYOUTS_JS, sandbox, { filename: "seatmap_layouts.js" });
+  vm.runInContext(CALENDAR_JS, sandbox, { filename: "seatmap_calendar.js" });
   vm.runInContext(SEATMAP_JS, sandbox, { filename: "seatmap.js" });
   if (opts.freezeTime) {
     // keep the generated timestamps stable for assertions that read them
@@ -474,6 +476,193 @@ test("after a lookup you can go straight back to the flight you converted", () =
   assert(/FROM YOUR CONVERTED ITINERARY/.test(page.el("seatmapStripSource").textContent),
     "the converted itinerary comes back");
   assert(page.el("seatmapStripIdentity").textContent.indexOf("QR 704") >= 0, "with its own flight");
+});
+
+/* ---------- calendar date handoff and deck-aware page state ---------- */
+
+function manual(page, code, cabin) {
+  page.el("seatmapFlightNumber").value = "EK202";
+  page.el("seatmapOrigin").value = "JFK";
+  page.el("seatmapDestination").value = "DXB";
+  page.el("seatmapDate").value = "2028-02-29";
+  page.el("seatmapAircraft").value = code;
+  page.el("seatmapManualCabin").value = cabin || "";
+  page.el("seatmapForm").dispatch("submit", { preventDefault() {} });
+}
+function inspect(page, key) {
+  page.el("seatmapSvg").dispatch("click", { target: { closest: () => ({ getAttribute: () => key }) } });
+}
+
+test("both date fields expose calendar triggers and no empty/single-deck page shows a deck switch", () => {
+  const empty = openPage({ routeText: null });
+  assert(!empty.el("seatmapDateToggle").classList.contains("hidden"));
+  assert(!empty.el("seatmapFindDateToggle").classList.contains("hidden"));
+  assert(empty.el("seatmapDecks").classList.contains("hidden"));
+  const converted = openPage({});
+  assert(converted.el("seatmapDecks").classList.contains("hidden"));
+  assert.strictEqual(converted.sandbox.SpicySeatMap.pageState.activeDeck, 0);
+  assert(converted.el("seatmapDeckUpper").disabled);
+});
+
+test("a clicked route result uses the find-flight date, never the manual form's date", () => {
+  const page = openPage({ routeText: null });
+  search(page, "LHR JFK");
+  page.el("seatmapFindDate").value = "2028-02-29";
+  page.el("seatmapDate").value = "2026-12-01";
+  const attributes = { "data-airline": "BA", "data-number": "117", "data-origin": "LHR", "data-destination": "JFK", "data-aircraft": "77W", "data-source": "LOCAL FLIGHT TABLE" };
+  page.el("seatmapSearchResults").dispatch("click", { target: { closest: () => ({ getAttribute: name => attributes[name] }) } });
+  const state = page.sandbox.SpicySeatMap.pageState;
+  assert.strictEqual(state.map.departureDate, "2028-02-29");
+  assert.strictEqual(state.searched.date, "2028-02-29");
+  assert(page.el("seatmapFlightMeta").textContent.includes("2028-02-29"));
+  page.el("seatmapRefreshNow").dispatch("click", {});
+  assert.strictEqual(state.map.departureDate, "2028-02-29", "refresh does not read another form or reset the date");
+});
+
+test("an invalid lookup date refuses without replacing the current map", () => {
+  const page = openPage({});
+  const state = page.sandbox.SpicySeatMap.pageState;
+  const before = state.map;
+  page.el("seatmapFlightQuery").value = "EK202";
+  page.el("seatmapFindDate").value = "2026-02-30";
+  page.el("seatmapFindForm").dispatch("submit", { preventDefault() {} });
+  assert.strictEqual(state.map, before);
+  assert(/valid departure date/.test(page.el("seatmapFormStatus").textContent));
+});
+
+test("the A380 switch draws only the active deck and counts only that deck", () => {
+  const page = openPage({ routeText: null });
+  search(page, "EK202");
+  const state = page.sandbox.SpicySeatMap.pageState;
+  assert(!page.el("seatmapDecks").classList.contains("hidden"));
+  assert.strictEqual(state.activeDeck, 0);
+  assert.strictEqual(page.el("seatmapTotalCount").textContent, "428");
+  assert.strictEqual(page.el("seatmapDeckMain").getAttribute("aria-pressed"), "true");
+  assert(page.el("seatmapSvg").innerHTML.includes('data-seat-id="0:1A"'));
+  assert(!page.el("seatmapSvg").innerHTML.includes('data-deck-index="1"'));
+  assert(page.el("seatmapDeckMainCount").textContent.includes("428"));
+  assert(page.el("seatmapDeckUpperCount").textContent.includes("60"));
+
+  page.el("seatmapDeckUpper").dispatch("click", {});
+  assert.strictEqual(state.activeDeck, 1);
+  assert.strictEqual(state.map.totalSeats, 488, "the full map is kept for exports and refreshes");
+  assert.strictEqual(page.el("seatmapTotalCount").textContent, "60");
+  assert.strictEqual(page.el("seatmapDeckUpper").getAttribute("aria-pressed"), "true");
+  assert.strictEqual(page.el("seatmapDeckMain").getAttribute("aria-pressed"), "false");
+  assert(page.el("seatmapSvg").innerHTML.includes('data-seat-id="1:5A"'));
+  assert(!page.el("seatmapSvg").innerHTML.includes('data-deck-index="0"'));
+  assert(/Upper deck/.test(page.el("seatmapSvg").getAttribute("aria-label")));
+  assert(/upper deck/.test(page.el("seatmapDeckStatus").textContent));
+  assert(/upper deck/.test(page.el("seatmapCountScope").textContent));
+  assert(page.el("seatmapStatusCounts").textContent.startsWith("UPPER DECK"));
+  assert.strictEqual(page.sandbox.SpicySeatMap.exportCsv(state.map).split("\r\n").length, 489);
+});
+
+test("deck switches reset off-screen inspection, scroll, zoom and incompatible cabin filters", () => {
+  const page = openPage({ routeText: null });
+  manual(page, "388");
+  const state = page.sandbox.SpicySeatMap.pageState;
+  page.el("seatmapFilterCabin").value = "economy";
+  page.el("seatmapFilterCabin").dispatch("change", {});
+  page.el("seatmapFilterWindowOnly").checked = true;
+  page.el("seatmapFilterWindowOnly").dispatch("change", {});
+  inspect(page, "0:26A");
+  state.zoom = 1.75;
+  state.panX = 30;
+  state.panY = 500;
+  page.el("seatmapCanvas").scrollTop = 800;
+  page.el("seatmapTooltip").classList.remove("hidden");
+  page.el("seatmapDeckUpper").dispatch("click", {});
+  assert.strictEqual(state.selectedSeatId, null);
+  assert.strictEqual(state.zoom, 1);
+  assert.strictEqual(state.panX, 0);
+  assert.strictEqual(state.panY, 0);
+  assert.strictEqual(page.el("seatmapCanvas").scrollTop, 0);
+  assert(page.el("seatmapTooltip").classList.contains("hidden"));
+  assert.strictEqual(state.filters.cabin, "all");
+  assert.strictEqual(state.filters.windowOnly, true);
+  assert(!page.el("seatmapFilterCabin").innerHTML.includes('value="economy"'));
+  assert(page.el("seatmapFilterCabin").innerHTML.includes('value="business"'));
+  inspect(page, "0:26A");
+  assert.strictEqual(state.selectedSeatId, null, "a seat on the hidden deck cannot be activated");
+  inspect(page, "1:5A");
+  assert(page.el("seatmapSeatDetails").innerHTML.includes("5A · Upper deck"));
+});
+
+test("a sample choice stays unambiguous when viewing the other deck", () => {
+  const page = openPage({ routeText: null });
+  manual(page, "388", "business");
+  const api = page.sandbox.SpicySeatMap, state = api.pageState;
+  assert.strictEqual(state.activeDeck, 1);
+  const seat = api.filterSeats(state.map, { deck: 1, availableOnly: true })[0];
+  inspect(page, seat.key);
+  page.el("seatmapDemoSelect").dispatch("click", {});
+  assert.strictEqual(state.demoSeatId, seat.key);
+  page.el("seatmapDeckMain").dispatch("click", {});
+  assert.strictEqual(state.demoSeatId, seat.key);
+  assert(page.el("seatmapSelectionStatus").textContent.includes(seat.id + " · Upper deck"));
+  assert(!page.el("seatmapSvg").innerHTML.includes("is-demo-choice"));
+});
+
+test("manual, lookup and converted refreshes preserve the upper deck and inspected seat", () => {
+  for (const mode of ["manual", "lookup", "converted"]) {
+    const page = openPage({ routeText: mode === "converted" ? ROUTE_TEXT.replace("359", "388") : null });
+    if (mode === "manual") manual(page, "388", "business");
+    if (mode === "lookup") search(page, "EK202", "business");
+    const api = page.sandbox.SpicySeatMap, state = api.pageState;
+    assert.strictEqual(state.activeDeck, 1, mode + " opens the deck with Business");
+    inspect(page, "1:5A");
+    state.zoom = 1.3;
+    const before = api.flattenSeats(state.map).map(seat => seat.status).join(",");
+    const date = state.map.departureDate;
+    page.el("seatmapRefreshNow").dispatch("click", {});
+    assert.strictEqual(state.activeDeck, 1, mode);
+    assert.strictEqual(state.selectedSeatId, "1:5A", mode);
+    assert.strictEqual(state.zoom, 1.3, mode);
+    assert.strictEqual(state.map.refreshIndex, 1, mode);
+    assert.strictEqual(state.map.departureDate, date, mode);
+    assert.notStrictEqual(api.flattenSeats(state.map).map(seat => seat.status).join(","), before, mode + " really resamples");
+    assert(page.el("seatmapSeatDetails").innerHTML.includes("5A · Upper deck"));
+  }
+});
+
+test("both passenger 747 types expose two decks, then a single-deck aircraft hides the control", () => {
+  const page = openPage({ routeText: null });
+  for (const code of ["744", "748"]) {
+    manual(page, code);
+    assert(!page.el("seatmapDecks").classList.contains("hidden"));
+    page.el("seatmapDeckUpper").dispatch("click", {});
+    assert.strictEqual(page.el("seatmapTotalCount").textContent, "20");
+    assert(page.el("seatmapSvg").innerHTML.includes('data-deck-index="1"'));
+    assert(!page.el("seatmapSvg").innerHTML.includes('data-deck-index="0"'));
+  }
+  search(page, "BA117");
+  assert(page.el("seatmapDecks").classList.contains("hidden"));
+  assert.strictEqual(page.sandbox.SpicySeatMap.pageState.activeDeck, 0);
+  assert.strictEqual(page.el("seatmapTotalCount").textContent, "390");
+  assert(page.el("seatmapDeckUpper").disabled);
+});
+
+test("switching converted legs resets deck state, and a freighter clears stale deck controls", () => {
+  for (const second of ["788", "77F"]) {
+    const page = openPage({ routeText: ROUTE_TEXT.replace("359", "388") });
+    // The converter avoids freighter assignments; inject one into the leg
+    // fixture to exercise the viewer's own no-passenger-cabin refusal.
+    page.sandbox.SpicySeatMap.pageState.legs[1].equipment = second;
+    assert.strictEqual(page.sandbox.SpicySeatMap.pageState.activeDeck, 1);
+    page.el("seatmapLegs").dispatch("click", { target: { closest: () => ({ getAttribute: () => "1" }) } });
+    assert(page.el("seatmapDecks").classList.contains("hidden"));
+    const state = page.sandbox.SpicySeatMap.pageState;
+    assert.strictEqual(state.legIndex, 1);
+    if (second === "77F") {
+      assert.strictEqual(state.map, null);
+      assert.strictEqual(state.selectedSeatId, null);
+      assert.strictEqual(page.el("seatmapSvg").innerHTML, "");
+      assert.strictEqual(page.el("seatmapTotalCount").textContent, "0");
+    } else {
+      assert.strictEqual(state.activeDeck, 0);
+    }
+  }
 });
 
 console.log("\nSeat Map page checks: " + checks + " passed.");

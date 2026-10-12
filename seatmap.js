@@ -38,6 +38,15 @@
     ? require("./seatmap_flights.js")
     : (root && root.SpicySeatMapFlights) || null;
 
+  var CALENDAR_API = (typeof module === "object" && module && module.exports)
+    ? require("./seatmap_calendar.js")
+    : (root && root.SpicySeatMapCalendar) || null;
+
+  function localDateValue(date) {
+    return CALENDAR_API ? CALENDAR_API.localDate(date)
+      : date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+  }
+
   var TIERS = (LAYOUT_API && LAYOUT_API.TIERS) || {
     AIRLINE_VERIFIED: "airline_verified",
     TYPE_REFERENCE: "type_reference",
@@ -158,7 +167,7 @@
 
   /** Choose a visibly varied but reproducible status for a sample seat. */
   function sampleStatus(seed, seat, refreshIndex) {
-    var score = hashString(seed + "|" + seat.id + "|" + refreshIndex) % 100;
+    var score = hashString(seed + "|" + seatKey(seat) + "|" + refreshIndex) % 100;
     var premiumCabin = seat.cabinCode === "first" || seat.cabinCode === "business" || seat.cabinCode === "premium_economy";
     if (seat.isExitRow) {
       if (score < 42) return "exit_row";
@@ -201,9 +210,12 @@
     var sample = !!spec.sampleWording;
     var cabins = [];
     var totalSeats = 0;
+    var multiDeck = layout.cabins.some(function (cabin) { return cabin.deck === 1; })
+      && layout.cabins.some(function (cabin) { return !cabin.deck; });
 
     layout.cabins.forEach(function (cabin) {
       var rows = [];
+      var deck = cabin.deck || 0;
       var outsideTicketedCabin = !!(spec.ticketedCabin && spec.ticketedCabin !== cabin.code);
       for (var rowNumber = cabin.from; rowNumber <= cabin.to; rowNumber++) {
         var isExitRow = (cabin.exitRows || []).indexOf(rowNumber) !== -1;
@@ -213,6 +225,9 @@
             var id = String(rowNumber) + letter;
             var seat = {
               id: id,
+              key: multiDeck ? deck + ":" + id : id,
+              deck: deck,
+              deckName: deckName(deck),
               row: rowNumber,
               letter: letter,
               cabin: cabin.name,
@@ -233,11 +248,12 @@
             totalSeats++;
           });
         });
-        rows.push({ rowNumber: rowNumber, isExitRow: isExitRow, seats: seats });
+        rows.push({ rowNumber: rowNumber, deck: deck, isExitRow: isExitRow, seats: seats });
       }
       cabins.push({
         name: cabin.name,
         code: cabin.code,
+        deck: deck,
         rows: rows,
         features: cabin.features.slice(),
         groups: cabin.groups.map(function (group) { return group.slice(); }),
@@ -263,6 +279,7 @@
       wingEndRow: layout.wingEndRow,
       facilities: layout.facilities.slice(),
       cabins: cabins,
+      decks: getDecks({ cabins: cabins }),
       totalSeats: totalSeats,
       ticketedCabin: spec.ticketedCabin || null,
       ticketedCabinLabel: spec.ticketedCabinLabel || null,
@@ -584,10 +601,39 @@
     }, refreshIndex);
   }
 
-  /** Flatten all cabins into a stable row-major seat array. */
-  function flattenSeats(map) {
+  function deckName(index) { return index === 1 ? "Upper deck" : "Main deck"; }
+  function seatKey(seat) { return seat.key || seat.id; }
+  function seatLabel(seat, map) {
+    return seat.id + (map.decks.length > 1 ? " · " + deckName(seat.deck) : "");
+  }
+
+  /** Deck eligibility comes from actual passenger cabins, not a name match.
+   *  The full map always retains both decks for refreshes and exports. */
+  function getDecks(map) {
+    var decks = [];
+    (map && map.cabins || []).forEach(function (cabin, cabinIndex) {
+      var index = cabin.deck || 0;
+      var deck = decks.filter(function (item) { return item.index === index; })[0];
+      if (!deck) {
+        deck = { index: index, name: deckName(index), cabins: [], seatCount: 0 };
+        decks.push(deck);
+      }
+      deck.cabins.push(cabinIndex);
+      (cabin.rows || []).forEach(function (row) { deck.seatCount += row.seats.length; });
+    });
+    return decks.sort(function (a, b) { return a.index - b.index; });
+  }
+
+  function initialDeck(map, cabinCode) {
+    var cabin = (map.cabins || []).filter(function (item) { return item.code === cabinCode; })[0];
+    return cabin ? cabin.deck || 0 : getDecks(map)[0].index;
+  }
+
+  /** Flatten all cabins (or one deck) into a stable row-major seat array. */
+  function flattenSeats(map, deck) {
     var seats = [];
     (map && map.cabins || []).forEach(function (cabin) {
+      if (deck != null && (cabin.deck || 0) !== Number(deck)) return;
       cabin.rows.forEach(function (row) {
         row.seats.forEach(function (seat) { seats.push(seat); });
       });
@@ -596,9 +642,9 @@
   }
 
   /** Count sample statuses, treating premium and exit seats as selectable. */
-  function countStatuses(map) {
+  function countStatuses(map, deck) {
     var counts = { total: 0, available: 0, selectable: 0, occupied: 0, blocked: 0, premium: 0, extra_legroom: 0, exit_row: 0 };
-    flattenSeats(map).forEach(function (seat) {
+    flattenSeats(map, deck).forEach(function (seat) {
       counts.total++;
       if (Object.prototype.hasOwnProperty.call(counts, seat.status)) counts[seat.status]++;
       if (AVAILABLE_STATUSES.indexOf(seat.status) !== -1) counts.selectable++;
@@ -609,7 +655,7 @@
   /** Filter sample seats by status, cabin, and position without mutating the map. */
   function filterSeats(map, filters) {
     var options = filters || {};
-    return flattenSeats(map).filter(function (seat) {
+    return flattenSeats(map, options.deck).filter(function (seat) {
       if (options.availableOnly && AVAILABLE_STATUSES.indexOf(seat.status) === -1) return false;
       if (options.windowOnly && seat.position !== "window") return false;
       if (options.aisleOnly && seat.position !== "aisle") return false;
@@ -620,7 +666,7 @@
   }
 
   /** Calculate consistent SVG coordinates for every seat and cabin label. */
-  function calculateLayout(map) {
+  function calculateLayout(map, deck) {
     var width = 720;
     var seatWidth = 30;
     var seatHeight = 25;
@@ -633,6 +679,7 @@
     var seats = [];
 
     (map && map.cabins || []).forEach(function (cabin) {
+      if (deck != null && (cabin.deck || 0) !== Number(deck)) return;
       var cabinStart = y;
       y += 28;
       var groups = cabin.groups || cabin.rows.reduce(function (list, row) {
@@ -702,13 +749,18 @@
          ""]
       : ["SEAT MAP DEMO — SIMULATED DATA", map.flightNumber + " " + map.origin + "-" + map.destination + " | " + map.departureDate + " | " + map.aircraftName, ""];
     var lines = header;
-    map.cabins.forEach(function (cabin) {
-      lines.push("[ " + cabin.name.toUpperCase() + " ]");
-      cabin.rows.forEach(function (row) {
-        var cells = row.seats.map(function (seat) { return seat.letter + symbols[seat.status]; });
-        lines.push(String(row.rowNumber).padStart(2, "0") + "  " + cells.join(" ") + (row.isExitRow ? "  EXIT ROW" : ""));
+    var decks = getDecks(map);
+    decks.forEach(function (deck) {
+      if (decks.length > 1) lines.push("=== " + deck.name.toUpperCase() + " ===");
+      deck.cabins.forEach(function (index) {
+        var cabin = map.cabins[index];
+        lines.push("[ " + cabin.name.toUpperCase() + " ]");
+        cabin.rows.forEach(function (row) {
+          var cells = row.seats.map(function (seat) { return seat.letter + symbols[seat.status]; });
+          lines.push(String(row.rowNumber).padStart(2, "0") + "  " + cells.join(" ") + (row.isExitRow ? "  EXIT ROW" : ""));
+        });
+        lines.push("");
       });
-      lines.push("");
     });
     lines.push("○ available  ● occupied  × unavailable  ◇ premium  ⬡ extra legroom  △ exit row");
     lines.push("Sample statuses only; no airline inventory or booking is connected.");
@@ -718,10 +770,10 @@
   /** Export all sample seats as RFC-style escaped CSV rows. */
   function exportCsv(map) {
     function quote(value) { return '"' + String(value == null ? "" : value).replace(/"/g, '""') + '"'; }
-    var rows = [["flight", "origin", "destination", "date", "aircraft", "seat", "cabin", "position", "status", "pitch_in", "width_in", "sample_data", "layout_tier"]];
+    var rows = [["flight", "origin", "destination", "date", "aircraft", "seat", "cabin", "position", "status", "pitch_in", "width_in", "sample_data", "layout_tier", "deck", "seat_key"]];
     var tier = map.layoutTier || "simulated_sample";
     flattenSeats(map).forEach(function (seat) {
-      rows.push([map.flightNumber, map.origin, map.destination, map.departureDate, map.aircraftName, seat.id, seat.cabin, seat.position, statusLabel(seat.status), seat.pitchInches, seat.widthInches, "simulated", tier]);
+      rows.push([map.flightNumber, map.origin, map.destination, map.departureDate, map.aircraftName, seat.id, seat.cabin, seat.position, statusLabel(seat.status), seat.pitchInches, seat.widthInches, "simulated", tier, deckName(seat.deck || 0), seatKey(seat)]);
     });
     return rows.map(function (row) { return row.map(quote).join(","); }).join("\r\n");
   }
@@ -741,6 +793,8 @@
       if (map.layoutSourceUrl) lines.push("Layout source: " + map.layoutSourceName + " " + map.layoutSourceUrl + " (verified " + map.layoutVerifiedOn + ")");
       lines.push("Ticketed cabin: " + (map.ticketedCabinLabel || "not stated in the itinerary"));
     }
+    var decks = getDecks(map);
+    if (decks.length > 1) lines.push(decks.map(function (deck) { return deck.name + ": " + deck.seatCount + " seats"; }).join(" · "));
     lines.push(
       "Seats in sample layout: " + counts.total,
       "Sample selectable: " + counts.selectable + " · occupied: " + counts.occupied + " · unavailable: " + counts.blocked,
@@ -780,6 +834,8 @@
     normalizeAirport: normalizeAirport,
     normalizeDate: normalizeDate,
     createDemoSeatMap: createDemoSeatMap,
+    getDecks: getDecks,
+    initialDeck: initialDeck,
     flattenSeats: flattenSeats,
     countStatuses: countStatuses,
     filterSeats: filterSeats,
@@ -817,15 +873,16 @@
     var width = geometry.width;
     var height = geometry.height;
     var markup = [];
+    var deckLabel = state.map.decks.length > 1 ? " · " + deckName(state.activeDeck) : "";
     var availableSet = {};
-    filterSeats(state.map, state.filters).forEach(function (seat) { availableSet[seat.id] = true; });
+    filterSeats(state.map, state.filters).forEach(function (seat) { availableSet[seatKey(seat)] = true; });
     var center = width / 2;
     var fuselageLeft = 118;
     var fuselageRight = width - fuselageLeft;
     var top = 18;
     var bottom = height - 10;
 
-    markup.push('<title>' + (state.map.airline ? 'Seat map for ' + escapeUi(state.map.airline + ' ' + state.map.flightNumber) + ' — ' + escapeUi(state.map.aircraftName) : 'Interactive simulated seat map for ' + escapeUi(state.map.flightNumber)) + '</title>');
+    markup.push('<title>' + (state.map.airline ? 'Seat map for ' + escapeUi(state.map.airline + ' ' + state.map.flightNumber) + ' — ' + escapeUi(state.map.aircraftName) : 'Interactive simulated seat map for ' + escapeUi(state.map.flightNumber)) + escapeUi(deckLabel) + '</title>');
     markup.push('<g id="seatmapPlane" transform="translate(' + state.panX.toFixed(1) + ' ' + state.panY.toFixed(1) + ') scale(' + state.zoom.toFixed(2) + ')">');
     if (geometry.wingStart && geometry.wingEnd) {
       var wingTop = geometry.wingStart.y + 8;
@@ -852,14 +909,15 @@
 
     geometry.seats.forEach(function (placed) {
       var seat = placed.seat;
-      var isShownByFilter = !!availableSet[seat.id];
-      var isSelected = state.selectedSeatId === seat.id;
-      var isDemoChoice = state.demoSeatId === seat.id;
-      var label = "Seat " + seat.id + ", " + seat.cabin + ", " + seat.position + ", " + statusLabel(seat.status)
+      var key = seatKey(seat);
+      var isShownByFilter = !!availableSet[key];
+      var isSelected = state.selectedSeatId === key;
+      var isDemoChoice = state.demoSeatId === key;
+      var label = "Seat " + seatLabel(seat, state.map) + ", " + seat.cabin + ", " + seat.position + ", " + statusLabel(seat.status)
         + (state.map.airline ? ", " + (seat.outsideTicketedCabin ? "outside your ticketed cabin" : "in your ticketed cabin") : "");
       var outside = !!seat.outsideTicketedCabin;
       var className = "seatmap-seat status-" + seat.status + (isSelected ? " is-selected" : "") + (isDemoChoice ? " is-demo-choice" : "") + (isShownByFilter ? "" : " is-filtered-out") + (outside ? " is-outside-cabin" : "");
-      markup.push('<g class="' + className + '" data-seat-id="' + escapeUi(seat.id) + '" tabindex="0" role="button" aria-label="' + escapeUi(label) + '">');
+      markup.push('<g class="' + className + '" data-seat-id="' + escapeUi(key) + '" data-deck-index="' + seat.deck + '" tabindex="0" role="button" aria-label="' + escapeUi(label) + '">');
       markup.push('<rect class="seatmap-seat-box" x="' + placed.x + '" y="' + placed.y + '" width="' + placed.width + '" height="' + placed.height + '" rx="1"/>');
       markup.push('<text class="seatmap-seat-letter" x="' + (placed.x + placed.width / 2) + '" y="' + (placed.y + 17) + '" text-anchor="middle">' + escapeUi(seat.letter) + '</text>');
       if (seat.isExitRow) markup.push('<path class="seatmap-seat-mark" d="M ' + (placed.x + 4) + ' ' + (placed.y + 4) + ' l 4 4 -4 4"/>');
@@ -869,7 +927,7 @@
     svg.setAttribute("viewBox", "0 0 " + width + " " + height);
     svg.setAttribute("aria-label", (state.map.airline
       ? "Seat map for " + state.map.airline + " " + state.map.flightNumber + ", " + state.map.aircraftName
-      : "Interactive simulated seat map for " + state.map.flightNumber + ", " + state.map.aircraftName));
+      : "Interactive simulated seat map for " + state.map.flightNumber + ", " + state.map.aircraftName) + deckLabel);
     svg.innerHTML = markup.join("");
   }
 
@@ -890,7 +948,7 @@
     var real = !!state.map.airline;
     if (real) {
       features.unshift(seat.outsideTicketedCabin ? "OUTSIDE YOUR TICKETED CABIN" : "IN YOUR TICKETED CABIN");
-      panel.innerHTML = '<div class="seatmap-detail-name">' + escapeUi(seat.id) + '</div>' +
+      panel.innerHTML = '<div class="seatmap-detail-name">' + escapeUi(seatLabel(seat, state.map)) + '</div>' +
         '<div class="seatmap-detail-status status-text-' + escapeUi(seat.status) + '">' + escapeUi(status.toUpperCase()) + ' · SIMULATED STATUS</div>' +
         '<dl class="seatmap-detail-list">' +
         '<div><dt>FLIGHT</dt><dd>' + escapeUi(state.map.airline + " " + state.map.flightNumber + " · " + state.map.origin + " → " + state.map.destination) + '</dd></div>' +
@@ -903,7 +961,7 @@
         '<div><dt>FARE</dt><dd>Not connected — no seat prices are shown</dd></div>' +
         '</dl>';
     } else {
-      panel.innerHTML = '<div class="seatmap-detail-name">' + escapeUi(seat.id) + '</div>' +
+      panel.innerHTML = '<div class="seatmap-detail-name">' + escapeUi(seatLabel(seat, state.map)) + '</div>' +
         '<div class="seatmap-detail-status status-text-' + escapeUi(seat.status) + '">' + escapeUi(status.toUpperCase()) + ' · SIMULATED</div>' +
         '<dl class="seatmap-detail-list">' +
         '<div><dt>CABIN</dt><dd>' + escapeUi(seat.cabin) + '</dd></div>' +
@@ -920,7 +978,7 @@
       action.textContent = "NOT THIS ITINERARY'S CABIN";
     } else if (!isSelectableStatus(seat.status)) {
       action.textContent = real ? "STATUS SIMULATED — NOT SELECTABLE" : "SAMPLE SEAT NOT AVAILABLE";
-    } else if (state.demoSeatId === seat.id) {
+    } else if (state.demoSeatId === seatKey(seat)) {
       action.textContent = "REMOVE SAMPLE SELECTION";
     } else {
       action.textContent = real ? "MARK SAMPLE SEAT (RESERVES NOTHING)" : "ADD TO DEMO SELECTION";
@@ -929,28 +987,36 @@
 
   /** Render the simulated availability totals and source labels. */
   function renderStats(doc, state) {
-    var counts = countStatuses(state.map);
+    var counts = countStatuses(state.map, state.activeDeck);
+    var multiDeck = state.map && state.map.decks.length > 1;
     var count = doc.getElementById("seatmapAvailableCount");
     var total = doc.getElementById("seatmapTotalCount");
     var selection = doc.getElementById("seatmapSelectionStatus");
     var update = doc.getElementById("seatmapLastUpdated");
     if (count) count.textContent = String(counts.selectable);
     if (total) total.textContent = String(counts.total);
-    if (selection) selection.textContent = state.demoSeatId
-      ? "DEMO SELECTION: " + state.demoSeatId + " — NO RESERVATION MADE"
+    var chosen = state.seatsById[state.demoSeatId];
+    if (selection) selection.textContent = chosen
+      ? "DEMO SELECTION: " + seatLabel(chosen, state.map) + " — NO RESERVATION MADE"
       : "NO SEAT SELECTED";
-    if (update) update.textContent = (state.map.airline ? "FLIGHT DATA REAL · SEAT STATUS SIMULATED " : "SIMULATED UPDATE ")
-      + new Date(state.map.generatedAt).toLocaleTimeString();
+    var scope = doc.getElementById("seatmapCountScope");
+    if (scope) scope.textContent = multiDeck
+      ? " seats on the " + deckName(state.activeDeck).toLowerCase() + " (" + state.map.totalSeats + " across both decks). Counts are not inventory."
+      : " seats in this illustrative layout. Counts are not inventory.";
+    if (update) update.textContent = state.map
+      ? (state.map.airline ? "FLIGHT DATA REAL · SEAT STATUS SIMULATED " : "SIMULATED UPDATE ") + new Date(state.map.generatedAt).toLocaleTimeString()
+      : "NO MAP LOADED";
     var statusCounts = doc.getElementById("seatmapStatusCounts");
     if (statusCounts) {
-      statusCounts.textContent = "SELECTABLE " + counts.selectable + " · OCCUPIED " + counts.occupied + " · UNAVAILABLE " + counts.blocked;
+      statusCounts.textContent = (multiDeck ? deckName(state.activeDeck).toUpperCase() + " · " : "") + "SELECTABLE " + counts.selectable + " · OCCUPIED " + counts.occupied + " · UNAVAILABLE " + counts.blocked;
     }
   }
 
   /** Update the countdown until the next local-only sample refresh. */
   function updateCountdown(doc, state) {
     var element = doc.getElementById("seatmapRefreshCountdown");
-    if (!element || !state.nextRefreshAt) return;
+    if (!element) return;
+    if (!state.map || !state.nextRefreshAt) { element.textContent = "NEXT SIMULATED UPDATE —"; return; }
     var seconds = Math.max(0, Math.ceil((state.nextRefreshAt - Date.now()) / 1000));
     var mm = String(Math.floor(seconds / 60)).padStart(2, "0");
     var ss = String(seconds % 60).padStart(2, "0");
@@ -1053,12 +1119,65 @@
     holder.innerHTML = markup;
   }
 
+  /** The deck controls are offered only when this layout contains both decks.
+   *  Static buttons keep keyboard focus while the drawing changes. */
+  function renderDeckSwitcher(doc, state) {
+    var holder = doc.getElementById("seatmapDecks");
+    if (!holder) return;
+    var decks = getDecks(state.map);
+    holder.classList.toggle("hidden", decks.length < 2);
+    ["Main", "Upper"].forEach(function (name, index) {
+      var deck = decks.filter(function (item) { return item.index === index; })[0];
+      var button = doc.getElementById("seatmapDeck" + name);
+      var count = doc.getElementById("seatmapDeck" + name + "Count");
+      if (button) {
+        button.disabled = !deck;
+        button.setAttribute("aria-pressed", String(!!deck && state.activeDeck === index));
+      }
+      if (count) count.textContent = deck ? deck.seatCount + " seats" : "";
+    });
+    var status = doc.getElementById("seatmapDeckStatus");
+    if (status) status.textContent = decks.length > 1
+      ? "Viewing " + deckName(state.activeDeck).toLowerCase() + " · 2 passenger decks" : "";
+  }
+
+  function renderCabinFilter(doc, state) {
+    var control = doc.getElementById("seatmapFilterCabin");
+    var codes = [];
+    state.map.cabins.forEach(function (cabin) {
+      if (cabin.deck === state.activeDeck && codes.indexOf(cabin.code) < 0) codes.push(cabin.code);
+    });
+    if (codes.indexOf(state.filters.cabin) < 0) state.filters.cabin = "all";
+    if (!control) return;
+    control.setAttribute("aria-label", "Cabin filter" + (state.map.decks.length > 1 ? " · " + deckName(state.activeDeck) : ""));
+    control.innerHTML = '<option value="all">All cabins</option>'
+      + codes.map(function (code) { return '<option value="' + escapeUi(code) + '">' + escapeUi(cabinLabel(code) || code) + '</option>'; }).join("");
+    control.value = state.filters.cabin;
+  }
+
+  function prepareMap(state, map, preserveView, preferredCabin) {
+    state.map = map;
+    if (!preserveView) {
+      state.activeDeck = initialDeck(map, preferredCabin || map.ticketedCabin || map.cabinShown);
+      state.refreshTick = 0;
+      state.selectedSeatId = null;
+      state.demoSeatId = null;
+      state.zoom = 1;
+      state.panX = 0;
+      state.panY = 0;
+    }
+    state.nextRefreshAt = Date.now() + 30000;
+  }
+
   /** Render seat SVG, details, and status counters in a single update. */
   function renderViewer(doc, state) {
-    if (!state.map) return;
+    if (!state.map) { renderDeckSwitcher(doc, state); return; }
+    if (!state.map.decks.some(function (deck) { return deck.index === state.activeDeck; })) state.activeDeck = initialDeck(state.map);
+    renderDeckSwitcher(doc, state);
     state.seatsById = {};
-    flattenSeats(state.map).forEach(function (seat) { state.seatsById[seat.id] = seat; });
-    state.geometry = calculateLayout(state.map);
+    flattenSeats(state.map).forEach(function (seat) { state.seatsById[seatKey(seat)] = seat; });
+    state.geometry = calculateLayout(state.map, state.activeDeck);
+    renderCabinFilter(doc, state);
     var flightName = doc.getElementById("seatmapFlightName");
     var flightMeta = doc.getElementById("seatmapFlightMeta");
     if (state.map.airline) {
@@ -1066,11 +1185,11 @@
         + " · " + state.map.origin + " → " + state.map.destination;
       if (flightMeta) flightMeta.textContent = (state.map.departureDate || "date not stated")
         + " · " + state.map.aircraftName + " (" + state.map.aircraftCode + ")"
-        + " · " + state.map.totalSeats + " seats · " + (state.map.layoutConfig || "");
+        + " · " + state.map.totalSeats + " seats" + (state.map.decks.length > 1 ? " across 2 decks" : "") + " · " + (state.map.layoutConfig || "");
     } else {
       if (flightName) flightName.textContent = state.map.flightNumber + " · " + state.map.origin + " → " + state.map.destination;
       if (flightMeta) flightMeta.textContent = state.map.departureDate + " · " + state.map.aircraftName + " (" + state.map.aircraftCode + ") · "
-        + state.map.totalSeats + " seats" + (state.map.layoutConfig ? " · " + state.map.layoutConfig : " in static sample layout");
+        + state.map.totalSeats + " seats" + (state.map.decks.length > 1 ? " across 2 decks" : "") + (state.map.layoutConfig ? " · " + state.map.layoutConfig : " in static sample layout");
     }
     var svg = doc.getElementById("seatmapSvg");
     if (svg) renderSvg(state, svg);
@@ -1129,7 +1248,7 @@
   /** Draw a flight the user looked up. No ticket, so no cabin is dimmed: the
    *  whole aircraft is shown, and the cabin the user asked for — if the type
    *  flies one — is the configuration drawn. */
-  function loadSearchedFlight(doc, state, flight) {
+  function loadSearchedFlight(doc, state, flight, preserveView) {
     var map;
     try {
       map = createFlightSeatMap({
@@ -1140,7 +1259,7 @@
         /* A lookup does not need a date to draw a cabin — the layout is the
            type's, and no schedule is involved — so an empty date box falls
            back to today instead of refusing to draw. */
-        departureDate: flight.date || new Date().toISOString().slice(0, 10),
+        departureDate: flight.date || localDateValue(new Date()),
         equipment: flight.equipment,
         cabinPreference: flight.cabin || null,
         airlineName: airlineLabel(flight.airline),
@@ -1151,7 +1270,7 @@
         search: true,
         legIndex: 0,
         legCount: 1
-      }, 0);
+      }, preserveView ? state.refreshTick : 0);
     } catch (error) {
       setNotice(doc, error.message + " No cabin is invented to fill the gap.", true);
       return null;
@@ -1159,16 +1278,9 @@
     /* The converted itinerary is kept, not discarded: "back to the flight I
        converted" has to still work after a lookup. What changes is what the
        viewer is showing, and the leg switcher stands down while it does. */
-    state.searched = flight;
+    state.searched = Object.assign({}, flight, { date: map.departureDate });
     state.currentInput = { manual: false, search: true };
-    state.refreshTick = 0;
-    state.selectedSeatId = null;
-    state.demoSeatId = null;
-    state.zoom = 1;
-    state.panX = 0;
-    state.panY = 0;
-    state.map = map;
-    state.nextRefreshAt = Date.now() + 30000;
+    prepareMap(state, map, preserveView);
     var demoPanel = doc.getElementById("seatmapDemo");
     if (demoPanel) demoPanel.classList.remove("hidden");
     var useConvertedAfterSearch = doc.getElementById("seatmapUseConverted");
@@ -1257,6 +1369,8 @@
     var date = dateInput ? dateInput.value : "";
     var cabinSelect = doc.getElementById("seatmapSearchCabin");
     var cabin = cabinSelect ? cabinSelect.value : "";
+    try { if (date) date = normalizeDate(date); }
+    catch (error) { setNotice(doc, error.message, true); return null; }
     if (!api) {
       setNotice(doc, "The local flight table is unavailable.", true);
       return null;
@@ -1322,7 +1436,7 @@
   }
 
   /** Load one leg of the stored itinerary into the viewer. */
-  function loadLeg(doc, state, index) {
+  function loadLeg(doc, state, index, preserveView) {
     if (!state.legs || !state.legs.length) return null;
     var leg = state.legs[index];
     if (!leg) return null;
@@ -1349,9 +1463,21 @@
     };
     var map;
     try {
-      map = createFlightSeatMap(flight, 0);
+      map = createFlightSeatMap(flight, preserveView ? state.refreshTick : 0);
     } catch (error) {
       state.map = null;
+      state.legIndex = index;
+      state.activeDeck = null;
+      state.currentInput = null;
+      state.selectedSeatId = null;
+      state.demoSeatId = null;
+      state.seatsById = {};
+      state.geometry = null;
+      state.nextRefreshAt = 0;
+      updateCountdown(doc, state);
+      renderDeckSwitcher(doc, state);
+      renderDetails(doc, state);
+      renderStats(doc, state);
       var demo = doc.getElementById("seatmapDemo");
       if (demo) demo.classList.remove("hidden");
       var badge = doc.getElementById("seatmapFlightName");
@@ -1382,13 +1508,7 @@
     state.legIndex = index;
     state.searched = null;
     state.currentInput = { manual: false };
-    state.refreshTick = 0;
-    state.selectedSeatId = null;
-    state.demoSeatId = null;
-    state.zoom = 1;
-    state.panX = 0;
-    state.panY = 0;
-    state.map = map;
+    prepareMap(state, map, preserveView);
     var demoPanel = doc.getElementById("seatmapDemo");
     if (demoPanel) demoPanel.classList.remove("hidden");
     var search = doc.getElementById("seatmapSearchButton");
@@ -1405,36 +1525,26 @@
    *  seat. A real flight is never re-generated from the manual form: its legs
    *  are re-loaded instead, so the flight identity can never drift. */
   function refreshSample(doc, state) {
-    if (!state.currentInput) return;
+    if (!state.currentInput || !state.map) return;
     state.refreshTick++;
     if (state.searched) {
-      var refreshedSearch = loadSearchedFlight(doc, state, state.searched);
-      state.map = refreshedSearch || state.map;
-      state.nextRefreshAt = Date.now() + 30000;
-      renderViewer(doc, state);
-      var liveSearch = doc.getElementById("seatmapRefreshStatus");
-      if (liveSearch && state.map) {
-        liveSearch.textContent = "SEAT STATUSES RESAMPLED " + new Date(state.map.generatedAt).toLocaleTimeString() + " — STILL SIMULATED, NO AIRLINE DATA REQUESTED";
-      }
-      return;
-    }
-    if (state.currentInput.manual === false && state.legs) {
-      var refreshed = loadLeg(doc, state, state.legIndex == null ? 0 : state.legIndex);
-      state.map = refreshed || state.map;
+      loadSearchedFlight(doc, state, state.searched, true);
+    } else if (state.currentInput.manual === false && state.legs) {
+      loadLeg(doc, state, state.legIndex == null ? 0 : state.legIndex, true);
     } else {
       state.map = createDemoSeatMap(state.currentInput, state.refreshTick);
     }
+    if (!state.map) return;
     if (state.demoSeatId) {
-      var updatedChoice = flattenSeats(state.map).filter(function (seat) { return seat.id === state.demoSeatId; })[0];
+      var updatedChoice = flattenSeats(state.map).filter(function (seat) { return seatKey(seat) === state.demoSeatId; })[0];
       if (!updatedChoice || !isSelectableStatus(updatedChoice.status)) state.demoSeatId = null;
     }
     state.nextRefreshAt = Date.now() + 30000;
     renderViewer(doc, state);
     var live = doc.getElementById("seatmapRefreshStatus");
-    if (live && state.map) {
-      live.textContent = (state.map.airline
-        ? "SEAT STATUSES RESAMPLED " + new Date(state.map.generatedAt).toLocaleTimeString() + " — STILL SIMULATED, NO AIRLINE DATA REQUESTED"
-        : "SIMULATED SAMPLE REFRESH " + new Date(state.map.generatedAt).toLocaleTimeString() + " — NO AIRLINE DATA REQUESTED");
+    if (live) {
+      live.textContent = "SEAT STATUSES RESAMPLED " + new Date(state.map.generatedAt).toLocaleTimeString()
+        + " — STILL SIMULATED, NO AIRLINE DATA REQUESTED";
     }
   }
 
@@ -1512,6 +1622,7 @@
       demoSeatId: null,
       seatsById: {},
       geometry: null,
+      activeDeck: null,
       filters: { availableOnly: false, windowOnly: false, aisleOnly: false, exitOnly: false, cabin: "all" },
       zoom: 1,
       panX: 0,
@@ -1573,10 +1684,13 @@
     ["seatmapDate", "seatmapFindDate"].forEach(function (id) {
       var field = doc.getElementById(id);
       if (field && !field.value) {
-        var tomorrow = new Date(Date.now() + 86400000);
-        field.value = tomorrow.toISOString().slice(0, 10);
+        var tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        field.value = localDateValue(tomorrow);
       }
     });
+
+    if (CALENDAR_API) CALENDAR_API.initialize(doc);
 
     /* ---------- the flight lookup ---------- */
     populateAircraftSelect(doc, "");
@@ -1597,7 +1711,7 @@
     if (resultsHolder) resultsHolder.addEventListener("click", function (event) {
       var button = event.target && event.target.closest ? event.target.closest(".seatmap-result") : null;
       if (!button) return;
-      var dateField = doc.getElementById("seatmapDate");
+      var dateField = doc.getElementById("seatmapFindDate");
       var cabinField = doc.getElementById("seatmapSearchCabin");
       var airline = button.getAttribute("data-airline") || "";
       var number = button.getAttribute("data-number") || "";
@@ -1630,21 +1744,6 @@
     /* Back from a lookup to the itinerary the user actually converted. */
     var useConverted = doc.getElementById("seatmapUseConverted");
     if (useConverted) useConverted.addEventListener("click", function () { loadConvertedRoute(doc, state); });
-
-    var quickButtons = doc.querySelectorAll("[data-seatmap-example]");
-    Array.prototype.forEach.call(quickButtons, function (button) {
-      button.addEventListener("click", function () {
-        var flight = doc.getElementById("seatmapFlightNumber");
-        var origin = doc.getElementById("seatmapOrigin");
-        var destination = doc.getElementById("seatmapDestination");
-        var aircraft = doc.getElementById("seatmapAircraft");
-        if (flight) flight.value = button.getAttribute("data-flight");
-        if (origin) origin.value = button.getAttribute("data-origin");
-        if (destination) destination.value = button.getAttribute("data-destination");
-        if (aircraft) aircraft.value = button.getAttribute("data-aircraft");
-        setNotice(doc, "SAMPLE FLIGHT DETAILS FILLED — STILL SIMULATED DATA", false);
-      });
-    });
 
     /* The converted itinerary: the OUTPUT pane is stored by app.js under
        `spicy_seatmap_route`; re-reading it with the real engine here means the
@@ -1682,6 +1781,7 @@
     if (form) form.addEventListener("submit", function (event) {
       event.preventDefault();
       var input;
+      var map;
       try {
         input = {
           flightNumber: doc.getElementById("seatmapFlightNumber").value,
@@ -1696,6 +1796,7 @@
         input.destination = normalizeAirport(input.destination, "Destination");
         input.date = normalizeDate(input.date);
         if (!input.aircraftCode) throw new TypeError("Choose an aircraft type to draw.");
+        map = createDemoSeatMap(input, 0);
       } catch (error) {
         setNotice(doc, error.message, true);
         return;
@@ -1706,13 +1807,7 @@
       state.searched = null;
       input.manual = true;
       state.currentInput = input;
-      state.refreshTick = 0;
-      state.demoSeatId = null;
-      state.selectedSeatId = null;
-      state.zoom = 1;
-      state.panX = 0;
-      state.panY = 0;
-      state.map = createDemoSeatMap(input, state.refreshTick);
+      prepareMap(state, map, false, input.cabinCode);
       if (demo) demo.classList.remove("hidden");
       if (searchButton) searchButton.textContent = "UPDATE SAMPLE MAP";
       var strip = doc.getElementById("seatmapFlightStrip");
@@ -1754,6 +1849,24 @@
     if (zoomOut) zoomOut.addEventListener("click", function () { setZoom(state.zoom - 0.15); });
     if (zoomReset) zoomReset.addEventListener("click", function () { state.panX = 0; state.panY = 0; setZoom(1); });
 
+    ["Main", "Upper"].forEach(function (name, index) {
+      var button = doc.getElementById("seatmapDeck" + name);
+      if (button) button.addEventListener("click", function () {
+        if (!state.map || state.activeDeck === index || !state.map.decks.some(function (deck) { return deck.index === index; })) return;
+        state.activeDeck = index;
+        state.selectedSeatId = null;
+        state.zoom = 1;
+        state.panX = 0;
+        state.panY = 0;
+        state.drag = null;
+        state.pointers.clear();
+        if (canvas) { canvas.scrollTop = 0; canvas.scrollLeft = 0; }
+        var tooltip = doc.getElementById("seatmapTooltip");
+        if (tooltip) tooltip.classList.add("hidden");
+        filteredRender();
+      });
+    });
+
     ["availableOnly", "windowOnly", "aisleOnly", "exitOnly"].forEach(function (filterName) {
       var control = doc.getElementById("seatmapFilter" + filterName.charAt(0).toUpperCase() + filterName.slice(1));
       if (control) control.addEventListener("change", function () {
@@ -1771,7 +1884,7 @@
       function findSeat(target) { return target && target.closest ? target.closest("[data-seat-id]") : null; }
       function chooseSeat(seatId) {
         var seat = state.seatsById[seatId];
-        if (!seat) return;
+        if (!seat || seat.deck !== state.activeDeck) return;
         if (state.map && state.map.airline && seat.outsideTicketedCabin && state.map.ticketedCabinLabel) {
           state.selectedSeatId = null;
           filteredRender();
@@ -1826,7 +1939,7 @@
         var tooltip = doc.getElementById("seatmapTooltip");
         if (seatElement && tooltip && state.seatsById[seatElement.getAttribute("data-seat-id")]) {
           var seat = state.seatsById[seatElement.getAttribute("data-seat-id")];
-          tooltip.textContent = seat.id + " · " + statusLabel(seat.status).toUpperCase() + " · " + seat.cabin.toUpperCase();
+          tooltip.textContent = seatLabel(seat, state.map) + " · " + statusLabel(seat.status).toUpperCase() + " · " + seat.cabin.toUpperCase();
           tooltip.classList.remove("hidden");
           var box = canvas.getBoundingClientRect();
           tooltip.style.left = Math.max(8, event.clientX - box.left + 12) + "px";
@@ -1857,14 +1970,10 @@
     var action = doc.getElementById("seatmapDemoSelect");
     if (action) action.addEventListener("click", function () {
       var seat = state.seatsById[state.selectedSeatId];
-      if (!seat || !isSelectableStatus(seat.status)) return;
-      state.demoSeatId = state.demoSeatId === seat.id ? null : seat.id;
+      if (!seat || seat.deck !== state.activeDeck || seat.outsideTicketedCabin || !isSelectableStatus(seat.status)) return;
+      state.demoSeatId = state.demoSeatId === seatKey(seat) ? null : seatKey(seat);
       renderViewer(doc, state);
       updateTransform();
-      var message = doc.getElementById("seatmapSelectionStatus");
-      if (message) message.textContent = state.demoSeatId
-        ? "DEMO SELECTION: " + state.demoSeatId + " — NO RESERVATION MADE"
-        : "NO SEAT SELECTED";
     });
 
     var refreshButton = doc.getElementById("seatmapRefreshNow");

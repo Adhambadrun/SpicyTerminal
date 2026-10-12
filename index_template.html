@@ -346,13 +346,8 @@ __SEATMAP_CSS__</style>
     <div class="seatmap-title-row">
       <div>
         <h1 class="seatmap-title" id="seatmapPageTitle">SEAT MAP</h1>
-        <p class="seatmap-subtitle">Your converted itinerary loads straight in here — airline, flight number, route, date, cabin and aircraft type, re-read from the OUTPUT you just converted with the same engine, so the two cannot disagree. The cabin is drawn from a layout that says, on the map, how well it is verified.</p>
-        <p class="seatmap-subtitle" style="margin-top:5px">No conversion to read, or after something else? Look a flight up by number below — or pick an aircraft type and I will draw that type.</p>
+        <p class="seatmap-subtitle">Your converted itinerary loads straight in here.</p>
       </div>
-    </div>
-    <div class="seatmap-dev-banner" role="status">
-      <span class="seatmap-dev-mark">WHAT IS REAL HERE</span>
-      <span><strong>Flight data is real.</strong> The flight identity and aircraft type come from your converted itinerary, and the cabin layout is labelled by tier: an airline-verified configuration when one has been checked, otherwise a reference layout for that aircraft type. When the seat itself matters, the airline link on the map takes you to the airline.</span>
     </div>
 
     <section class="seatmap-card" aria-labelledby="seatmapFindTitle">
@@ -364,7 +359,13 @@ __SEATMAP_CSS__</style>
         </div>
         <div class="seatmap-field">
           <label for="seatmapFindDate">Date</label>
-          <input id="seatmapFindDate" name="findDate" type="date" autocomplete="off">
+          <div class="seatmap-date-control" id="seatmapFindDateControl">
+            <input id="seatmapFindDate" name="findDate" type="date" autocomplete="off">
+            <button class="seatmap-calendar-toggle hidden" id="seatmapFindDateToggle" type="button" aria-label="Open calendar for flight date" aria-haspopup="dialog" aria-expanded="false" aria-controls="seatmapCalendar" title="Choose a date">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2"/></svg>
+              <span aria-hidden="true">▾</span>
+            </button>
+          </div>
         </div>
         <div class="seatmap-field">
           <label for="seatmapSearchCabin">Cabin</label>
@@ -402,7 +403,13 @@ __SEATMAP_CSS__</style>
         </div>
         <div class="seatmap-field">
           <label for="seatmapDate">Departure date</label>
-          <input id="seatmapDate" name="date" type="date" autocomplete="off">
+          <div class="seatmap-date-control" id="seatmapDateControl">
+            <input id="seatmapDate" name="date" type="date" autocomplete="off">
+            <button class="seatmap-calendar-toggle hidden" id="seatmapDateToggle" type="button" aria-label="Open calendar for departure date" aria-haspopup="dialog" aria-expanded="false" aria-controls="seatmapCalendar" title="Choose a date">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2"/></svg>
+              <span aria-hidden="true">▾</span>
+            </button>
+          </div>
         </div>
         <div class="seatmap-field">
           <label for="seatmapAircraft">Aircraft type</label>
@@ -422,12 +429,6 @@ __SEATMAP_CSS__</style>
         </div>
         <button class="seatmap-btn seatmap-btn-primary" id="seatmapSearchButton" type="submit">DRAW IT</button>
       </form>
-      <div class="seatmap-examples" aria-label="Example sample flights">
-        <span class="seatmap-examples-label">QUICK EXAMPLES</span>
-        <button class="seatmap-example" type="button" data-seatmap-example data-flight="AS100" data-origin="SEA" data-destination="LAX" data-aircraft="738">AS100 · 738</button>
-        <button class="seatmap-example" type="button" data-seatmap-example data-flight="BA117" data-origin="LHR" data-destination="JFK" data-aircraft="77W">BA117 · 77W</button>
-        <button class="seatmap-example" type="button" data-seatmap-example data-flight="MS777" data-origin="CAI" data-destination="LHR" data-aircraft="77W">MS777 · 77W</button>
-      </div>
       <div class="seatmap-form-status" id="seatmapFormStatus" role="status" aria-live="polite"></div>
     </section>
 
@@ -511,6 +512,14 @@ __SEATMAP_CSS__</style>
         </aside>
 
         <div>
+          <div class="seatmap-decks hidden" id="seatmapDecks" role="group" aria-label="Aircraft deck">
+            <span class="seatmap-overline">VIEW DECK</span>
+            <div class="seatmap-deck-controls">
+              <button class="seatmap-deck-button" id="seatmapDeckMain" type="button" aria-pressed="true" aria-controls="seatmapSvg"><span>Main deck</span><span class="seatmap-deck-count" id="seatmapDeckMainCount"></span></button>
+              <button class="seatmap-deck-button" id="seatmapDeckUpper" type="button" aria-pressed="false" aria-controls="seatmapSvg"><span>Upper deck</span><span class="seatmap-deck-count" id="seatmapDeckUpperCount"></span></button>
+            </div>
+            <span class="seatmap-deck-status" id="seatmapDeckStatus" role="status" aria-live="polite"></span>
+          </div>
           <div class="seatmap-canvas-wrap">
             <div class="seatmap-canvas" id="seatmapCanvas" aria-label="Scrollable interactive sample seat map">
               <svg class="seatmap-svg" id="seatmapSvg" role="group" aria-label="Interactive simulated seat map"></svg>
@@ -537,7 +546,7 @@ __SEATMAP_CSS__</style>
             <div class="seatmap-panel-body">
               <div class="seatmap-count" id="seatmapAvailableCount">—</div>
               <p class="seatmap-count-caption">SELECTABLE SAMPLE SEATS</p>
-              <p class="seatmap-count-caption"><span id="seatmapTotalCount">—</span> seats in this illustrative layout. Counts are not inventory.</p>
+              <p class="seatmap-count-caption"><span id="seatmapTotalCount">—</span><span id="seatmapCountScope"> seats in this illustrative layout. Counts are not inventory.</span></p>
             </div>
           </section>
           <section class="seatmap-panel">
@@ -549,6 +558,7 @@ __SEATMAP_CSS__</style>
                 <button class="seatmap-btn" id="seatmapDownloadJson" type="button">JSON</button>
                 <button class="seatmap-btn" id="seatmapShowSummary" type="button" aria-haspopup="dialog" aria-controls="seatmapSummaryDialog">SUMMARY</button>
               </div>
+              <p class="seatmap-count-caption">Exports include all seats on every deck.</p>
             </div>
           </section>
         </aside>
@@ -556,6 +566,8 @@ __SEATMAP_CSS__</style>
       <p class="seatmap-disclaimer" id="seatmapRefreshStatus" role="status" aria-live="polite"><strong>SIMULATED REFRESH:</strong> the 30-second refresh changes sample statuses locally. It does not check a flight, contact an airline, reserve a seat, or confirm availability.</p>
     </section>
   </div>
+
+  <div class="seatmap-calendar hidden" id="seatmapCalendar" role="dialog" aria-modal="false" aria-labelledby="seatmapCalendarLabel"></div>
 
   <div class="seatmap-notice" id="seatmapNotice" role="dialog" aria-modal="true" aria-labelledby="seatmapNoticeTitle" aria-describedby="seatmapNoticeBody">
     <div class="seatmap-notice-card">
@@ -611,6 +623,7 @@ __SEATMAP_CSS__</style>
 <script>__APP_JS__</script>
 <script>__SEATMAP_FLIGHTS__</script>
 <script>__SEATMAP_LAYOUTS__</script>
+<script>__SEATMAP_CALENDAR__</script>
 <script>__SEATMAP_JS__</script>
 <script>window.SPICY_PRICE_ENDPOINT="__SPICY_PRICE_ENDPOINT__";</script>
 <script>__SEATMAP_PRICE__</script>

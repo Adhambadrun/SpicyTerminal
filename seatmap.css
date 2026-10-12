@@ -12,8 +12,6 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;}
 .seatmap-title{font-size:clamp(19px,3vw,28px);font-weight:500;letter-spacing:.8px;color:#e0e9e3;}
 .seatmap-subtitle{margin-top:7px;color:#7d919a;font-size:11px;line-height:1.65;max-width:78ch;}
-.seatmap-dev-banner{display:flex;align-items:flex-start;gap:10px;margin:0 0 18px;padding:11px 13px;border:1px solid #66572d;background:#15130d;color:#ddc77f;font-size:10px;line-height:1.65;letter-spacing:.15px;}
-.seatmap-dev-mark{flex:none;border:1px solid #806b34;padding:3px 6px;color:#efd77e;font-size:9px;letter-spacing:1px;white-space:nowrap;}
 .seatmap-card{border:1px solid #1e2b34;background:#080d11;padding:14px;}
 .seatmap-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:end;}
 /* Six fields and one action: the action owns its own row so it stays a
@@ -29,10 +27,6 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-page .seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
 .seatmap-btn:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline:2px solid #c9d8ce;outline-offset:2px;}
 .seatmap-btn-primary{border-color:#8fa6b2;color:#e0e9e3;}
-.seatmap-examples{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:12px;}
-.seatmap-examples-label{margin-right:2px;color:#647983;font-size:9px;letter-spacing:.8px;}
-.seatmap-example{min-height:26px!important;padding:4px 8px;border:1px solid #25343d;background:transparent;color:#9aadb6;font-size:9px;letter-spacing:.45px;cursor:pointer;}
-.seatmap-example:hover{border-color:#647983;color:#e0e9e3;filter:none;}
 .seatmap-form-status{min-height:16px;margin-top:9px;color:#91a59d;font-size:9px;letter-spacing:.3px;}
 .seatmap-form-status.is-error{color:#e59c91;}
 .seatmap-demo{margin-top:16px;}
@@ -129,7 +123,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-summary-actions{display:flex;justify-content:flex-end;margin-top:14px;}
 @media(max-width:1120px){.seatmap-form{grid-template-columns:repeat(3,minmax(0,1fr));}.seatmap-form .seatmap-btn{align-self:end;}.seatmap-demo-layout{grid-template-columns:180px minmax(0,1fr);}.seatmap-side-panel-right{grid-column:2;grid-row:2;grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-side-panel-left{grid-row:1 / span 2;}}
 @media(max-width:760px){.seatmap-main{padding:15px 12px 24px;}.seatmap-title-row{align-items:flex-start;flex-direction:column;}.seatmap-demo-layout{grid-template-columns:1fr;}.seatmap-side-panel-left,.seatmap-side-panel-right{grid-column:auto;grid-row:auto;grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-canvas{height:64vh;min-height:440px;}.seatmap-toolbar{align-items:flex-start;}.seatmap-flight-heading{align-items:flex-start;}.seatmap-source-pill{max-width:132px;white-space:normal;line-height:1.45;}}
-@media(max-width:520px){.seatmap-topbar{padding:8px 11px;}.seatmap-wordmark{font-size:9px;letter-spacing:.8px;}.seatmap-top-tag{font-size:8px;padding:4px 5px;}.seatmap-form{grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-form .seatmap-btn{grid-column:1 / -1;}.seatmap-side-panel-left,.seatmap-side-panel-right{grid-template-columns:1fr;}.seatmap-toolbar{display:grid;grid-template-columns:1fr;}.seatmap-toolbar-group{justify-content:flex-start;}.seatmap-canvas{height:60vh;min-height:390px;}.seatmap-notice-card{padding:18px 15px;}.seatmap-notice-card h2{font-size:15px;}.seatmap-examples-label{flex-basis:100%;}}
+@media(max-width:520px){.seatmap-topbar{padding:8px 11px;}.seatmap-wordmark{font-size:9px;letter-spacing:.8px;}.seatmap-top-tag{font-size:8px;padding:4px 5px;}.seatmap-form{grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-form .seatmap-btn{grid-column:1 / -1;}.seatmap-side-panel-left,.seatmap-side-panel-right{grid-template-columns:1fr;}.seatmap-toolbar{display:grid;grid-template-columns:1fr;}.seatmap-toolbar-group{justify-content:flex-start;}.seatmap-canvas{height:60vh;min-height:390px;}.seatmap-notice-card{padding:18px 15px;}.seatmap-notice-card h2{font-size:15px;}}
 @media(prefers-reduced-motion:reduce){.seatmap-page *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 
 /* ---------- SpicyTerminal chrome ----------
@@ -172,15 +166,11 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-page .seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
 .seatmap-page .seatmap-btn-primary{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 4px 16px rgba(226,87,75,.12);}
 .seatmap-page .seatmap-btn-primary:hover:not(:disabled){background:var(--red);border-color:#ff847b;color:#fff;filter:brightness(1.12);}
-.seatmap-page .seatmap-example{border:1px solid #22313c;border-radius:4px;background:transparent;color:#7f95a0;}
-.seatmap-page .seatmap-example:hover{border-color:#53d977;color:#dff3e4;background:#15231c;filter:none;}
 .seatmap-page button:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline:2px solid var(--green);outline-offset:2px;}
 .seatmap-field input,.seatmap-field select,.seatmap-filter-select{border:1px solid #22313c;border-radius:4px;background:#05080b;color:#dbe7de;}
 .seatmap-field input:focus,.seatmap-field select:focus,.seatmap-filter-select:focus{border-color:#53d977;outline:1px solid #53d977;outline-offset:1px;}
 .seatmap-field label,.seatmap-overline{color:#7f95a0;}
 .seatmap-tooltip{border:1px solid #52626a;border-radius:4px;background:#05080b;color:#e1ebe4;}
-.seatmap-dev-banner{border:1px solid #66572d;border-radius:6px;background:#15130d;color:#ddc77f;}
-.seatmap-dev-mark{border:1px solid #806b34;color:#efd77e;}
 .seatmap-source-pill{border:1px solid #66572d;color:#ddc77f;}
 .seatmap-notice{background:rgba(4,8,12,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
 .seatmap-notice-card{border:1px solid #1e2b34;border-radius:14px;background:#0c1218;box-shadow:0 30px 90px rgba(0,0,0,.72);}
@@ -263,3 +253,44 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-price-line{margin:0 0 4px;padding:0;}
 .seatmap-price-line:last-child{margin-bottom:0}
 .seatmap-price-note{color:#647983;font-size:9px;line-height:1.6;letter-spacing:.2px;margin:0;}
+
+/* ---------- date dropdowns ---------- */
+.seatmap-card + .seatmap-card{margin-top:12px;}
+.seatmap-date-control{display:flex;align-items:stretch;min-width:0;}
+.seatmap-date-control input{color-scheme:dark;}
+.seatmap-date-control.has-calendar input{flex:1;border-radius:4px 0 0 4px;border-right:0;}
+.seatmap-date-control.has-calendar input::-webkit-calendar-picker-indicator{display:none;}
+.seatmap-page .seatmap-calendar-toggle{display:inline-flex;align-items:center;justify-content:center;gap:3px;flex:0 0 42px;padding:0;border:1px solid #22313c;border-radius:0 4px 4px 0;background:#18222b;color:#9fb4bf;cursor:pointer;}
+.seatmap-page .seatmap-calendar-toggle:hover,.seatmap-page .seatmap-calendar-toggle[aria-expanded="true"]{border-color:#53d977;background:#15231c;color:#dff3e4;filter:none;}
+.seatmap-calendar{position:fixed;z-index:65;width:304px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:auto;padding:12px;border:1px solid #334a3d;border-radius:8px;background:#0c1218;color:#dbe7de;box-shadow:0 16px 48px rgba(0,0,0,.6);color-scheme:dark;}
+.seatmap-calendar.hidden,.seatmap-calendar-toggle.hidden{display:none!important;}
+.seatmap-calendar-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;color:#8fa6b2;font-size:9px;letter-spacing:.8px;}
+.seatmap-calendar button{display:inline-flex;align-items:center;justify-content:center;min-width:28px;min-height:30px;padding:4px;border:1px solid transparent;border-radius:4px;background:transparent;color:#dbe7de;font-size:12px;cursor:pointer;}
+.seatmap-calendar button:hover:not(:disabled){border-color:#53d977;background:#15231c;color:#eaffef;filter:none;}
+.seatmap-calendar button:disabled{opacity:.35;cursor:not-allowed;}
+.seatmap-calendar-nav{display:grid;grid-template-columns:28px minmax(0,1fr) 76px 28px;gap:5px;align-items:center;}
+.seatmap-calendar-nav button{font-size:22px;}
+.seatmap-calendar-nav select{width:100%;height:32px;padding:4px;border:1px solid #22313c;border-radius:4px;background:#05080b;color:#dbe7de;font-family:var(--mono);font-size:11px;}
+.seatmap-calendar-month{margin:12px 0 8px;color:#a8bdc7;text-align:center;font-size:10px;}
+.seatmap-calendar-grid{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2px;}
+.seatmap-calendar-grid th{padding:5px 0;color:#8fa6b2;text-align:center;font-size:9px;font-weight:500;}
+.seatmap-calendar-grid td{padding:0;text-align:center;}
+.seatmap-calendar-grid .seatmap-calendar-day{width:100%;height:32px;font-size:11px;}
+.seatmap-calendar-day.is-adjacent{color:#758b96;}
+.seatmap-calendar-day[aria-current="date"]{border-color:#4c6756;}
+.seatmap-calendar-grid .seatmap-calendar-day.is-selected{border-color:#53d977;background:#183b27;color:#b1f7c6;font-weight:700;}
+.seatmap-calendar-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;padding-top:9px;border-top:1px solid #22313c;}
+.seatmap-calendar-footer button{padding:5px 9px;border-color:#22313c;color:#8af5a8;font-size:10px;}
+.seatmap-calendar-footer span{color:#8fa6b2;font-size:9px;line-height:1.6;text-align:right;}
+
+/* ---------- passenger deck switcher ---------- */
+.seatmap-decks{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--pane);}
+.seatmap-decks.hidden{display:none!important;}
+.seatmap-deck-controls{display:flex;gap:4px;}
+.seatmap-page .seatmap-deck-button{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:40px;padding:8px 12px;border:1px solid #22313c;border-radius:4px;background:#0a0f14;color:#9fb4bf;font-size:11px;cursor:pointer;}
+.seatmap-deck-count{font-size:9px;color:#8fa6b2;}
+.seatmap-page .seatmap-deck-button[aria-pressed="true"]{border-color:#53d977;background:#152b1f;color:#b1f7c6;box-shadow:inset 0 -2px #53d977;}
+.seatmap-deck-button[aria-pressed="true"] .seatmap-deck-count{color:#b1f7c6;}
+.seatmap-page .seatmap-deck-button:hover:not(:disabled){border-color:#53d977;color:#eaffef;filter:none;}
+.seatmap-deck-status{color:#8fa6b2;font-size:10px;line-height:1.6;}
+@media(max-width:520px){.seatmap-top-tag{white-space:normal;text-align:right;line-height:1.4;}.seatmap-deck-controls{width:100%;}.seatmap-page .seatmap-deck-button{flex:1;flex-direction:column;gap:4px;}.seatmap-deck-status{width:100%;}}
