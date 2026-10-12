@@ -161,3 +161,34 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-disclaimer{border-color:#3a3a3a;}
 .seatmap-disclaimer strong{color:#eee;}
 @media(max-width:1120px){.seatmap-side-panel-right{border-color:#3a3a3a;}}
+
+/* ---------- real-flight strip, leg switcher, and tier badges ----------
+   The seat map now carries the converted itinerary's own flight. These styles
+   separate the three layers on screen: real flight identity, the layout's
+   verification tier, and the simulated seat status. No transitions. */
+.seatmap-flight-strip{display:flex;flex-direction:column;gap:8px;margin-top:-1px;padding:12px 14px;border:1px solid #1e2b34;border-top:0;background:#070c10;}
+.seatmap-flight-strip.hidden{display:none}
+.seatmap-strip-source{color:#72f39b;font-size:9px;letter-spacing:1.1px;}
+.seatmap-strip-identity{color:#e0e9e3;font-size:12px;line-height:1.6;letter-spacing:.3px;word-break:break-word;}
+.seatmap-strip-grid{display:flex;flex-wrap:wrap;gap:8px 22px;}
+.seatmap-strip-fact{color:#9aadb6;font-size:10px;line-height:1.65;letter-spacing:.25px;}
+.seatmap-strip-layout{padding:6px 8px;border:1px solid #33434d;font-size:9px;line-height:1.6;letter-spacing:.7px;}
+.seatmap-strip-layout.tier-airline_verified{border-color:#1f9d55;background:#0b1a12;color:#8af5a8;}
+.seatmap-strip-layout.tier-type_reference{border-color:#66572d;background:#15130d;color:#ddc77f;}
+.seatmap-strip-layout.tier-category_generic{border-color:#5a4a34;background:#141009;color:#d8b98b;}
+.seatmap-strip-layout.tier-no_passenger_cabin,.seatmap-strip-layout.tier-unknown_type{border-color:#7a3b34;background:#1a0f0d;color:#e59c91;}
+.seatmap-strip-note{color:#7d919a;font-size:10px;line-height:1.7;}
+.seatmap-strip-link{align-self:flex-start;color:#8af5a8;font-size:10px;letter-spacing:.6px;text-decoration:underline;text-underline-offset:3px;}
+.seatmap-strip-link.hidden{display:none}
+.seatmap-strip-link:hover{color:#eaffef;}
+.seatmap-legs{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:10px 0;padding:9px;border:1px solid #1e2b34;background:#070b0e;}
+.seatmap-legs.hidden{display:none}
+.seatmap-legs-label{margin-right:3px;color:#647983;font-size:9px;letter-spacing:.8px;}
+.seatmap-leg{display:inline-flex;align-items:center;gap:7px;min-height:30px!important;padding:5px 9px;border:1px solid #25343d;background:transparent;color:#9aadb6;font-size:9px;letter-spacing:.4px;cursor:pointer;}
+.seatmap-leg:hover{border-color:#647983;color:#e0e9e3;filter:none;}
+.seatmap-leg.is-active{border-color:#53d977;background:rgba(31,157,85,.12);color:#8af5a8;}
+.seatmap-leg-flight{font-weight:700;letter-spacing:.6px;}
+.seatmap-leg-route{color:inherit;}
+.seatmap-leg-equipment{color:#8498a0;}
+.seatmap-leg.is-active .seatmap-leg-equipment{color:#8af5a8;}
+.seatmap-seat.is-outside-cabin{opacity:.32}

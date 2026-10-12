@@ -32,6 +32,7 @@ var bookingSourceWarnings = [];
 var bookingSourceDirty = false;
 function setOut(text) {
   text = text == null ? "" : text;
+  if (typeof saveSeatMapRoute === "function") saveSeatMapRoute(text);
   if (out.textContent === text) {
     if (typeof refreshBookingLinkButton === "function") refreshBookingLinkButton(text);
     return;
@@ -3109,41 +3110,28 @@ if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) 
 });
 /* ABOUT:END */
 
-/* SEATMAP_GATE:BEGIN */
+/* SEATMAP_ROUTE:BEGIN */
 /*
- * The Seat Map preview is still under development, so its status-row link is
- * dimmed and does not open on an ordinary click. Only ten consecutive clicks
- * — each within SEATMAP_GATE_GAP_MS of the previous one — unlock it and
- * navigate to /seatmap. A slower click restarts the count. Blocked clicks are
- * intentionally silent so the status line does not reveal the click gate.
+ * The Seat Map reads the flight the user just converted. The OUTPUT pane is
+ * the single source of truth for that itinerary, so it is mirrored into
+ * sessionStorage here — same tab, same origin, no network — and the seat-map
+ * page re-parses it with the real engine (window.SpicyEngine). The seat map
+ * therefore cannot disagree with the itinerary: it is the same text.
+ *
+ * The seat map is also openable from the status row on an ordinary click:
+ * its flight data is real, and what is simulated (seat status) says so on the
+ * page. Clearing the input clears the stored route.
  */
-var SEATMAP_GATE_REQUIRED = 10;
-var SEATMAP_GATE_GAP_MS = 1500;
-var seatmapGateClicks = 0;
-var seatmapGateLastAt = 0;
-function seatmapGate(event, now, required, gapMs) {
-  var need = (typeof required === "number" && required > 0) ? required : SEATMAP_GATE_REQUIRED;
-  var gap = (typeof gapMs === "number" && gapMs > 0) ? gapMs : SEATMAP_GATE_GAP_MS;
-  var stamp = (typeof now === "number") ? now : Date.now();
-  if (seatmapGateLastAt === 0 || stamp - seatmapGateLastAt > gap) seatmapGateClicks = 0;
-  seatmapGateLastAt = stamp;
-  seatmapGateClicks++;
-  if (seatmapGateClicks >= need) {
-    seatmapGateClicks = 0;
-    seatmapGateLastAt = 0;
-    setStatus("SEAT MAP UNLOCKED — OPENING PREVIEW");
-    return true; // tenth consecutive click: allow the navigation to /seatmap
-  }
-  if (event && typeof event.preventDefault === "function") event.preventDefault();
-  return false;
+var SEATMAP_ROUTE_KEY = "spicy_seatmap_route";
+function saveSeatMapRoute(text) {
+  try {
+    if (!window.sessionStorage) return;
+    var body = String(text == null ? "" : text);
+    if (!body.trim()) { window.sessionStorage.removeItem(SEATMAP_ROUTE_KEY); return; }
+    window.sessionStorage.setItem(SEATMAP_ROUTE_KEY, JSON.stringify({ savedAt: Date.now(), text: body }));
+  } catch (e) { /* storage full or blocked: the seat map falls back to manual entry */ }
 }
-function wireSeatMapGate() {
-  var btn = $("btnSeatMap");
-  if (!btn || typeof btn.addEventListener !== "function") return;
-  btn.addEventListener("click", function (event) { seatmapGate(event); });
-}
-wireSeatMapGate();
-/* SEATMAP_GATE:END */
+/* SEATMAP_ROUTE:END */
 
 /* ---------- UI events ---------- */
 if ($("bookingAdults")) $("bookingAdults").addEventListener("change", function() {
