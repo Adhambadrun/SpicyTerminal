@@ -10,6 +10,7 @@ Repo layout:
   ocrad.js                      -> pure offline OCR engine
   spicy_data.js / spicy_engine.js / spicy_links.js / app.js -> inlined scripts
   seatmap_layouts.js / seatmap.js  -> inlined Seat Map registry + viewer
+  seatmap_gate.js                -> inlined Seat Map lock (ten-click gate)
   seatmap.css                    -> inlined Seat Map route styles
 
 Run from anywhere:  python3 build_web.py
@@ -66,6 +67,7 @@ data = (SRC / "spicy_data.js").read_text(encoding="utf-8")
 engine = (SRC / "spicy_engine.js").read_text(encoding="utf-8")
 links = (SRC / "spicy_links.js").read_text(encoding="utf-8")
 app = (SRC / "app.js").read_text(encoding="utf-8")
+seatmap_gate_js = (SRC / "seatmap_gate.js").read_text(encoding="utf-8")
 seatmap_css = (SRC / "seatmap.css").read_text(encoding="utf-8")
 seatmap_layouts_js = (SRC / "seatmap_layouts.js").read_text(encoding="utf-8")
 seatmap_js = (SRC / "seatmap.js").read_text(encoding="utf-8")
@@ -76,6 +78,7 @@ html = (tpl.replace("__LOGO_MARK_B64__", mark)
            .replace("__SPICY_ENGINE__", engine)
            .replace("__SPICY_LINKS__", links)
            .replace("__APP_JS__", app)
+           .replace("__SEATMAP_GATE__", seatmap_gate_js)
            .replace("__SEATMAP_CSS__", seatmap_css)
            .replace("__SEATMAP_LAYOUTS__", seatmap_layouts_js)
            .replace("__SEATMAP_JS__", seatmap_js))

@@ -3110,6 +3110,65 @@ if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) 
 });
 /* ABOUT:END */
 
+/* SEATMAP_GATE:BEGIN */
+/*
+ * Seat Map is sealed while it is still being finished. The status-row link is
+ * dimmed and only opens on the tenth click — an annoyance for anyone who
+ * stumbles onto it, and a clear "not public yet" sign, nothing more. It is not
+ * a password and it is not security; the honest description of this lock lives
+ * in seatmap_gate.js.
+ *
+ * The knock itself lives in seatmap_gate.js (window.SpicySeatMapGate) because
+ * two places must agree on it: this link, and the /seatmap page, which checks
+ * the same count before it draws anything (a URL that opens the map anyway is
+ * not a gate). The count is kept in sessionStorage, so it survives a reload in
+ * this tab and a fresh tab starts over.
+ */
+function seatMapGate() {
+  return (window.SpicySeatMapGate && typeof window.SpicySeatMapGate.isUnlocked === "function")
+    ? window.SpicySeatMapGate
+    : null;
+}
+/* Paint the link the way the gate currently stands: dimmed while sealed,
+   ordinary once the tenth click has landed (so coming back from /seatmap
+   doesn't re-dim a door you already opened). */
+function paintSeatMapLink() {
+  var link = $("btnSeatMap");
+  if (!link) return;
+  var gate = seatMapGate();
+  var open = !gate || gate.isUnlocked();
+  var cls = link.classList;
+  if (cls && cls.add && cls.remove) {
+    /* add/remove rather than toggle(name, force): the same paint runs in the
+       headless test sandboxes, whose classList has no toggle. */
+    if (open) cls.add("is-unlocked"); else cls.remove("is-unlocked");
+  }
+  var title = open
+    ? "Seat map for the flight you converted — real aircraft type and layout tier, simulated seat statuses (no airline inventory is connected)."
+    : "Seat Map is sealed while it is being finished. Click it ten times to open it — this tab only, no account and no password.";
+  if (link.setAttribute) link.setAttribute("title", title);
+  else link.title = title;
+}
+function seatMapKnock(event) {
+  var gate = seatMapGate();
+  if (!gate) return;                     /* no gate shipped: the plain link wins */
+  if (gate.isUnlocked()) return;         /* ordinary click, ordinary navigation */
+  if (event && event.preventDefault) event.preventDefault();
+  var result = gate.knock();
+  if (!result.unlocked) {
+    setStatus("SEAT MAP LOCKED — " + result.remaining + " MORE CLICK" + (result.remaining === 1 ? "" : "S") +
+              " (" + result.clicks + "/" + gate.CLICKS_REQUIRED + ")", true);
+    return;
+  }
+  paintSeatMapLink();
+  setStatus("SEAT MAP UNLOCKED — OPENING IT");
+  var link = $("btnSeatMap");
+  window.location.assign(link && link.href ? link.href : "/seatmap");
+}
+if ($("btnSeatMap")) $("btnSeatMap").addEventListener("click", seatMapKnock);
+paintSeatMapLink();
+/* SEATMAP_GATE:END */
+
 /* SEATMAP_ROUTE:BEGIN */
 /*
  * The Seat Map reads the flight the user just converted. The OUTPUT pane is
@@ -3118,10 +3177,12 @@ if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) 
  * page re-parses it with the real engine (window.SpicyEngine). The seat map
  * therefore cannot disagree with the itinerary: it is the same text.
  *
- * The seat map is also openable from the status row on an ordinary click:
- * its flight data is real, and what is simulated (seat status) says so on the
+ * The seat map is reached through the status-row link, which is sealed behind
+ * the ten-click gate in SEATMAP_GATE while the page is being finished: its
+ * flight data is real, and what is simulated (seat status) says so on the
  * page. Clearing the input clears the stored route.
  */
+
 var SEATMAP_ROUTE_KEY = "spicy_seatmap_route";
 function saveSeatMapRoute(text) {
   try {
@@ -3367,11 +3428,14 @@ try {
 // Share the single inlined wordmark with the welcome card instead of embedding
 // the same ~300KB base64 twice in the static page.
 try {
-  var _wmH = $("wordmarkHeader"), _wmW = $("wordmarkWelcome"), _wmA = $("wordmarkAbout");
+  var _wmH = $("wordmarkHeader"), _wmW = $("wordmarkWelcome"), _wmA = $("wordmarkAbout"), _wmS = $("wordmarkSeatMap");
   var _wmSrc = _wmH ? (_wmH.getAttribute("src") || _wmH.src) : "";
   if (_wmW && !_wmW.getAttribute("src")) _wmW.setAttribute("src", _wmSrc);
   // Same trick for the About dialog: the wordmark is one base64 blob, shared.
   if (_wmA && !_wmA.getAttribute("src")) _wmA.setAttribute("src", _wmSrc);
+  // ...and a fourth time for the Seat Map masthead, so the route reads as the
+  // same terminal instead of a different product wearing a different hat.
+  if (_wmS && !_wmS.getAttribute("src")) _wmS.setAttribute("src", _wmSrc);
 } catch (e) {}
 
 })();

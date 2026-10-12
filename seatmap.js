@@ -829,7 +829,7 @@
     if (!panel || !action) return;
     var seat = state.selectedSeatId ? state.seatsById[state.selectedSeatId] : null;
     if (!seat) {
-      panel.innerHTML = '<p class="seatmap-empty-detail">Choose a seat to inspect its sample status and layout features.</p>';
+      panel.innerHTML = '<p class="seatmap-empty-detail">Click a seat. I will tell you what it is, what it is not, and nothing at all about who is sitting in it.</p>';
       action.disabled = true;
       action.textContent = "SELECT A SAMPLE SEAT";
       return;
@@ -1164,11 +1164,55 @@
     return copied ? Promise.resolve() : Promise.reject(new Error("Clipboard access is unavailable."));
   }
 
+  /* The Seat Map is sealed while it is being finished. The gate is checked
+     here and not only on the link, because a URL that opens the map anyway
+     would make the ten-click knock decorative. Failing closed is deliberate:
+     if the gate module is missing from the page, the map stays locked. */
+  function gate() {
+    return (root && root.SpicySeatMapGate && typeof root.SpicySeatMapGate.isUnlocked === "function")
+      ? root.SpicySeatMapGate
+      : null;
+  }
+
+  /** Draw the "sealed" card instead of the map, and hide every control that
+      would otherwise hand the page over. */
+  function lockSeatMapPage(doc) {
+    var page = doc.getElementById("seatmapPage");
+    var lock = doc.getElementById("seatmapLock");
+    if (!page || !lock) return;
+    doc.body.classList.add("seatmap-active");
+    page.classList.remove("hidden");
+    lock.classList.remove("hidden");
+
+    var content = doc.getElementById("seatmapContent");
+    if (content) {
+      content.classList.add("hidden");
+      content.setAttribute("aria-hidden", "true");
+      if ("inert" in content) content.inert = true;
+    }
+    var notice = doc.getElementById("seatmapNotice");
+    if (notice) notice.classList.add("hidden");
+    var summary = doc.getElementById("seatmapSummaryDialog");
+    if (summary) summary.classList.add("hidden");
+
+    var count = doc.getElementById("seatmapLockCount");
+    var api = gate();
+    if (count && api) {
+      var heard = api.CLICKS_REQUIRED - api.clicksLeft();
+      count.textContent = api.isUnlocked() ? (api.CLICKS_REQUIRED + " / " + api.CLICKS_REQUIRED)
+                                           : (heard + " / " + api.CLICKS_REQUIRED);
+    }
+    var back = doc.getElementById("seatmapLockBack");
+    if (back && back.focus) back.focus();
+  }
+
   /** Bind the /seatmap preview page and all of its local demo interactions. */
   function initializeSeatMapPage(doc) {
     if (!root.location || root.location.pathname.replace(/\/+$/, "") !== "/seatmap") return;
     var page = doc.getElementById("seatmapPage");
     if (!page) return;
+    var api = gate();
+    if (!api || !api.isUnlocked()) { lockSeatMapPage(doc); return; }
     doc.body.classList.add("seatmap-active");
     page.classList.remove("hidden");
 

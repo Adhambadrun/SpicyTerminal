@@ -135,9 +135,13 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 #btnBookingLink.booking-link-ready{padding:4px 9px;color:#72f39b;text-decoration:none;font-weight:700;letter-spacing:.45px;background:rgba(31,157,85,.13);border:1px solid rgba(83,217,119,.6);box-shadow:0 0 11px rgba(83,217,119,.2),inset 0 0 8px rgba(83,217,119,.08);text-shadow:0 0 8px rgba(83,217,119,.42)}
 #btnBookingLink.booking-link-ready:hover{color:#eaffef;background:rgba(31,157,85,.24);border-color:#8af5a8;box-shadow:0 0 16px rgba(83,217,119,.36),inset 0 0 9px rgba(83,217,119,.14);filter:none}
 #btnBookingLink:focus-visible{outline:2px solid #53d977;outline-offset:3px}
-/* The Seat Map link opens on an ordinary click. It carries the flight you
-   just converted; seat availability inside is simulated and says so. */
+/* The Seat Map is sealed while it is still being finished: the link is dimmed
+   and only opens on the tenth click (see SEATMAP_GATE in app.js). Hover and
+   focus still lift it to full contrast, so the dim is a label and never a
+   contrast trap; once the tenth click lands the link is painted normally. */
+#btnSeatMap{opacity:.35}
 #btnSeatMap:hover,#btnSeatMap:focus-visible{opacity:1}
+#btnSeatMap.is-unlocked{opacity:1}
 .about-modal{z-index:56;padding:16px;align-items:flex-start}
 .about-card{position:relative;width:min(880px,100%);max-height:calc(100dvh - 32px);overflow:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(180deg,#0d141a,#080c11);border:1px solid #1e2b34;border-radius:16px;padding:26px 26px 20px;box-shadow:0 30px 90px rgba(0,0,0,.72)}
 .about-card::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:16px 16px 0 0;background:linear-gradient(90deg,transparent,rgba(83,217,119,.55) 30%,#e2574b 72%,transparent);opacity:.6;pointer-events:none}
@@ -206,7 +210,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-page button{min-height:0;border-radius:0;font-family:var(--mono);font-weight:500;}
 .seatmap-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px!important;padding:7px 11px;border:1px solid #33434d;background:#090e12;color:#c9d8ce;font-size:10px;letter-spacing:.65px;text-align:center;text-decoration:none;white-space:nowrap;cursor:pointer;}
 .seatmap-btn:hover:not(:disabled){background:#c9d8ce;color:#05080b;filter:none;}
-.seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
+.seatmap-page .seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
 .seatmap-btn:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline:2px solid #c9d8ce;outline-offset:2px;}
 .seatmap-btn-primary{border-color:#8fa6b2;color:#e0e9e3;}
 .seatmap-examples{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:12px;}
@@ -312,38 +316,89 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 @media(max-width:520px){.seatmap-topbar{padding:8px 11px;}.seatmap-wordmark{font-size:9px;letter-spacing:.8px;}.seatmap-top-tag{font-size:8px;padding:4px 5px;}.seatmap-form{grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-form .seatmap-btn{grid-column:1 / -1;}.seatmap-side-panel-left,.seatmap-side-panel-right{grid-template-columns:1fr;}.seatmap-toolbar{display:grid;grid-template-columns:1fr;}.seatmap-toolbar-group{justify-content:flex-start;}.seatmap-canvas{height:60vh;min-height:390px;}.seatmap-notice-card{padding:18px 15px;}.seatmap-notice-card h2{font-size:15px;}.seatmap-examples-label{flex-basis:100%;}}
 @media(prefers-reduced-motion:reduce){.seatmap-page *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 
-/* The new route keeps the requested black-and-white chrome; only seat-state
-   swatches and seat cells intentionally use status colors. */
-.seatmap-page{background:#000;color:#f3f3f3;}
-.seatmap-topbar,.seatmap-card,.seatmap-panel,.seatmap-flight-heading,.seatmap-toolbar,.seatmap-notice-card,.seatmap-summary-card{background:#000;border-color:#3a3a3a;}
-.seatmap-canvas-wrap,.seatmap-canvas,.seatmap-field input,.seatmap-field select,.seatmap-filter-select,.seatmap-tooltip{background:#000;border-color:#4a4a4a;color:#f2f2f2;}
-.seatmap-canvas{scrollbar-color:#555 #000;}
-.seatmap-dev-banner{border-color:#555;background:#000;color:#ddd;}
-.seatmap-dev-mark,.seatmap-source-pill{border-color:#777;color:#eee;}
-.seatmap-notice-kicker,.seatmap-notice-card p strong{color:#fff;}
-.seatmap-notice-card p,.seatmap-notice-actions a{color:#d0d0d0;}
-.seatmap-notice-actions a{border-color:#666;}
-.seatmap-btn,.seatmap-example{border-color:#666;background:#000;color:#f2f2f2;}
-.seatmap-btn-primary{border-color:#fff;color:#fff;}
-.seatmap-btn:hover:not(:disabled),.seatmap-example:hover{border-color:#fff;background:#fff;color:#000;}
-.seatmap-btn:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline-color:#fff;}
-.seatmap-field input:focus,.seatmap-field select:focus,.seatmap-filter-select:focus{border-color:#fff;outline-color:#fff;}
-.seatmap-back,.seatmap-wordmark,.seatmap-title,.seatmap-flight-name,.seatmap-detail-name,.seatmap-count,.seatmap-notice-card h2{color:#f2f2f2;}
-.seatmap-subtitle,.seatmap-flight-meta,.seatmap-panel-title,.seatmap-field label,.seatmap-overline,.seatmap-examples-label,.seatmap-zoom-value,.seatmap-refresh-info,.seatmap-filter,.seatmap-legend-item,.seatmap-availability-summary,.seatmap-map-foot,.seatmap-count-caption,.seatmap-empty-detail,.seatmap-detail-list dt,.seatmap-detail-list dd,.seatmap-selection-status,.seatmap-disclaimer,.seatmap-summary-card h2,.seatmap-summary-card pre{color:#bdbdbd;}
-.seatmap-fuselage{fill:#050505;stroke:#777;}
-.seatmap-centerline{stroke:#383838;}
-.seatmap-wing{fill:#080808;stroke:#393939;}
-.seatmap-facility,.seatmap-cabin-label,.seatmap-row-label{fill:#c5c5c5;}
-.seatmap-filter input{accent-color:#fff;}
-.seatmap-exit-label{fill:#f6e19c;}
-.seatmap-top-tag{border-color:#666;color:#ddd;}
-.seatmap-panel-title{border-color:#333;}
-.seatmap-form-status{color:#bdbdbd;}
-.seatmap-form-status.is-error{color:#f2a8a0;}
-.seatmap-back:hover{color:#fff;}
-.seatmap-disclaimer{border-color:#3a3a3a;}
-.seatmap-disclaimer strong{color:#eee;}
-@media(max-width:1120px){.seatmap-side-panel-right{border-color:#3a3a3a;}}
+/* ---------- SpicyTerminal chrome ----------
+   The Seat Map is not a second product: it wears the terminal's own shell —
+   near-black, hairline panes, terminal green for what is real, amber for what
+   is verified by someone other than the airline, red for a refusal, and the
+   plain dim grey the app uses for everything that is only furniture. Seat
+   swatches keep their colours because the colours mean something; every other
+   surface is the terminal's. No motion here either, same as the app. */
+.seatmap-page{background:var(--bg);color:#c9d8ce;}
+.seatmap-topbar{position:sticky;background:linear-gradient(180deg,#080d12,#05080b);border-bottom:1px solid var(--line);}
+.seatmap-topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(83,217,119,.5) 26%,rgba(226,87,75,.45) 74%,transparent);}
+.seatmap-wordmark-img{height:20px;width:auto;max-width:44vw;display:block;object-fit:contain;flex:none;}
+.seatmap-back{color:#5b6e77;font-size:10px;letter-spacing:1.1px;}
+.seatmap-back:hover{color:#8fa6b2;}
+/* Four items share the bar; the auto margin keeps the wordmark group left
+   and parks the tag on the right, the way the masthead does. */
+.seatmap-wordmark{color:#7f95a0;font-size:10px;letter-spacing:2px;margin-right:auto;}
+.seatmap-top-tag{border:1px solid var(--line);background:#0a0f14;color:#7f95a0;}
+.seatmap-card,.seatmap-panel{border:1px solid var(--line);border-radius:6px;background:var(--pane);}
+.seatmap-panel-title{border-bottom:1px solid var(--line);color:#7f95a0;font-size:9px;letter-spacing:1.6px;}
+.seatmap-title{color:#e6f3ea;letter-spacing:1.6px;}
+.seatmap-subtitle{color:#7d919a;}
+.seatmap-flight-heading{border:1px solid var(--line);border-radius:6px 6px 0 0;background:var(--pane);}
+.seatmap-flight-name{color:#e6f3ea;letter-spacing:1.1px;}
+.seatmap-flight-meta{color:#8498a0;}
+.seatmap-toolbar{border:1px solid var(--line);border-radius:6px;background:var(--pane);}
+.seatmap-legs{border:1px solid var(--line);border-radius:6px;background:var(--pane);}
+.seatmap-canvas-wrap{position:relative;border:1px solid var(--line);border-radius:6px;background:#05080b;}
+.seatmap-canvas-wrap::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:6px 6px 0 0;pointer-events:none;z-index:2;background:linear-gradient(90deg,transparent,rgba(83,217,119,.45) 30%,rgba(226,87,75,.35) 72%,transparent);}
+.seatmap-canvas{scrollbar-color:rgba(81,224,124,.42) #05080b;}
+.seatmap-canvas::-webkit-scrollbar{width:8px;height:8px}
+.seatmap-canvas::-webkit-scrollbar-track{background:rgba(7,12,16,.72)}
+.seatmap-canvas::-webkit-scrollbar-thumb{background:rgba(81,224,124,.34);border:2px solid #05080b;border-radius:8px}
+.seatmap-canvas::-webkit-scrollbar-thumb:hover{background:rgba(81,224,124,.68)}
+/* `.seatmap-page button` resets every button on this route (radius 0, weight
+   500), so the seat-map buttons are declared one class deeper to be heard. */
+.seatmap-page .seatmap-btn{border:1px solid #22313c;border-radius:4px;background:#18222b;color:#9fb4bf;font-weight:700;letter-spacing:.9px;}
+.seatmap-page .seatmap-btn:hover:not(:disabled){border-color:#53d977;background:#15231c;color:#dff3e4;filter:none;}
+.seatmap-page .seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
+.seatmap-page .seatmap-btn-primary{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 4px 16px rgba(226,87,75,.12);}
+.seatmap-page .seatmap-btn-primary:hover:not(:disabled){background:var(--red);border-color:#ff847b;color:#fff;filter:brightness(1.12);}
+.seatmap-page .seatmap-example{border:1px solid #22313c;border-radius:4px;background:transparent;color:#7f95a0;}
+.seatmap-page .seatmap-example:hover{border-color:#53d977;color:#dff3e4;background:#15231c;filter:none;}
+.seatmap-page button:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline:2px solid var(--green);outline-offset:2px;}
+.seatmap-field input,.seatmap-field select,.seatmap-filter-select{border:1px solid #22313c;border-radius:4px;background:#05080b;color:#dbe7de;}
+.seatmap-field input:focus,.seatmap-field select:focus,.seatmap-filter-select:focus{border-color:#53d977;outline:1px solid #53d977;outline-offset:1px;}
+.seatmap-field label,.seatmap-overline{color:#7f95a0;}
+.seatmap-tooltip{border:1px solid #52626a;border-radius:4px;background:#05080b;color:#e1ebe4;}
+.seatmap-dev-banner{border:1px solid #66572d;border-radius:6px;background:#15130d;color:#ddc77f;}
+.seatmap-dev-mark{border:1px solid #806b34;color:#efd77e;}
+.seatmap-source-pill{border:1px solid #66572d;color:#ddc77f;}
+.seatmap-notice{background:rgba(4,8,12,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.seatmap-notice-card{border:1px solid #1e2b34;border-radius:14px;background:#0c1218;box-shadow:0 30px 90px rgba(0,0,0,.72);}
+.seatmap-notice-kicker{color:#7f95a0;}
+.seatmap-notice-card h2{color:#e6f3ea;font-weight:500;letter-spacing:1.2px;}
+.seatmap-notice-card p{color:#a8bdc7;}
+.seatmap-notice-card p strong{color:#e6f3ea;}
+.seatmap-notice-actions a{border:1px solid #22313c;border-radius:4px;color:#9fb4bf;}
+.seatmap-notice-actions a:hover{border-color:#53d977;color:#dff3e4;background:#15231c;}
+.seatmap-summary-dialog{background:rgba(4,8,12,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.seatmap-summary-card{border:1px solid #1e2b34;border-radius:12px;background:#0c1218;}
+.seatmap-summary-card h2{color:#e6f3ea;}
+.seatmap-summary-card pre{color:#a8bdc7;}
+.seatmap-disclaimer{border:1px solid var(--line);border-radius:6px;color:#89999e;}
+.seatmap-disclaimer strong{color:#c7d3ce;}
+.seatmap-map-foot kbd{border:1px solid #22313c;border-radius:3px;padding:0 3px;background:#0a0f14;color:#9fb4bf;font-family:var(--mono);font-size:9px;}
+
+/* ---------- the sealed state ----------
+   Shown instead of the map when this tab has not knocked ten times. It is the
+   terminal's own voice: it says the door is shut, says why, and does not
+   pretend a click counter is a lock. */
+.seatmap-lock{display:flex;align-items:center;justify-content:center;min-height:100%;padding:clamp(18px,6vh,64px) clamp(14px,3vw,28px);}
+.seatmap-lock.hidden{display:none!important}
+.seatmap-lock-card{width:min(620px,100%);border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0d141a,#080c11);padding:26px 26px 20px;box-shadow:0 30px 90px rgba(0,0,0,.72);position:relative;}
+.seatmap-lock-card::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:14px 14px 0 0;background:linear-gradient(90deg,transparent,rgba(226,87,75,.6) 32%,rgba(83,217,119,.45) 74%,transparent);opacity:.7;pointer-events:none;}
+.seatmap-lock-kicker{margin-bottom:12px;color:var(--red);font-size:9px;letter-spacing:1.8px;}
+.seatmap-lock-title{margin-bottom:12px;color:#e6f3ea;font-size:clamp(17px,2.4vw,22px);font-weight:500;letter-spacing:.75px;}
+.seatmap-lock-body p{margin-bottom:10px;color:#a8bdc7;font-size:11.5px;line-height:1.75;}
+.seatmap-lock-body p strong{color:#e6f3ea;font-weight:600;}
+.seatmap-lock-body p em{color:#9fb4bf;font-style:italic;}
+.seatmap-lock-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;margin-top:17px;}
+.seatmap-lock-actions a{display:inline-flex;align-items:center;min-height:34px;padding:7px 11px;border:1px solid #22313c;border-radius:4px;color:#9fb4bf;text-decoration:none;font-size:10px;letter-spacing:.65px;}
+.seatmap-lock-actions a:hover{border-color:#53d977;color:#dff3e4;background:#15231c;}
+@media(max-width:560px){.seatmap-wordmark-img{display:none}.seatmap-lock-card{padding:20px 16px 16px;border-radius:12px}}
 
 /* ---------- real-flight strip, leg switcher, and tier badges ----------
    The seat map now carries the converted itinerary's own flight. These styles
@@ -524,24 +579,49 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
   </div>
 </div>
 
-<!-- Seat Map is a separate static route. Its data is a local illustration, not airline inventory. -->
+<!-- Seat Map is a separate static route. Its data is a local illustration, not
+     airline inventory, and it is sealed behind the ten-click gate until it is
+     finished: the gate is honoured here as well as on the link, because a URL
+     that opens the map anyway is not a gate. -->
 <div class="seatmap-page hidden" id="seatmapPage">
   <div class="seatmap-topbar">
-    <a class="seatmap-back" id="seatmapBackLink" href="/" aria-label="Return to SpicyTerminal">← SPICYTERMINAL</a>
+    <a class="seatmap-back" id="seatmapBackLink" href="/" aria-label="Return to SpicyTerminal">← TERMINAL</a>
+    <img class="seatmap-wordmark-img" id="wordmarkSeatMap" src="" alt="SpicyTerminal">
     <span class="seatmap-wordmark">SEAT MAP VIEWER</span>
-    <span class="seatmap-top-tag">REAL FLIGHT DATA · SIMULATED SEAT STATUS</span>
+    <span class="seatmap-top-tag" id="seatmapTopTag">REAL FLIGHT · SIMULATED SEATS · NOTHING RESERVED</span>
   </div>
+
+  <!-- Shown instead of the map when this tab has not knocked ten times yet. -->
+  <section class="seatmap-lock hidden" id="seatmapLock" aria-labelledby="seatmapLockTitle">
+    <div class="seatmap-lock-card">
+      <div class="seatmap-lock-kicker">SEALED · NOT FINISHED</div>
+      <h2 class="seatmap-lock-title" id="seatmapLockTitle">Seat Map is mine for now.</h2>
+      <div class="seatmap-lock-body" id="seatmapLockBody">
+        <p>Not a password, not an account, not security — a door with a count on it. The
+          <strong>Seat Map</strong> link in the status row opens on its <strong>tenth</strong> click, and this page
+          checks the same count, so typing the URL gets you exactly this sentence.</p>
+        <p><strong id="seatmapLockCount">0 / 10</strong> clicks heard in this tab. A new tab starts over at zero.
+          Treat it as a sign that says <em>still building</em>, because that is all it is.</p>
+        <p>Everything else here converts normally. Go paste something and let the engine do its job.</p>
+      </div>
+      <div class="seatmap-lock-actions">
+        <a href="/" id="seatmapLockBack">← BACK TO THE TERMINAL</a>
+      </div>
+    </div>
+  </section>
+
   <div class="seatmap-main" id="seatmapContent">
     <div class="seatmap-title-row">
       <div>
         <h1 class="seatmap-title" id="seatmapPageTitle">SEAT MAP</h1>
-        <p class="seatmap-subtitle">Your converted itinerary loads automatically: the seat map reads that flight directly — airline, flight number, route, date, cabin and aircraft type — and draws the aircraft's cabin from a layout labelled by how well it is verified. Seat <em>statuses</em> are simulated — no airline seat-availability feed is connected.</p>
-        <p class="seatmap-subtitle" style="margin-top:5px">Nothing converted yet, or want to try a layout by hand? Use the manual entry form below.</p>
+        <p class="seatmap-subtitle">Your converted itinerary loads straight in here — airline, flight number, route, date, cabin and aircraft type, re-read from the OUTPUT you just converted with the same engine, so the two cannot disagree. The cabin is drawn from a layout that says, on the map, how well it is verified.</p>
+        <p class="seatmap-subtitle" style="margin-top:5px">The seat colours are invented in this tab. No airline inventory is connected, and picking a seat reserves nothing — not even a preference. Want a real seat? Take the airline link on the map and ask the airline.</p>
+        <p class="seatmap-subtitle" style="margin-top:5px">Nothing converted yet, or want to poke a layout by hand? The form below does not need a flight.</p>
       </div>
     </div>
     <div class="seatmap-dev-banner" role="status">
       <span class="seatmap-dev-mark">WHAT IS REAL HERE</span>
-      <span><strong>Flight data is real; seat status is not.</strong> The flight identity and aircraft type come from your converted itinerary, and the cabin layout is labelled by tier: an airline-verified configuration when one has been checked, otherwise a reference layout for that aircraft type. Seat availability is simulated in this browser — never live airline inventory — and selecting a seat reserves nothing.</span>
+      <span><strong>Flight data is real; seat status is not.</strong> The flight identity and aircraft type come from your converted itinerary, and the cabin layout is labelled by tier: an airline-verified configuration when one has been checked, otherwise a reference layout for that aircraft type. Seat availability is simulated in this browser — never live airline inventory — and selecting a seat reserves nothing. I would rather say that four times than have you believe one green square.</span>
     </div>
 
     <section class="seatmap-card" aria-labelledby="seatmapSearchTitle">
@@ -660,7 +740,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
             <div class="seatmap-tooltip hidden" id="seatmapTooltip" role="status"></div>
           </div>
           <div class="seatmap-map-foot">
-            <span>Click a seat for sample details · drag to pan · use controls to zoom</span>
+            <span>Click a seat for its details · drag to pan · <kbd>+</kbd> and <kbd>−</kbd> to zoom. Still a drawing, still not inventory.</span>
             <span id="seatmapLastUpdated">NO SAMPLE GENERATED</span>
           </div>
         </div>
@@ -669,7 +749,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
           <section class="seatmap-panel">
             <h3 class="seatmap-panel-title">SEAT DETAILS</h3>
             <div class="seatmap-panel-body">
-              <div class="seatmap-details" id="seatmapSeatDetails" aria-live="polite"><p class="seatmap-empty-detail">Choose a seat to inspect its sample status and layout features.</p></div>
+              <div class="seatmap-details" id="seatmapSeatDetails" aria-live="polite"><p class="seatmap-empty-detail">Click a seat. I will tell you what it is, what it is not, and nothing at all about who is sitting in it.</p></div>
               <button class="seatmap-btn" id="seatmapDemoSelect" type="button" disabled>SELECT A SAMPLE SEAT</button>
               <p class="seatmap-selection-status" id="seatmapSelectionStatus">NO SEAT SELECTED</p>
             </div>
@@ -707,6 +787,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
         <p><strong>Real:</strong> the airline, flight number, route, date, cabin, booking class and aircraft type come from the itinerary you converted. The aircraft type's provenance is shown — stated in your itinerary, or inferred by the converter (and how).</p>
         <p><strong>Layout:</strong> the cabin configuration is labelled by tier. <em>Verified</em> means it was checked against that airline's own seat map; <em>reference</em> means it is the typical configuration for the aircraft type and has not been verified for the airline; <em>generic</em> means only the cabin cross-section is known. The badge on the map says which one you are looking at. Layouts are never invented to fill a gap.</p>
         <p><strong>Simulated:</strong> seat availability, counts and refreshes are generated in this browser — not live airline data, pricing, or a reservation. Selecting a seat reserves nothing. Nothing is sent to an airline, and no API key is required.</p>
+        <p><strong>Short version:</strong> the flight is real, the cabin is a labelled best effort, and the seat colours are a coin flip tossed in your browser. When the seat actually matters, the airline's own site is where seats live — the link on the map walks you there.</p>
       </div>
       <div class="seatmap-notice-actions">
         <a href="/" id="seatmapNoticeBack">BACK TO SPICYTERMINAL</a>
@@ -11214,6 +11295,132 @@ if (typeof module !== "undefined") module.exports = SpicyLinks;
 if (typeof window !== "undefined") window.SpicyLinks = SpicyLinks;
 })();
 </script>
+<!-- The Seat Map gate ships ahead of app.js so the link can be painted dimmed
+     on the very first frame, and ahead of seatmap.js so the /seatmap page
+     honours the same lock. -->
+<script>/* seatmap_gate.js — the Seat Map's owner-only knock.
+ *
+ * While the Seat Map is still being built it stays sealed: the status-row
+ * link is dimmed and only opens on the tenth click, and the /seatmap URL
+ * itself refuses to render the map until the same knock has been heard in
+ * this tab. One small module, deliberately, because two places have to
+ * agree on the lock — the link in app.js and the page in seatmap.js — and
+ * a door they disagree about is not a door.
+ *
+ * What this is and is not:
+ *   - it is a local, in-tab annoyance for anyone who stumbles onto the link
+ *     or the URL by accident. Ten clicks is not a password and it is not
+ *     security; it is a "this is not finished" sign with a handle on it.
+ *   - it stores a click count and a flag in sessionStorage: the same tab
+ *     keeps the unlock across reloads, a new tab locks it again, and no
+ *     data leaves the browser. There is no server, no account and no key.
+ *   - when storage is blocked or full the gate falls back to memory, so a
+ *     locked page still locks and an unlocked session still works; only the
+ *     "survives a reload" part is lost.
+ *
+ * The lock is temporary by design. To open the Seat Map to everyone, delete
+ * the SEATMAP_GATE block in app.js and the gate check in seatmap.js; nothing
+ * else in the app depends on this file.
+ */
+(function (root) {
+  "use strict";
+
+  /** How many clicks on the Seat Map link open it. */
+  var CLICKS_REQUIRED = 10;
+  /** sessionStorage key: {"clicks":<n>,"unlocked":<bool>} for this tab only. */
+  var STORE_KEY = "spicy_seatmap_gate";
+
+  /* Used when sessionStorage is unavailable: the gate still works inside the
+     page, it just forgets on reload. */
+  var memory = null;
+
+  function storage() {
+    try {
+      var store = root && root.sessionStorage;
+      if (store && typeof store.getItem === "function" && typeof store.setItem === "function") return store;
+    } catch (e) { /* access to sessionStorage can throw outright */ }
+    return null;
+  }
+
+  function read() {
+    var raw = null;
+    var store = storage();
+    if (store) { try { raw = store.getItem(STORE_KEY); } catch (e) { raw = null; } }
+    if (raw == null) return memory ? { clicks: memory.clicks, unlocked: memory.unlocked } : { clicks: 0, unlocked: false };
+    try {
+      var parsed = JSON.parse(raw);
+      /* A payload is only believed when both fields are exactly the shape
+         written: a hand-edited or half-written flag locks, never unlocks. */
+      if (!parsed || typeof parsed.clicks !== "number" || !Number.isFinite(parsed.clicks) || parsed.clicks < 0) {
+        return { clicks: 0, unlocked: false };
+      }
+      return {
+        clicks: Math.floor(parsed.clicks),
+        unlocked: parsed.unlocked === true
+      };
+    } catch (e) {
+      return { clicks: 0, unlocked: false };   /* a corrupted flag locks, never unlocks */
+    }
+  }
+
+  function write(state) {
+    memory = { clicks: state.clicks, unlocked: state.unlocked === true };
+    var store = storage();
+    if (!store) return;
+    try { store.setItem(STORE_KEY, JSON.stringify(memory)); } catch (e) { /* full or blocked: memory holds */ }
+  }
+
+  /** True once the tenth click has landed in this tab. */
+  function isUnlocked() {
+    return read().unlocked === true;
+  }
+
+  /** Clicks still owed before the link opens (0 once unlocked). */
+  function clicksLeft() {
+    var state = read();
+    return state.unlocked ? 0 : Math.max(0, CLICKS_REQUIRED - state.clicks);
+  }
+
+  /** Record one click. Returns {unlocked, clicks, remaining}. */
+  function knock() {
+    var state = read();
+    if (state.unlocked) return { unlocked: true, clicks: state.clicks, remaining: 0 };
+    state.clicks += 1;
+    if (state.clicks >= CLICKS_REQUIRED) state.unlocked = true;
+    write(state);
+    return {
+      unlocked: state.unlocked,
+      clicks: state.clicks,
+      remaining: Math.max(0, CLICKS_REQUIRED - state.clicks)
+    };
+  }
+
+  /** Open without knocking (used by nothing on purpose — here for tests and
+   *  for the console: `SpicySeatMapGate.unlock()`). */
+  function unlock() {
+    var state = read();
+    write({ clicks: Math.max(state.clicks, CLICKS_REQUIRED), unlocked: true });
+  }
+
+  /** Back to sealed, first click owed again. */
+  function lock() {
+    write({ clicks: 0, unlocked: false });
+  }
+
+  var API = {
+    CLICKS_REQUIRED: CLICKS_REQUIRED,
+    STORE_KEY: STORE_KEY,
+    isUnlocked: isUnlocked,
+    clicksLeft: clicksLeft,
+    knock: knock,
+    unlock: unlock,
+    lock: lock
+  };
+
+  if (typeof module === "object" && module && module.exports) module.exports = API;
+  if (root) root.SpicySeatMapGate = API;
+})(typeof window !== "undefined" ? window : null);
+</script>
 <script>/* app.js — SpicyTerminal Web UI — Instant Conversion & AI Self-Learner
    Features:
    - Bounded screenshot OCR: lazy-loaded worker path plus a no-hang fallback
@@ -14326,6 +14533,65 @@ if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) 
 });
 /* ABOUT:END */
 
+/* SEATMAP_GATE:BEGIN */
+/*
+ * Seat Map is sealed while it is still being finished. The status-row link is
+ * dimmed and only opens on the tenth click — an annoyance for anyone who
+ * stumbles onto it, and a clear "not public yet" sign, nothing more. It is not
+ * a password and it is not security; the honest description of this lock lives
+ * in seatmap_gate.js.
+ *
+ * The knock itself lives in seatmap_gate.js (window.SpicySeatMapGate) because
+ * two places must agree on it: this link, and the /seatmap page, which checks
+ * the same count before it draws anything (a URL that opens the map anyway is
+ * not a gate). The count is kept in sessionStorage, so it survives a reload in
+ * this tab and a fresh tab starts over.
+ */
+function seatMapGate() {
+  return (window.SpicySeatMapGate && typeof window.SpicySeatMapGate.isUnlocked === "function")
+    ? window.SpicySeatMapGate
+    : null;
+}
+/* Paint the link the way the gate currently stands: dimmed while sealed,
+   ordinary once the tenth click has landed (so coming back from /seatmap
+   doesn't re-dim a door you already opened). */
+function paintSeatMapLink() {
+  var link = $("btnSeatMap");
+  if (!link) return;
+  var gate = seatMapGate();
+  var open = !gate || gate.isUnlocked();
+  var cls = link.classList;
+  if (cls && cls.add && cls.remove) {
+    /* add/remove rather than toggle(name, force): the same paint runs in the
+       headless test sandboxes, whose classList has no toggle. */
+    if (open) cls.add("is-unlocked"); else cls.remove("is-unlocked");
+  }
+  var title = open
+    ? "Seat map for the flight you converted — real aircraft type and layout tier, simulated seat statuses (no airline inventory is connected)."
+    : "Seat Map is sealed while it is being finished. Click it ten times to open it — this tab only, no account and no password.";
+  if (link.setAttribute) link.setAttribute("title", title);
+  else link.title = title;
+}
+function seatMapKnock(event) {
+  var gate = seatMapGate();
+  if (!gate) return;                     /* no gate shipped: the plain link wins */
+  if (gate.isUnlocked()) return;         /* ordinary click, ordinary navigation */
+  if (event && event.preventDefault) event.preventDefault();
+  var result = gate.knock();
+  if (!result.unlocked) {
+    setStatus("SEAT MAP LOCKED — " + result.remaining + " MORE CLICK" + (result.remaining === 1 ? "" : "S") +
+              " (" + result.clicks + "/" + gate.CLICKS_REQUIRED + ")", true);
+    return;
+  }
+  paintSeatMapLink();
+  setStatus("SEAT MAP UNLOCKED — OPENING IT");
+  var link = $("btnSeatMap");
+  window.location.assign(link && link.href ? link.href : "/seatmap");
+}
+if ($("btnSeatMap")) $("btnSeatMap").addEventListener("click", seatMapKnock);
+paintSeatMapLink();
+/* SEATMAP_GATE:END */
+
 /* SEATMAP_ROUTE:BEGIN */
 /*
  * The Seat Map reads the flight the user just converted. The OUTPUT pane is
@@ -14334,10 +14600,12 @@ if ($("aboutModal")) $("aboutModal").addEventListener("click", function (event) 
  * page re-parses it with the real engine (window.SpicyEngine). The seat map
  * therefore cannot disagree with the itinerary: it is the same text.
  *
- * The seat map is also openable from the status row on an ordinary click:
- * its flight data is real, and what is simulated (seat status) says so on the
+ * The seat map is reached through the status-row link, which is sealed behind
+ * the ten-click gate in SEATMAP_GATE while the page is being finished: its
+ * flight data is real, and what is simulated (seat status) says so on the
  * page. Clearing the input clears the stored route.
  */
+
 var SEATMAP_ROUTE_KEY = "spicy_seatmap_route";
 function saveSeatMapRoute(text) {
   try {
@@ -14583,11 +14851,14 @@ try {
 // Share the single inlined wordmark with the welcome card instead of embedding
 // the same ~300KB base64 twice in the static page.
 try {
-  var _wmH = $("wordmarkHeader"), _wmW = $("wordmarkWelcome"), _wmA = $("wordmarkAbout");
+  var _wmH = $("wordmarkHeader"), _wmW = $("wordmarkWelcome"), _wmA = $("wordmarkAbout"), _wmS = $("wordmarkSeatMap");
   var _wmSrc = _wmH ? (_wmH.getAttribute("src") || _wmH.src) : "";
   if (_wmW && !_wmW.getAttribute("src")) _wmW.setAttribute("src", _wmSrc);
   // Same trick for the About dialog: the wordmark is one base64 blob, shared.
   if (_wmA && !_wmA.getAttribute("src")) _wmA.setAttribute("src", _wmSrc);
+  // ...and a fourth time for the Seat Map masthead, so the route reads as the
+  // same terminal instead of a different product wearing a different hat.
+  if (_wmS && !_wmS.getAttribute("src")) _wmS.setAttribute("src", _wmSrc);
 } catch (e) {}
 
 })();
@@ -16113,7 +16384,7 @@ try {
     if (!panel || !action) return;
     var seat = state.selectedSeatId ? state.seatsById[state.selectedSeatId] : null;
     if (!seat) {
-      panel.innerHTML = '<p class="seatmap-empty-detail">Choose a seat to inspect its sample status and layout features.</p>';
+      panel.innerHTML = '<p class="seatmap-empty-detail">Click a seat. I will tell you what it is, what it is not, and nothing at all about who is sitting in it.</p>';
       action.disabled = true;
       action.textContent = "SELECT A SAMPLE SEAT";
       return;
@@ -16448,11 +16719,55 @@ try {
     return copied ? Promise.resolve() : Promise.reject(new Error("Clipboard access is unavailable."));
   }
 
+  /* The Seat Map is sealed while it is being finished. The gate is checked
+     here and not only on the link, because a URL that opens the map anyway
+     would make the ten-click knock decorative. Failing closed is deliberate:
+     if the gate module is missing from the page, the map stays locked. */
+  function gate() {
+    return (root && root.SpicySeatMapGate && typeof root.SpicySeatMapGate.isUnlocked === "function")
+      ? root.SpicySeatMapGate
+      : null;
+  }
+
+  /** Draw the "sealed" card instead of the map, and hide every control that
+      would otherwise hand the page over. */
+  function lockSeatMapPage(doc) {
+    var page = doc.getElementById("seatmapPage");
+    var lock = doc.getElementById("seatmapLock");
+    if (!page || !lock) return;
+    doc.body.classList.add("seatmap-active");
+    page.classList.remove("hidden");
+    lock.classList.remove("hidden");
+
+    var content = doc.getElementById("seatmapContent");
+    if (content) {
+      content.classList.add("hidden");
+      content.setAttribute("aria-hidden", "true");
+      if ("inert" in content) content.inert = true;
+    }
+    var notice = doc.getElementById("seatmapNotice");
+    if (notice) notice.classList.add("hidden");
+    var summary = doc.getElementById("seatmapSummaryDialog");
+    if (summary) summary.classList.add("hidden");
+
+    var count = doc.getElementById("seatmapLockCount");
+    var api = gate();
+    if (count && api) {
+      var heard = api.CLICKS_REQUIRED - api.clicksLeft();
+      count.textContent = api.isUnlocked() ? (api.CLICKS_REQUIRED + " / " + api.CLICKS_REQUIRED)
+                                           : (heard + " / " + api.CLICKS_REQUIRED);
+    }
+    var back = doc.getElementById("seatmapLockBack");
+    if (back && back.focus) back.focus();
+  }
+
   /** Bind the /seatmap preview page and all of its local demo interactions. */
   function initializeSeatMapPage(doc) {
     if (!root.location || root.location.pathname.replace(/\/+$/, "") !== "/seatmap") return;
     var page = doc.getElementById("seatmapPage");
     if (!page) return;
+    var api = gate();
+    if (!api || !api.isUnlocked()) { lockSeatMapPage(doc); return; }
     doc.body.classList.add("seatmap-active");
     page.classList.remove("hidden");
 
