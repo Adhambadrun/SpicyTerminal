@@ -242,4 +242,74 @@ test("no variant is ever presented as an airline's verified configuration", () =
   });
 });
 
+/* ---------------------------------------------------------------------------
+ * 2026-10-12 additions: the three types that were missing, the schema fields
+ * the renderer reads (columns, decks), and the provenance badge text.
+ * ------------------------------------------------------------------------- */
+
+test("the three newly registered types are real, complete and drawable", () => {
+  ["35K", "76W", "7M9"].forEach(code => {
+    const layout = Layouts.TYPE_LAYOUTS[code];
+    assert(layout, code + " must be in the registry");
+    assert.deepStrictEqual(Layouts.layoutProblems(layout, code), [], code + " has structural problems");
+    assert(layout.cabins.length >= 1, code + " has at least one cabin");
+  });
+  /* 35K is the code carriers print for the aircraft this registry already had
+     as 351: same type, same cross-section, so they must not disagree. */
+  assert.strictEqual(Layouts.TYPE_LAYOUTS["35K"].icaoCode, Layouts.TYPE_LAYOUTS["351"].icaoCode);
+  assert.strictEqual(Layouts.TYPE_LAYOUTS["35K"].seatCount, Layouts.TYPE_LAYOUTS["351"].seatCount);
+  assert.strictEqual(Layouts.TYPE_LAYOUTS["35K"].columns, Layouts.TYPE_LAYOUTS["351"].columns);
+});
+
+test("every layout states its cross-section width and its decks", () => {
+  Object.keys(Layouts.TYPE_LAYOUTS).forEach(code => {
+    const layout = Layouts.TYPE_LAYOUTS[code];
+    const widest = layout.cabins.reduce((best, cabin) =>
+      Math.max(best, cabin.groups.reduce((sum, group) => sum + group.length, 0)), 0);
+    assert.strictEqual(layout.columns, widest, code + " columns must be the widest cabin");
+    assert(Array.isArray(layout.decks) && layout.decks.length >= 1, code + " needs at least a main deck");
+    assert.strictEqual(layout.decks[0].name, "Main deck", code + " starts on the main deck");
+    const covered = new Set();
+    layout.decks.forEach(deck => deck.cabins.forEach(index => covered.add(index)));
+    assert.strictEqual(covered.size, layout.cabins.length, code + " must place every cabin on a deck");
+    /* Seat letters are unique inside one row, on every deck. */
+    layout.cabins.forEach(cabin => {
+      const letters = new Set();
+      cabin.groups.forEach(group => group.forEach(letter => {
+        assert(!letters.has(letter), code + " repeats seat letter " + letter + " in one row");
+        letters.add(letter);
+      }));
+    });
+  });
+});
+
+test("a double-decker says which cabins are upstairs", () => {
+  ["388", "744", "748"].forEach(code => {
+    const layout = Layouts.TYPE_LAYOUTS[code];
+    assert.strictEqual(layout.decks.length, 2, code + " is a double-decker and must show two decks");
+    const upper = layout.decks[1];
+    assert.strictEqual(upper.name, "Upper deck");
+    assert(upper.cabins.length >= 1, code + " upper deck must hold at least one cabin");
+    upper.cabins.forEach(index => {
+      assert.strictEqual(layout.cabins[index].deck, 1, code + " upper-deck cabin must be flagged");
+      assert(/upper deck/i.test(layout.cabins[index].name), code + " upper-deck cabin must say so in its name");
+    });
+  });
+});
+
+test("a type reference is labelled GENERIC and never borrows an airline's authority", () => {
+  Object.keys(Layouts.TYPE_LAYOUTS).forEach(code => {
+    const provenance = Layouts.provenanceOf(code, "XX");
+    assert.strictEqual(provenance.confidence, "GENERIC", code + " type references are GENERIC");
+    assert.strictEqual(provenance.sourceUrl, null, code + " must not cite a source it does not have");
+    assert(provenance.note && /not the airline|not an airline/i.test(provenance.note),
+      code + " must say in its note that it is not the airline's own configuration");
+    assert.strictEqual(Layouts.confidenceLabel("GENERIC"), "GENERIC LAYOUT — not airline verified");
+  });
+  assert.strictEqual(Layouts.confidenceLabel("VERIFIED"), "VERIFIED LAYOUT");
+  assert(/UNVERIFIED/.test(Layouts.confidenceLabel("UNVERIFIED")));
+  assert.strictEqual(Layouts.provenanceOf("ZZZ", "XX").confidence, "UNVERIFIED");
+});
+
 console.log("\nLayout registry checks: " + checks + " passed.");
+

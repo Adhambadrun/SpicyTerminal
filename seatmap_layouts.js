@@ -67,10 +67,11 @@
   }
 
   /** Build one cabin in the shape the seat-map renderer consumes. */
-  function cab(code, name, from, to, groups, exitRows, pitch, width, features) {
+  function cab(code, name, from, to, groups, exitRows, pitch, width, features, deck) {
     return {
       code: code,
       name: name,
+      deck: deck || 0,                 /* 0 = main deck; 1 = upper deck (A380, 747) */
       from: from,
       to: to,
       groups: groups,
@@ -83,6 +84,23 @@
 
   /** Build one type-reference layout. */
   function lay(spec) {
+    var cabins = spec.cabins || [];
+    /* The tube is as wide as the widest cabin that sits on it: 3-3 for a 737,
+       3-4-3 for an A380 main deck. Keep it derived, never typed twice. */
+    var columns = cabins.reduce(function (widest, cabin) {
+      var abreast = (cabin.groups || []).reduce(function (sum, group) { return sum + group.length; }, 0);
+      return Math.max(widest, abreast);
+    }, 0);
+    /* Decks are an index over the flat cabin list, so every consumer that only
+       knows cabins keeps working: main deck first, upper deck second. */
+    var decks = [];
+    cabins.forEach(function (cabin, index) {
+      var name = (cabin.deck || 0) === 0 ? "Main deck" : "Upper deck";
+      var deck = null;
+      for (var i = 0; i < decks.length; i++) if (decks[i].name === name) deck = decks[i];
+      if (!deck) { deck = { name: name, index: decks.length, cabins: [] }; decks.push(deck); }
+      deck.cabins.push(index);
+    });
     return {
       name: spec.name,
       iataCode: spec.iata || null,
@@ -92,10 +110,25 @@
       category: spec.category,
       seatCount: spec.seatCount,
       configLabel: spec.configLabel,
+      columns: columns,
+      decks: decks,
       wingStartRow: spec.wingStartRow,
       wingEndRow: spec.wingEndRow,
       facilities: spec.facilities || ["GALLEY", "LAVATORY", "EXIT"],
-      cabins: spec.cabins
+      /* Provenance is part of the layout, not decoration. A type reference is
+         GENERIC by definition: it follows the aircraft, not the airline, so it
+         carries no sourceUrl — there is no airline page that could back it —
+         and says so in the note instead of borrowing someone else's authority.
+         A verified airline configuration is added to AIRLINE_LAYOUTS with its
+         own sourceUrl + verifiedOn and wins over this entry. */
+      provenance: spec.provenance || {
+        confidence: "GENERIC",
+        sourceName: "SpicyTerminal type reference",
+        sourceUrl: null,
+        verifiedOn: LAYOUT_UPDATED,
+        note: "Cabin structure follows the aircraft type, not the airline's own configuration. The operating carrier's seat map is the only verified source."
+      },
+      cabins: cabins
     };
   }
 
@@ -391,7 +424,7 @@
       cabins: [
         cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 22, ["LIE-FLAT", "POWER"]),
         cab("business", "Business", 3, 8, g(2, 2, 2), [], 45, 21, ["LIE-FLAT", "POWER"]),
-        cab("premium_economy", "Premium Economy · Upper Deck", 9, 13, g(2, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("premium_economy", "Premium Economy · Upper Deck", 9, 13, g(2, 2), [], 38, 19, ["EXTRA LEGROOM"], 1),
         cab("economy", "Economy · Main Deck", 20, 48, g(3, 4, 3), [34, 35], 32, 17, ["STANDARD LEGROOM"])
       ]
     }),
@@ -402,7 +435,7 @@
       cabins: [
         cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 22, ["LIE-FLAT", "POWER"]),
         cab("business", "Business", 3, 9, g(2, 2, 2), [], 45, 21, ["LIE-FLAT", "POWER"]),
-        cab("premium_economy", "Premium Economy · Upper Deck", 10, 14, g(2, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("premium_economy", "Premium Economy · Upper Deck", 10, 14, g(2, 2), [], 38, 19, ["EXTRA LEGROOM"], 1),
         cab("economy", "Economy · Main Deck", 21, 50, g(3, 4, 3), [36, 37], 32, 17, ["STANDARD LEGROOM"])
       ]
     }),
@@ -412,7 +445,7 @@
       wingStartRow: 26, wingEndRow: 44,
       cabins: [
         cab("first", "First · Main Deck", 1, 4, g(1, 2, 1), [], 81, 23, ["LIE-FLAT", "SUITE", "POWER"]),
-        cab("business", "Business · Upper Deck", 5, 19, g(1, 2, 1), [], 48, 22, ["LIE-FLAT", "POWER"]),
+        cab("business", "Business · Upper Deck", 5, 19, g(1, 2, 1), [], 48, 22, ["LIE-FLAT", "POWER"], 1),
         cab("premium_economy", "Premium Economy · Main Deck", 20, 25, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
         cab("economy", "Economy · Main Deck", 26, 62, g(3, 4, 3), [43, 44], 32, 18, ["STANDARD LEGROOM"])
       ]
@@ -492,6 +525,37 @@
       wingStartRow: 9, wingEndRow: 14,
       cabins: [
         cab("economy", "Economy", 1, 20, g(2, 2), [10, 11], 31, 17, ["STANDARD LEGROOM"])
+      ]
+    }),
+    /* 35K is the other code carriers print for the A350-1000 (351 is the type
+       designator). It is the same aircraft, so it repeats 351's reference
+       numbers rather than inventing a second configuration. */
+    "35K": lay({
+      name: "Airbus A350-1000", icao: "A35K", family: "A350", manufacturer: "Airbus", category: "widebody",
+      seatCount: 350, configLabel: "two-class reference · 44 Business / 306 Economy (3-3-3)",
+      wingStartRow: 18, wingEndRow: 28,
+      cabins: [
+        cab("business", "Business", 1, 11, g(1, 2, 1), [], 46, 21, ["LIE-FLAT", "POWER"]),
+        cab("economy", "Economy", 12, 45, g(3, 3, 3), [25, 26], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "7M9": lay({
+      name: "Boeing 737 MAX 9", icao: "B39M", family: "737 MAX", manufacturer: "Boeing", category: "narrowbody",
+      seatCount: 178, configLabel: "two-class reference · 16 First / 162 Economy",
+      wingStartRow: 20, wingEndRow: 28,
+      cabins: [
+        cab("first", "First", 1, 4, g(2, 2), [], 38, 21, ["RECLINE", "POWER"]),
+        cab("economy", "Economy", 5, 31, g(3, 3), [16, 17], 31, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "76W": lay({
+      name: "Boeing 767-300ER (winglets)", icao: "B763", family: "767", manufacturer: "Boeing", category: "widebody",
+      seatCount: 275, configLabel: "three-class reference · 30 Business / 21 Premium Economy / 224 Economy (2-2-2 / 2-3-2)",
+      wingStartRow: 18, wingEndRow: 26,
+      cabins: [
+        cab("business", "Business", 1, 5, g(2, 2, 2), [], 44, 20, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 6, 8, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 9, 40, g(2, 3, 2), [20, 21], 32, 18, ["STANDARD LEGROOM"])
       ]
     })
   };
@@ -665,7 +729,30 @@
         cab("premium_economy", "Premium Economy", 14, 19, g(2, 4, 2), [], 38, 19, ["EXTRA LEGROOM"]),
         cab("economy", "Economy", 20, 45, g(3, 3, 3), [25, 26], 32, 17, ["STANDARD LEGROOM", "POWER"])
       ]
-    })
+    }),
+    "76W": lay({
+      name: "Boeing 767-300ER (winglets)", icao: "B763", family: "767", manufacturer: "Boeing", category: "widebody",
+      seatCount: 267, configLabel: "four-class reference · 6 First / 30 Business / 21 Premium Economy / 210 Economy (1-1-1 / 2-2-2 / 2-3-2)",
+      wingStartRow: 17, wingEndRow: 25,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 1, 1), [], 79, 22, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 7, g(2, 2, 2), [], 44, 20, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 8, 10, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 11, 40, g(2, 3, 2), [21, 22], 32, 18, ["STANDARD LEGROOM"])
+      ]
+    }),
+    "35K": lay({
+      name: "Airbus A350-1000", icao: "A35K", family: "A350", manufacturer: "Airbus", category: "widebody",
+      seatCount: 334, configLabel: "four-class reference · 8 First / 44 Business / 48 Premium Economy / 234 Economy (3-3-3)",
+      wingStartRow: 18, wingEndRow: 28,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 23, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 13, g(1, 2, 1), [], 46, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 14, 19, g(2, 4, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 20, 45, g(3, 3, 3), [25, 26], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+
   };
 
   var CABIN_NAMES = { first: "First", business: "Business", premium_economy: "Premium Economy", economy: "Economy" };
@@ -850,11 +937,41 @@
     });
     (layout.cabins || []).forEach(function (cabin) {
       for (var row = cabin.from; row <= cabin.to; row++) {
-        var id = row + "|" + cabin.code;
-        if (seen[id]) problems.push(key + ": row " + row + " is claimed by two cabins");
+        /* Rows are per deck: an A380 prints row 20 twice, main deck and upper. */
+        var id = (cabin.deck || 0) + "|" + row + "|" + cabin.code;
+        if (seen[id]) problems.push(key + ": row " + row + " is claimed by two cabins on the same deck");
         seen[id] = 1;
       }
     });
+    /* The schema the seat map renders from: a cross-section width, at least one
+       deck, and a provenance block with one of the three honest confidences. */
+    var widest = 0;
+    (layout.cabins || []).forEach(function (cabin) {
+      var abreast = (cabin.groups || []).reduce(function (sum, group) { return sum + group.length; }, 0);
+      widest = Math.max(widest, abreast);
+    });
+    if (layout.columns != null && layout.columns !== widest) {
+      problems.push(key + ": columns " + layout.columns + " does not match the widest cabin (" + widest + ")");
+    }
+    if (layout.decks != null) {
+      var covered = {};
+      layout.decks.forEach(function (deck) {
+        (deck.cabins || []).forEach(function (index) { covered[index] = 1; });
+      });
+      (layout.cabins || []).forEach(function (cabin, index) {
+        if (!covered[index]) problems.push(key + ": cabin " + (cabin.code || index) + " belongs to no deck");
+      });
+    }
+    if (layout.provenance) {
+      var confidences = { VERIFIED: 1, GENERIC: 1, UNVERIFIED: 1 };
+      if (!confidences[layout.provenance.confidence]) problems.push(key + ": provenance confidence must be VERIFIED, GENERIC or UNVERIFIED");
+      if (layout.provenance.confidence === "VERIFIED" && !/^https?:\/\//.test(String(layout.provenance.sourceUrl || ""))) {
+        problems.push(key + ": a VERIFIED layout must carry its sourceUrl");
+      }
+      if (layout.provenance.confidence !== "VERIFIED" && !layout.provenance.note) {
+        problems.push(key + ": a non-verified layout must state in its note what it is not");
+      }
+    }
     if (layout.seatCount != null && layout.seatCount !== total) {
       problems.push(key + ": seatCount " + layout.seatCount + " does not match the " + total + " seats the cabins contain");
     }
@@ -862,6 +979,29 @@
       problems.push(key + ": wing rows are missing or inverted");
     }
     return problems;
+  }
+
+  /** The provenance block a layout is shown with, verified entry or not. */
+  function provenanceOf(key, airline) {
+    var carrier = normalizeAirline(airline);
+    for (var i = 0; i < AIRLINE_LAYOUTS.length; i++) {
+      var entry = AIRLINE_LAYOUTS[i];
+      if (normalizeAirline(entry.airline) === carrier && normalizeType(entry.iataType) === normalizeType(key)) {
+        return { confidence: "VERIFIED", sourceName: entry.sourceName, sourceUrl: entry.sourceUrl,
+          verifiedOn: entry.verifiedOn, note: entry.sourceNote || null };
+      }
+    }
+    var layout = TYPE_LAYOUTS[normalizeType(key)];
+    if (layout && layout.provenance) return layout.provenance;
+    return { confidence: "UNVERIFIED", sourceName: null, sourceUrl: null, verifiedOn: null,
+      note: "No layout on file for this type — the cabin is drawn as a plain cross-section only." };
+  }
+
+  /** The badge text that goes with a confidence, in the plainest words. */
+  function confidenceLabel(confidence) {
+    if (confidence === "VERIFIED") return "VERIFIED LAYOUT";
+    if (confidence === "GENERIC") return "GENERIC LAYOUT — not airline verified";
+    return "UNVERIFIED — no layout for this type";
   }
 
   /** Provenance rules for a verified airline entry. */
@@ -895,6 +1035,8 @@
     buildGenericLayout: buildGenericLayout,
     layoutProblems: layoutProblems,
     provenanceProblems: provenanceProblems,
+    provenanceOf: provenanceOf,
+    confidenceLabel: confidenceLabel,
     typeMeta: typeMeta
   };
 

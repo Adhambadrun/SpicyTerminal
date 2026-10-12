@@ -11,8 +11,11 @@ Repo layout:
   spicy_data.js / spicy_engine.js / spicy_links.js / app.js -> inlined scripts
   seatmap_layouts.js / seatmap.js  -> inlined Seat Map registry + viewer
   seatmap_flights.js              -> inlined Seat Map flight lookup table
-  seatmap_gate.js                -> inlined Seat Map lock (ten-click gate)
   seatmap.css                    -> inlined Seat Map route styles
+
+seatmap_gate.js is deliberately NOT inlined: the ten-click lock is retired and
+the module stays in the repository unused, so a shipped page cannot re-seal the
+Seat Map by accident.
 
 Run from anywhere:  python3 build_web.py
 """
@@ -67,8 +70,8 @@ ocrad = (SRC / "ocrad.js").read_text(encoding="utf-8") if (SRC / "ocrad.js").exi
 data = (SRC / "spicy_data.js").read_text(encoding="utf-8")
 engine = (SRC / "spicy_engine.js").read_text(encoding="utf-8")
 links = (SRC / "spicy_links.js").read_text(encoding="utf-8")
+live = (SRC / "spicy_live_free.js").read_text(encoding="utf-8")
 app = (SRC / "app.js").read_text(encoding="utf-8")
-seatmap_gate_js = (SRC / "seatmap_gate.js").read_text(encoding="utf-8")
 seatmap_css = (SRC / "seatmap.css").read_text(encoding="utf-8")
 seatmap_layouts_js = (SRC / "seatmap_layouts.js").read_text(encoding="utf-8")
 seatmap_flights_js = (SRC / "seatmap_flights.js").read_text(encoding="utf-8")
@@ -79,8 +82,8 @@ html = (tpl.replace("__LOGO_MARK_B64__", mark)
            .replace("__SPICY_DATA__", data)
            .replace("__SPICY_ENGINE__", engine)
            .replace("__SPICY_LINKS__", links)
+           .replace("__SPICY_LIVE_FREE__", live)
            .replace("__APP_JS__", app)
-           .replace("__SEATMAP_GATE__", seatmap_gate_js)
            .replace("__SEATMAP_CSS__", seatmap_css)
            .replace("__SEATMAP_FLIGHTS__", seatmap_flights_js)
            .replace("__SEATMAP_LAYOUTS__", seatmap_layouts_js)

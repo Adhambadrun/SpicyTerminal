@@ -1,26 +1,25 @@
-/* seatmap_gate.js — the Seat Map's owner-only knock.
+/* seatmap_gate.js — a ten-click counter. RETIRED: nothing ships it.
  *
- * While the Seat Map is still being built it stays sealed: the status-row
- * link is dimmed and only opens on the tenth click, and the /seatmap URL
- * itself refuses to render the map until the same knock has been heard in
- * this tab. One small module, deliberately, because two places have to
- * agree on the lock — the link in app.js and the page in seatmap.js — and
- * a door they disagree about is not a door.
+ * HISTORY. While the Seat Map was still being built it stayed sealed: the
+ * status-row link was dimmed and only opened on the tenth click, and the
+ * /seatmap URL checked the same count before drawing anything. Two places had
+ * to agree on the lock — the link in app.js and the page in seatmap.js — which
+ * is why the counter lived in one small module.
  *
- * What this is and is not:
- *   - it is a local, in-tab annoyance for anyone who stumbles onto the link
- *     or the URL by accident. Ten clicks is not a password and it is not
- *     security; it is a "this is not finished" sign with a handle on it.
- *   - it stores a click count and a flag in sessionStorage: the same tab
- *     keeps the unlock across reloads, a new tab locks it again, and no
- *     data leaves the browser. There is no server, no account and no key.
- *   - when storage is blocked or full the gate falls back to memory, so a
- *     locked page still locks and an unlocked session still works; only the
- *     "survives a reload" part is lost.
+ * TODAY the Seat Map is open to everyone. app.js paints the link as an
+ * ordinary link, seatmap.js draws the map on arrival, and build_web.py does
+ * not inline this file, so a shipped page cannot re-seal the map by accident
+ * and the text "SEAT MAP LOCKED" appears nowhere in the app.
  *
- * The lock is temporary by design. To open the Seat Map to everyone, delete
- * the SEATMAP_GATE block in app.js and the gate check in seatmap.js; nothing
- * else in the app depends on this file.
+ * The module is kept because it still works and it is still tested
+ * (test_seatmap_gate.js executes it): if a private door is ever wanted again,
+ * wire these two call sites and inline it in build_web.py. Until then it is
+ * dead code in the repository, which is a deliberate choice, not an oversight.
+ *
+ * It is a local, in-tab annoyance, never a security control: it stores a click
+ * count and a flag in sessionStorage, keeps the unlock across reloads in the
+ * same tab, forgets in a new tab, falls back to memory when storage is blocked
+ * or full, and treats a damaged flag as locked rather than open.
  */
 (function (root) {
   "use strict";

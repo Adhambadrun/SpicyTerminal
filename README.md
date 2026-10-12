@@ -139,11 +139,13 @@ files and archives are never shipped.
 | `app.js` | UI logic (offline image parser, auto-convert, AI mistake detector & self-learning) |
 | `seatmap_layouts.js` | aircraft cabin layouts for the Seat Map: tiered (airline-verified / type reference / generic), versioned, with an integrity + provenance suite; inlined by the build |
 | `seatmap.js` / `seatmap.css` | the Seat Map page: reads the converted itinerary, resolves the layout tier, marks the ticketed cabin, and keeps seat statuses visibly simulated; inlined by the build |
-| `seatmap_gate.js` | the Seat Map's ten-click lock (dimmed link + `/seatmap` honouring the same count); inlined by the build |
+| `seatmap_gate.js` | retired: the Seat Map is unlocked for everyone (no click counter, no dimmed link, `/seatmap` draws immediately). The module stays in the repo, unenforced, and nothing in the app imports it |
 | `seatmap_flights.js` | the Seat Map's flight lookup: a local table of published flight numbers + the layered fallbacks (converter's own table → route → airline) behind the `BA117` search box; inlined by the build |
 | `spicy_engine.js` | the conversion engine |
 | `spicy_links.js` | booking checkout link engine (AA / DL / AS / UA / BA), ported from the Spicy Link Generator; feeds the BOOKING LINK button |
-| `spicy_data.js` | airports / airlines / aircraft data |
+| `spicy_live_free.js` | free live verification: keyless-first providers (OpenSky, Open-Meteo, Frankfurter, FlightSeatMap's free MCP, the local ICAO CO2 formula and the shipped visa table) plus optional BYOK free keys (AviationStack, AeroDataBox, Travelpayouts); 10-minute cache, token buckets, 800 ms debounce, provenance on every badge; inlined by the build |
+| `spicy_data.js` | airports / airlines / aircraft data, merged from free open data (see below) |
+| `update_spicy_data_free.py` | the free-data merge into `spicy_data.js`: OurAirports (Unlicense) + OpenFlights (ODbL) + Passport Index (MIT) + mledoze/countries (ODbL) — `python3 update_spicy_data_free.py` |
 | `index_template.html` | page template |
 | `wordmark_alpha.png` | transparent-background wordmark (header + welcome) |
 | `build_web.py` | assembles the self-contained app pages from the sources above — `python3 build_web.py` |
@@ -171,11 +173,52 @@ files and archives are never shipped.
 | `test_ai_fix_label.js` | the AI FIX label is on the button and in every user-facing hint, with no legacy name left in the chrome, and the id stays `btnAi` — `node test_ai_fix_label.js` |
 | `test_jro_kilimanjaro.js` | TK AMS–IST–JRO–IST–AMS GDS re-paste regression (2026-09-10 report): Kilimanjaro `JRO` overlay, glued `¥1` marker, `7M8` equipment, and unknown-code numbered table rows surviving instead of being mangled — `node test_jro_kilimanjaro.js` |
 | `test_weekly_report.js` | weekly-report counters: week rollover, what counts as a conversion, blocked pop-up — `node test_weekly_report.js` |
+| `test_live_free.js` | the free live layer with a stubbed network: keyless providers work with nothing configured, a keyed provider without a key makes no request, a user's key is stored locally and kept out of URLs, a cache hit skips the network, 429 locks the bucket with the offline-friendly message, CORS/HTML/truncated-JSON/server-error/offline are handled, FlightSeatMap's free MCP is never called live availability, and identical inputs give identical badges — `node test_live_free.js` |
+| `test_month_airports.js` | the airport codes that are also something else (AUG/JAN/MAR/MAY/DEC/JUL/NOV months, HRS hours, JAL/PIA airline names, a clock glued to a code), pinned in both directions — `node test_month_airports.js` |
+
+## Free live verification ($0, no card, no account)
+
+The converter never needs the network: an itinerary converts offline in about 50 ms and the GDS
+block it prints is final. On top of that, `spicy_live_free.js` adds *badges* — one-line facts about
+the flight that a free provider can confirm — under the OUTPUT pane. Badges never block, never
+re-render the output, and a provider that fails produces a single honest line instead of an error.
+
+Two kinds of free provider, labelled differently everywhere they appear:
+
+| kind | providers | key | what it is |
+|---|---|---|---|
+| keyless | OpenSky Network (anonymous state vectors), Open-Meteo (weather), Frankfurter (ECB rates), FlightSeatMap's free hosted MCP (seat maps), the local ICAO-style CO2 estimate, the shipped visa table | none | works for an anonymous visitor |
+| BYOK | AviationStack free plan, AeroDataBox free tier, Travelpayouts | the user's own, typed in the app | stored in `localStorage`, sent straight from the browser to that provider, never to this app and never in a URL this app builds |
+
+Rules the module enforces:
+
+* every value carries its `provenance` string — `OPENSKY_LIVE`, `AVIATIONSTACK_FREE`,
+  `AERODATABOX_FREE`, `FLIGHTSEATMAP_FREE (hosted MCP, not live booking inventory)`,
+  `OPEN_METEO_FREE`, `FRANKFURTER_FREE`, `LOCAL_ICAO_CO2`, `VISA_TABLE_LOCAL`, `SIMULATED (deterministic hash)`;
+* responses are cached 10 minutes in memory and `localStorage`, calls are debounced 800 ms and
+  deduplicated, and each provider has a token bucket, so a free quota cannot be burned by pasting;
+* a 429 stops that provider for an hour with the exact line
+  “Free API limit reached — offline conversion still perfect, try in 1h”; a FlightSeatMap outage is
+  reported as “FlightSeatMap free unavailable (CORS) — showing verified local layout”;
+* availability is `SIMULATED` unless a live provider is configured, and none is configured by
+  default; selecting a seat reserves nothing and the page says so;
+* no paid endpoint, paid plan or paid feature is referenced anywhere in the code or the UI.
+
+## Free airport data
+
+`update_spicy_data_free.py` folds four free datasets into `spicy_data.js` without ever deleting or
+rewriting an entry the app already had: OurAirports (public domain) for names, coordinates, IATA
+codes and scheduled-service flags; OpenFlights (ODbL) for the IANA zone of each airport; the
+Passport Index dataset (MIT) for passport → destination requirements; mledoze/countries (ODbL) for
+country names and currencies. Every generated block carries its source, licence and the date it was
+fetched, and the script refuses to add an airport whose UTC offset and DST rule it cannot *prove*
+against the IANA database — an unknown airport is better than a wrong local time. Re-run it any
+time; it reports what changed and merges in place.
 
 ## Privacy
 
 No accounts, no cookies, no tracking. Text conversion and screenshot OCR run in the browser;
-those inputs are not uploaded by the local conversion path. A `BOOKING LINK` click explicitly
+those inputs are not uploaded by the local conversion path. The free badges described above contact the keyless providers named on the badge (Open-Meteo, Frankfurter, OpenSky) from your browser; no account, cookie or identifier is sent, and BYOK keys stay in this browser's `localStorage`. A `BOOKING LINK` click explicitly
 opens an external airline search or prefilled summary for the selected party of 1–9 passengers and shares
 the itinerary details with that site — flight numbers, routes and dates (American, Delta and
 Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United,

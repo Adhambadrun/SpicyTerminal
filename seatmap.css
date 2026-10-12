@@ -222,19 +222,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
    Shown instead of the map when this tab has not knocked ten times. It is the
    terminal's own voice: it says the door is shut, says why, and does not
    pretend a click counter is a lock. */
-.seatmap-lock{display:flex;align-items:center;justify-content:center;min-height:100%;padding:clamp(18px,6vh,64px) clamp(14px,3vw,28px);}
-.seatmap-lock.hidden{display:none!important}
-.seatmap-lock-card{width:min(620px,100%);border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0d141a,#080c11);padding:26px 26px 20px;box-shadow:0 30px 90px rgba(0,0,0,.72);position:relative;}
-.seatmap-lock-card::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:14px 14px 0 0;background:linear-gradient(90deg,transparent,rgba(226,87,75,.6) 32%,rgba(83,217,119,.45) 74%,transparent);opacity:.7;pointer-events:none;}
-.seatmap-lock-kicker{margin-bottom:12px;color:var(--red);font-size:9px;letter-spacing:1.8px;}
-.seatmap-lock-title{margin-bottom:12px;color:#e6f3ea;font-size:clamp(17px,2.4vw,22px);font-weight:500;letter-spacing:.75px;}
-.seatmap-lock-body p{margin-bottom:10px;color:#a8bdc7;font-size:11.5px;line-height:1.75;}
-.seatmap-lock-body p strong{color:#e6f3ea;font-weight:600;}
-.seatmap-lock-body p em{color:#9fb4bf;font-style:italic;}
-.seatmap-lock-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;margin-top:17px;}
-.seatmap-lock-actions a{display:inline-flex;align-items:center;min-height:34px;padding:7px 11px;border:1px solid #22313c;border-radius:4px;color:#9fb4bf;text-decoration:none;font-size:10px;letter-spacing:.65px;}
-.seatmap-lock-actions a:hover{border-color:#53d977;color:#dff3e4;background:#15231c;}
-@media(max-width:560px){.seatmap-wordmark-img{display:none}.seatmap-lock-card{padding:20px 16px 16px;border-radius:12px}}
+@media(max-width:560px){.seatmap-wordmark-img{display:none}}
 
 /* ---------- real-flight strip, leg switcher, and tier badges ----------
    The seat map now carries the converted itinerary's own flight. These styles

@@ -99,6 +99,16 @@ function dstActive(region, dt){  // dt={y,m,d}
   if(region==="NZ") return _cmpD(dt,_lastWeekday(dt.y,9,6))>=0 || _cmpD(dt,_nthWeekday(dt.y,4,6,1))<0;
   if(region==="SHSEP") return _cmpD(dt,_nthWeekday(dt.y,9,6,1))>=0 || _cmpD(dt,_nthWeekday(dt.y,4,6,1))<0;
   if(region==="EG") return _cmpD(_lastWeekday(dt.y,4,4),dt)<=0 && _cmpD(dt,_lastWeekday(dt.y,10,4))<0;
+  /* Israel starts on the Friday before the last Sunday of March and ends on
+     the last Sunday of October — a rule no other region here shares, and the
+     one airport table that needs it (TLV, HFA) is in update_spicy_data_free.py's
+     proof set: the generator refuses any zone whose rule disagrees with the
+     IANA database, so this branch is checked, not assumed. */
+  if(region==="IL"){
+    var ilEnd=_lastWeekday(dt.y,10,6), ilSunday=_lastWeekday(dt.y,3,6);
+    var ilStart={y:ilSunday.y,m:ilSunday.m,d:ilSunday.d-2};   // the Friday before
+    return _cmpD(ilStart,dt)<=0 && _cmpD(dt,ilEnd)<0;
+  }
   return false;
 }
 function utcOffset(code, dt){
@@ -358,7 +368,10 @@ var PAREN_CODE_RE = new RegExp("(?<=["+LATIN+"]\\s)\\(([A-Z]{3})\\)","g");
 var ROUTE_TO_SRC = "(?:[Tt][Oo]|[Ii][Nn][Tt][Oo])";
 var CITY_CHARS = "["+LATIN+" ,.'\\-]";
 var PAREN_ROUTE_HDR_RE = new RegExp("\\(([A-Z]{3})\\)\\s+"+ROUTE_TO_SRC+"\\s+"+CITY_CHARS+"{2,40}?\\(([A-Z]{3})\\)");
-var BARE_CODE_RE = /\b([A-Z]{3})\b/g;
+/* No leading \b: a clock can run straight into the code ("07:44DEC"), and the
+   boundary test is done in _codeBoundary, which accepts a real word boundary or
+   a HH:MM clock in front and nothing else. */
+var BARE_CODE_RE = /([A-Z]{3})\b/g;
 var AIRLINE_TOK = "(?:[A-Z][A-Z0-9]|[0-9][A-Z])";
 var _aliasAlt = Object.keys(AIRLINE_ALIASES).sort(function(a,b){return b.length-a.length;})
   .map(function(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}).join("|");
@@ -377,6 +390,19 @@ var CODE_NUM_RE = new RegExp("\\b("+"[A-Z][A-Z0-9]|[0-9][A-Z]"+")\\s{0,3}(\\d{1,
    class ("170 P") has no M, so real anchors survive this guard. */
 var MERIDIEM_AFTER_NUM_RE = /^[ \t]*[AP]\.?[ \t]*M\b/i;
 var TIME_UNIT_AFTER = /\s*(?::\d{2}|hrs?\b|hours?\b|mins?\b|minutes?\b|m\b|h\b)/i;
+/* The time-unit guard throws away anchors that are really durations ("AF 3 hrs").
+   Three of those unit words are also airports — HRS is Harrismith — so a unit
+   word that opens a route keeps its anchor: "UA 6447 HRS-DPS" is Harrismith to
+   Denpasar, not six thousand hours. */
+function _unitStartsRoute(rest, unitText){
+  var u=String(unitText).replace(/^\s+/,"").toUpperCase();
+  if(!/^[A-Z]{3}$/.test(u)||!AIRPORTS[u]) return false;
+  var after=rest.slice(String(unitText).length);
+  /* "HRS-DPS", "HRS DPS", "HRS to DPS" and "HRS → DPS" are all routes out of
+     Harrismith; a bare "2 hrs" stays a duration. */
+  return /^\s*(?:[-–—→>]{1,2}|[Tt][Oo]\b|[Ii][Nn][Tt][Oo]\b|[Vv][Ii][Aa]\b)\s*[A-Z]{3}\b/.test(after)
+      || /^\s+[A-Z]{3}(?![A-Za-z])/.test(after);
+}
 function _stripFltZeros(n){var v=parseInt(n,10);return v>0?String(v):n;}   // "AF 0003" -> "AF 3"
 /* Google Flights collapsed "next flight" summary card — junk times/dates/ghost flight:
    AF / Air France / 12:30 PM / Sep 16, 2026 / 6:45 PM / Sep 16, 2026 / 12h 15m / FCO to JFK / CDG */
@@ -390,23 +416,64 @@ var _cityAlts = Object.keys(CITY_ALIASES).sort(function(a,b){return b.length-a.l
   .map(function(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}).join("|");
 var CITY_ALT_RE = new RegExp("\\b("+_cityAlts+")\\b","g");
 
+/* Twelve IATA codes are also month abbreviations — AUG (Augusta), JAN (Jackson),
+   MAR (Maracaibo), DEC (Decatur), JUL (Juliaca), NOV (Novo Progresso), MAY,
+   APR, JUN, SEP, OCT, FEB — and every one of them is in the airport table, so a
+   row like "2 AUG to AVB on Dec 1" reads as "2 AUG" (the 2nd of August) unless
+   the month token is standing where an airport stands.  A "day MONTH" pair is
+   therefore not a date when the month token is followed by route glue, because
+   "AUG to AVB" is a route and nothing else.  Real date uses ("2 AUG 2026",
+   "26NOV DEB HQQ") keep their reading: what follows the month there is a year
+   or an airport, not the word "to". */
+var ROUTE_GLUE_RE = /^\s*(?:to\b|->|→|–|-|\|)/i;
+function monthIsRouteNotDate(region, month, at){
+  if(!AIRPORTS[month]) return false;                 // not an airport: always a month
+  return ROUTE_GLUE_RE.test(region.slice(at + month.length, at + month.length + 6));
+}
+
 function findDates(region){
-  var out=[];
+  var out=[], deferred=[];
   for(var idx=0;idx<DATE_RES.length;idx++){
     var rx=DATE_RES[idx]; rx.lastIndex=0; var m;
     while((m=rx.exec(region))){
-      var day,mon;
+      var day,mon,held=false;
       try{
-        if(idx===0){day=parseInt(m[1],10);mon=MONTH_MAP[m[2].toUpperCase()];}
-        else if(idx===1){day=parseInt(m[2],10);mon=MONTH_MAP[m[1].toUpperCase()];}
+        if(idx===0){
+          var monTok0=String(m[2]).toUpperCase();
+          /* A day followed by a month that is also an airport, with the word
+             "to" right behind it: this is a route, not a date — but only while
+             some other date is on offer for the same leg.  See below. */
+          if(monthIsRouteNotDate(region,monTok0,m.index+String(m[0]).toUpperCase().indexOf(monTok0))) held=true;
+          day=parseInt(m[1],10);mon=MONTH_MAP[monTok0];
+        }
+        else if(idx===1){
+          var monTok1=String(m[1]).toUpperCase();
+          if(monthIsRouteNotDate(region,monTok1,m.index)) held=true;
+          /* "JUL 2:59 AM" is a landing at Juliaca, not the 2nd of July: a day
+             number with a clock behind it is a clock. */
+          var dayOff=m[0].indexOf(m[2],String(m[1]).length);
+          var tail=region.slice(m.index+dayOff+m[2].length,m.index+dayOff+m[2].length+4);
+          if(/^:\d{2}/.test(tail)) continue;
+          day=parseInt(m[2],10);mon=MONTH_MAP[monTok1];
+        }
         else if(idx===2){day=parseInt(m[3],10);mon=parseInt(m[2],10);}
         else{var a=parseInt(m[1],10),b=parseInt(m[2],10);
           if(a>12){day=a;mon=b;}else{day=b;mon=a;}}
-        if(day>=1&&day<=31&&mon>=1&&mon<=12)
-          out.push({pos:m.index,day:day,mon:mon,prio:idx});
+        if(day>=1&&day<=31&&mon>=1&&mon<=12){
+          var cand={pos:m.index,day:day,mon:mon,prio:idx};
+          if(held) deferred.push(cand); else out.push(cand);
+        }
       }catch(e){}
     }
   }
+  /* The held-back candidates are dates only when the leg has no other date to
+     use.  "2 AUG to AVB on Dec 1" is row 2 of a Google-Flights card — Augusta
+     to Al Baha on the 1st of December — and the later "Dec 1" is what makes the
+     first reading wrong; "15 DEC to JFK" has no second date, so the 15th of
+     December is the only honest reading of it.  Without this fallback a leg
+     would silently lose its date whenever its own origin airport happens to be
+     a month's name. */
+  if(!out.length && deferred.length) out.push(deferred[0]);
   out.sort(function(a,b){return a.pos-b.pos||a.prio-b.prio;});
   var seen={},clean=[];
   out.forEach(function(d){var k=d.day+"-"+d.mon;if(!seen[k]){seen[k]=1;clean.push(d);}});
@@ -508,10 +575,70 @@ function foldDiacritics(s){
 }
 
 /* ---------------- airport mentions / headers ---------------- */
+/* Twelve IATA codes are month abbreviations (AUG Augusta, JAN Jackson,
+   MAR Maracaibo, MAY Clarence Bain, DEC Decatur, JUL Juliaca, NOV Novo
+   Progresso …) and all of them are in the airport table.  Where such a token
+   is doing a month's work it must not also be read as an airport, or
+   "AA 100 DEC 2 JFK to LHR" anchors a route on Decatur: the leg comes out
+   DEC→JFK with the real outbound route thrown away.
+
+   A month token is doing a month's work when a day number touches it
+   ("2 DEC", "DEC 2", "26NOV") and it is NOT standing in route position
+   ("2 AUG to AVB" is row 2, Augusta to Al Baha — the "to" decides). */
+var _MONTH_WORD_RE=/^(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/;
+function _monthDoingDateWork(region, code, at){
+  if(!_MONTH_WORD_RE.test(code)) return false;
+  var after=region.slice(at+3,at+9);
+  if(ROUTE_GLUE_RE.test(after)) return false;          // "DEC to JFK" is a route
+  /* "2 DEC" and "26NOV" are dates, but "23:32 AUG" is a clock followed by the
+     airport you land at: minutes are not a day number, so the digits only count
+     when nothing clock-shaped sits in front of them. */
+  var before=region.slice(Math.max(0,at-4),at);
+  if(/(?:^|[^\d:\.])(\d{1,2})[\s\-\.]?$/.test(before)) return true;
+  /* "DEC 2 JFK" is the 2nd of December.  "PPN to MAY 08DEC" is a route to
+     Clarence Bain with a date glued behind it, and the digits there belong to
+     the month that follows them (08DEC), not to the month before — so the day
+     only counts when no month token starts right after it. */
+  /* A day number is not a clock: "JUL 2:59 AM" is a landing at Juliaca, and
+     "DEC 2 JFK" is the second of December.  Digits followed by a colon (or by a
+     meridiem) are a time, so they say nothing about the month word. */
+  var md=/^\s*(\d{1,2})(?![\d:])(?![APap]\.?[Mm])/.exec(after);
+  if(md && !_MONTH_WORD_RE.test(after.slice(md[0].length,md[0].length+3).toUpperCase())) return true;
+  return false;
+}
+
+/* \b alone misses the common screenshot shape where a clock runs straight into
+   the airport it departs from ("07:44DEC to 16:51 CSK"): a digit in front of a
+   letter is not a word boundary, so the code went unread and the leg printed
+   with no origin.  A code that follows a HH:MM clock is a real mention; a code
+   glued to anything else still is not ("12DEC" is a date, not Decatur). */
+function _codeBoundary(region, at){
+  if(at===0) return true;
+  if(!/[A-Za-z0-9_]/.test(region.charAt(at-1))) return true;
+  return /\d{1,2}:\d{2}$/.test(region.slice(0,at));
+}
+
+/* "JAL 14" is Japan Airlines flight 14 before it is Jalapa, and "PIA 743" is
+   Pakistan International before it is Peoria: when the three-letter word is a
+   known airline name and a flight number follows it, the word names the
+   carrier.  A number that is really a clock ("JAL 1015P") does not count, so a
+   genuine airport mention survives. */
+function _airlineNameBeforeNumber(region, code, at){
+  var low=code.toLowerCase();
+  if(!AIRLINE_ALIASES[low] || code.length<3) return false;
+  var after=region.slice(at+code.length);
+  /* A clock is not a flight number: "Arrives: JAL 3:45 AM" lands at Jalapa,
+     while "JAL 14" is Japan Airlines flight 14. */
+  return /^\s*\d{1,4}(?![\d:])(?![A-Za-z])(?![APap]\.?[Mm])/.test(after);
+}
+
 function _airportMentions(region){
   var rl=foldDiacritics(region.toLowerCase()), raw=[], m;
   BARE_CODE_RE.lastIndex=0;
-  while((m=BARE_CODE_RE.exec(region))) if(AIRPORTS[m[1]]) raw.push([m.index,m[1],3]);
+  while((m=BARE_CODE_RE.exec(region)))
+    if(AIRPORTS[m[1]] && _codeBoundary(region,m.index)
+       && !_monthDoingDateWork(region,m[1],m.index)
+       && !_airlineNameBeforeNumber(region,m[1],m.index)) raw.push([m.index,m[1],3]);
   PAREN_CODE_RE.lastIndex=0;
   while((m=PAREN_CODE_RE.exec(region))){
     var dup=false;
@@ -626,6 +753,16 @@ function _codeCorroborated(code, text_l){
   }
   return false;
 }
+/* A token standing right after "to"/"into"/"via"/"from" is the place the leg is
+   going, not the carrier flying it.  Three-letter airline aliases that are also
+   airport codes (JAL is Jalapa and Japan Airlines' own name) otherwise spawn a
+   phantom leg out of a route: "DY 8076 BWH to JAL" printed an invented
+   "JL 14 14SEP BWH JAL" beside the real Norwegian row. */
+function _inRoutePosition(text, at){
+  var before=text.slice(Math.max(0,at-10),at);
+  return /(?:^|[\s(>\[])(?:to|into|via|from|-{1,2}>|→|–)\s*$/i.test(before);
+}
+
 function findAnchors(text){
   var text_l=text.toLowerCase(), cands=[], occupied=[], m;
   ALIAS_NUM_RE.lastIndex=0;
@@ -633,12 +770,16 @@ function findAnchors(text){
     var afterT=text.slice(m.index+m[0].length);
     if(TIME_UNIT_AFTER.test(afterT)){
       var tm=TIME_UNIT_AFTER.exec(afterT);
-      if(tm.index===0) continue;
+      if(tm.index===0 && !_unitStartsRoute(afterT,tm[0])) continue;
     }
     if(MERIDIEM_AFTER_NUM_RE.test(text.slice(m.index+m[0].length,m.index+m[0].length+6))) continue;
     if(_suppressedAnchor(text,m.index)) continue;
     var raw_alias=m[1].toLowerCase();
     var code=AIRLINE_ALIASES[raw_alias];
+    /* The token as written is what the reader sees: "PIA" resolves to Pakistan
+       International (PK) but is also Peoria, so the route check asks about the
+       typed word, not the carrier code it resolves to. */
+    if(AIRPORTS[raw_alias.toUpperCase()] && _inRoutePosition(text,m.index)) continue;
     var code_txt=(m[2]||"").toUpperCase();
     if(code_txt && AIRLINES[code_txt]) code=code_txt;
     if(!code) continue;
@@ -653,7 +794,7 @@ function findAnchors(text){
     if(!AIRLINES[code2]||overlaps(m.index,m.index+m[0].length)) continue;
     var afterU=text.slice(m.index+m[0].length);
     var tu=TIME_UNIT_AFTER.exec(afterU);
-    if(tu&&tu.index===0) continue;
+    if(tu&&tu.index===0&&!_unitStartsRoute(afterU,tu[0])) continue;
     if(MERIDIEM_AFTER_NUM_RE.test(afterU.slice(0,6))) continue;
     if(_suppressedAnchor(text,m.index)) continue;
     if(/^-\d/.test(text.slice(m.index+m[0].length,m.index+m[0].length+6))) continue;
