@@ -1,10 +1,9 @@
 "use strict";
 /* test_booking_link.js — a booking link is offered only for a complete,
  * certain itinerary on one bookable airline (AA / DL / AS / UA / BA, one or
- * several legs), and it opens that airline's own checkout handoff built by
- * the real spicy_links.js engine. The tests execute the real BOOKING_LINK
- * block from app.js and use the real SpicyEngine parser/renderer so no parser
- * stub can make an invalid row green.
+ * several legs), and it opens that airline's own checkout handoff with the
+ * selected adult count. Tests execute the real BOOKING_LINK block and use the
+ * real SpicyEngine parser/renderer so no parser stub can make an invalid row green.
  */
 const fs = require("fs");
 const path = require("path");
@@ -34,6 +33,10 @@ function assert(cond, message) {
 function section(title) { console.log("\n=== " + title + " ==="); }
 
 const NOW = new Date(2026, 9, 5, 12, 0, 0);
+class FixedDate extends Date {
+  constructor(...args) { if (args.length) super(...args); else super(NOW.getTime()); }
+  static now() { return NOW.getTime(); }
+}
 function makeOutput(carrier, date, flight, origin, destination, depTime, arrTime) {
   const row = "1 " + (carrier || "AS") + " " + (flight || "100") + " " + (date || "10OCT") + " " +
     (origin || "SEA") + " " + (destination || "LHR") + " " + (depTime || "730A") + " " +
@@ -64,6 +67,7 @@ function makeSandbox(withLinks) {
   const opened = [];
   const copied = [];
   const statuses = [];
+  const adultControl = { value: "1" };
   const out = { textContent: "" };
   const win = {
     SpicyEngine: Engine,
@@ -84,19 +88,19 @@ function makeSandbox(withLinks) {
     execCommand() { return true; }
   };
   const sandbox = {
-    Date, Array, String, Number, Math, RegExp, Object, parseInt, encodeURIComponent,
+    Date: FixedDate, Array, String, Number, Math, RegExp, Object, parseInt, encodeURIComponent,
     window: win,
     navigator: { clipboard: { writeText(value) { copied.push(value); return { catch() {} }; } } },
     document,
     out,
-    $: (id) => id === "btnBookingLink" ? button : null,
+    $: (id) => id === "btnBookingLink" ? button : id === "bookingAdults" ? adultControl : null,
     setStatus(message, warn) { statuses.push({ message, warn: !!warn }); },
     console
   };
   vm.createContext(sandbox);
   vm.runInContext("var bookingSourceWarnings = []; var bookingSourceDirty = false;", sandbox);
   vm.runInContext(BOOKING_SRC, sandbox, { filename: "booking-link.js" });
-  return { sandbox, button, opened, copied, statuses, out, win };
+  return { sandbox, button, opened, copied, statuses, out, win, adultControl };
 }
 
 section("1. the status-row booking button is safe and eligibility-gated");
@@ -104,22 +108,30 @@ const statusStart = TEMPLATE.indexOf('<div class="status">');
 const statusEnd = TEMPLATE.indexOf("</div>", statusStart);
 const status = TEMPLATE.slice(statusStart, statusEnd);
 const aboutAt = status.indexOf('id="btnAbout"');
+const adultsAt = status.indexOf('id="bookingAdults"');
 const bookingAt = status.indexOf('id="btnBookingLink"');
-assert(aboutAt >= 0 && bookingAt > aboutAt && status.indexOf('id="genKey"') > bookingAt,
-       "BOOKING LINK sits directly beside About, before the existing status actions");
+assert(aboutAt >= 0 && adultsAt > aboutAt && bookingAt > adultsAt && status.indexOf('id="genKey"') > bookingAt,
+       "the compact adult selector sits beside BOOKING LINK, before the existing status actions");
+assert(/<label class="booking-pax"[^>]*>[\s\S]*?<select id="bookingAdults" aria-label="Number of adult travelers for the booking link"[\s\S]*?<\/select>[\s\S]*?<\/label>\s*<button id="btnBookingLink"/.test(status) &&
+       (status.match(/<option value="[1-9]"/g) || []).length === 9,
+       "the adjacent accessible dropdown offers 1–9 adult travelers in a compact control");
+assert(/does not assign seats/.test(status),
+       "the control clearly says that traveler count is not seat assignment");
 assert(/id="btnBookingLink" class="linkbtn" type="button" disabled/.test(status),
        "the button is a quiet status link and starts disabled");
 assert(/#btnBookingLink\.booking-link-ready\{[^}]*color:#72f39b[^}]*box-shadow:[^}]*rgba\(83,217,119/.test(TEMPLATE),
        "an eligible booking link is visibly lit green");
 assert(/#btnBookingLink:disabled\{[^}]*cursor:not-allowed/.test(TEMPLATE),
        "ineligible booking links are muted and cannot be clicked");
+assert(/if \(\$\("bookingAdults"\)\) \$\("bookingAdults"\)\.addEventListener\("change"/.test(APP),
+       "changing the adult count refreshes the passenger-aware link disclosure");
 assert(/if \(\$\("btnBookingLink"\)\) \$\("btnBookingLink"\)\.addEventListener\("click", openBookingLink\)/.test(APP),
        "the real button invokes the link opener");
 assert(BUILT.includes('id="btnBookingLink"') && BUILT.includes("function openBookingLink()"),
        "the generated index contains both markup and behavior");
 assert(BUILT === BUILT_APP && embeddedBookingBlock(BUILT) === BOOKING_SRC && embeddedBookingBlock(BUILT_APP) === BOOKING_SRC,
        "index.html and app.html both contain the current source booking behavior");
-assert(/window\.SpicyLinks/.test(BUILT) && BUILT.indexOf("function linkFor(engineSegs, nowMs)") >= 0,
+assert(/window\.SpicyLinks/.test(BUILT) && BUILT.indexOf("function linkFor(engineSegs, nowMs, adultCount)") >= 0,
        "the built page inlines the spicy_links.js checkout engine ahead of the app");
 assert(/shares the itinerary details/i.test(TEMPLATE) &&
        /never books or purchases a ticket automatically/i.test(TEMPLATE),
@@ -202,6 +214,11 @@ assert(!alaskaUrl.searchParams.has("departureTime") && !alaskaUrl.searchParams.h
        "unverified time and cabin parameters are still not appended or claimed as prefilled");
 assert(asDetails.exact === true && asDetails.sharedFields.join(",").includes("flight numbers"),
        "the Alaska metadata reports the airline and the details it shares");
+const asThreeAdults = env.sandbox.bookingLinkFromOutput(sample.text, sample.warnings, NOW, 3);
+const alaskaThreeAdultsUrl = new URL(asThreeAdults.url);
+assert(asThreeAdults.eligible && asThreeAdults.adults === 3 && alaskaThreeAdultsUrl.searchParams.get("A") === "3" &&
+       Number(alaskaThreeAdultsUrl.searchParams.get("FARE")) === Number(alaskaUrl.searchParams.get("FARE")) * 3,
+       "Alaska receives the selected adult count and its disclosed estimated total scales with it");
 
 const aaOutput = makeOutput("AA", "10OCT", "123", "JFK", "LAX");
 const aaDetails = env.sandbox.bookingLinkFromOutput(aaOutput.text, aaOutput.warnings, NOW);
@@ -212,6 +229,9 @@ assert(aaUrl.hostname === "www.aa.com" && aaUrl.pathname === "/goto/metasearch",
        "the American link opens aa.com metasearch");
 assert(iten.includes("#AA|123|Y|JFK|LAX|") && iten.includes("#JFK|LAX|0|0|"),
        "the ITEN payload pins the exact American flight, route and departure stamp");
+const aaThreeAdults = env.sandbox.bookingLinkFromOutput(aaOutput.text, aaOutput.warnings, NOW, 3);
+assert(decodeURIComponent(new URL(aaThreeAdults.url).searchParams.get("ITEN") || "").includes("A3S0C0I0Y0L0"),
+       "American's ITEN payload carries the selected adult count");
 
 const dlOutput = makeOutput("DL", "10OCT", "456", "JFK", "LAX");
 const dlDetails = env.sandbox.bookingLinkFromOutput(dlOutput.text, dlOutput.warnings, NOW);
@@ -223,6 +243,11 @@ assert((dlUrl.searchParams.get("itinSegment[0]") || "").includes("JFK:LAX:DL:456
        "the Delta summary carries the exact flight");
 assert(/^\d+(\.\d+)?$/.test(dlUrl.searchParams.get("price") || ""),
        "the Delta summary's price parameter is a disclosed estimate");
+const dlThreeAdults = env.sandbox.bookingLinkFromOutput(dlOutput.text, dlOutput.warnings, NOW, 3);
+const dlThreeAdultsUrl = new URL(dlThreeAdults.url);
+assert(dlThreeAdultsUrl.searchParams.get("paxCount") === "3" &&
+       Number(dlThreeAdultsUrl.searchParams.get("price")) === Number(dlUrl.searchParams.get("price")) * 3,
+       "Delta receives the selected adult count and scales its disclosed estimate");
 
 const uaOutput = makeOutput("UA", "10OCT", "789", "SFO", "ORD");
 const uaDetails = env.sandbox.bookingLinkFromOutput(uaOutput.text, uaOutput.warnings, NOW);
@@ -232,6 +257,10 @@ assert(uaUrl.hostname === "www.united.com" && uaUrl.searchParams.get("f") === "S
        uaUrl.searchParams.get("t") === "ORD" && uaUrl.searchParams.get("d") === "2026-10-10",
        "the United link searches the first leg and date");
 assert(uaDetails.exact === false, "the United disclosure admits exact flights are not pinned");
+const uaThreeAdults = env.sandbox.bookingLinkFromOutput(uaOutput.text, uaOutput.warnings, NOW, 3);
+const uaThreeAdultsUrl = new URL(uaThreeAdults.url);
+assert(uaThreeAdultsUrl.searchParams.get("at") === "3" && uaThreeAdultsUrl.searchParams.get("px") === "3",
+       "United receives the selected adult count in both traveler-count fields");
 
 const baOutput = makeOutput("BA", "10OCT", "117", "LHR", "JFK");
 const baDetails = env.sandbox.bookingLinkFromOutput(baOutput.text, baOutput.warnings, NOW);
@@ -241,6 +270,9 @@ assert(baUrl.hostname === "www.britishairways.com" &&
        (baUrl.searchParams.get("onds") || "").startsWith("LHR-JFK_2026-10-10"),
        "the BA link carries the route and date");
 assert(baDetails.exact === false, "the BA disclosure admits exact flights are not pinned");
+const baThreeAdults = env.sandbox.bookingLinkFromOutput(baOutput.text, baOutput.warnings, NOW, 3);
+assert(new URL(baThreeAdults.url).searchParams.get("ad") === "3",
+       "British Airways receives the selected adult count");
 
 const tkOutput = makeOutput("TK", "10OCT", "615", "IST", "JFK");
 const tkDetails = env.sandbox.bookingLinkFromOutput(tkOutput.text, tkOutput.warnings, NOW);
@@ -250,6 +282,9 @@ const noLinks = makeSandbox(false);
 const engineGone = noLinks.sandbox.bookingLinkFromOutput(sample.text, sample.warnings, NOW);
 assert(!engineGone.eligible && /engine is unavailable/.test(engineGone.reason),
        "a missing link engine degrades to a clear refusal instead of a fake link");
+assert(Links.normalizeAdultCount(0) === 1 && Links.normalizeAdultCount(10) === 9 &&
+       Links.normalizeAdultCount("3") === 3 && Links.normalizeAdultCount("not a number") === 1,
+       "link generation safely normalizes adult counts to the supported range 1–9");
 
 section("5. multi-leg trips on one bookable airline qualify; mixed bookable airlines do not");
 const multi = makeMultiOutput(
@@ -309,6 +344,11 @@ assert(/AS 100/.test(ui.button._attrs["aria-label"]) && /SEA to LHR/.test(ui.but
        "the button label names the linked flight, route and date");
 assert(/route, date and flight number/.test(ui.button._attrs["aria-description"]),
        "the itinerary-sharing disclosure is also available to assistive technology");
+ui.adultControl.value = "3";
+ui.sandbox.refreshBookingLinkButton(sample.text);
+assert(/3 adults/.test(ui.button.title) && /3 adults/.test(ui.button._attrs["aria-label"]) &&
+       /seat assignment is separate/i.test(ui.button.title),
+       "the compact selector updates the button's visible and accessible party-size disclosure");
 ui.sandbox.invalidateBookingLinkButton();
 assert(ui.button.disabled && !ui.button._classes.has("booking-link-ready"),
        "an input edit immediately clears the green state until reconverted");
@@ -321,10 +361,11 @@ assert(ui.opened.length === 1 && ui.opened[0].url === "about:blank" && ui.opened
        "one itinerary click creates exactly one new tab");
 assert(ui.copied.length === 1,
        "one itinerary click performs exactly one copy action");
-const openedInfo = ui.sandbox.bookingLinkFromOutput(sample.text, [], NOW);
+const openedInfo = ui.sandbox.bookingLinkFromOutput(sample.text, [], NOW, 3);
 assert(ui.opened[0].finalUrl === ui.copied[0] && ui.copied[0] === openedInfo.url &&
-       new URL(ui.copied[0]).searchParams.get("F1") === "SEA|LHR|10/10/2026|100|f",
-       "the single copied/opened URL is the exact flight link for the entire itinerary");
+       new URL(ui.copied[0]).searchParams.get("F1") === "SEA|LHR|10/10/2026|100|f" &&
+       new URL(ui.copied[0]).searchParams.get("A") === "3",
+       "the copied/opened URL preserves the exact trip and selected three-adult party");
 assert(ui.opened[0].finalUrl.indexOf("/planbook/shoppingstart") >= 0 &&
        !/checkout|purchase|payment/i.test(ui.opened[0].finalUrl),
        "the Alaska click opens a search only and never submits a purchase");

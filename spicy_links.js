@@ -6,9 +6,10 @@
    SpicyEngine segments directly, so no GDS text is re-parsed and no leg can
    be silently dropped or mis-read on the way in.
 
-   One entry point:  SpicyLinks.linkFor(engineSegs) ->
-     { eligible:true,  carrier:"DL", kind:"delta", url:"...", label:"..." }
+   One entry point:  SpicyLinks.linkFor(engineSegs, nowMs, adultCount) ->
+     { eligible:true,  carrier:"DL", kind:"delta", url:"...", label:"...", adults:2 }
      { eligible:false, reason:"why not (shown in the status line)" }
+   adultCount is clamped to 1–9 and defaults to one adult.
 
    Booking checkouts supported (one marketing carrier per link):
      AA -> aa.com metasearch (embeds every flight)      kind "aa-meta"
@@ -21,7 +22,8 @@
    from (SpicyLinkGenerator-main.zip, app.html):
      * ES5 throughout (no const/let/arrow/Set/BigInt/TextEncoder), matching
        spicy_engine.js, so the single-file page runs on the same browsers.
-     * Passengers are fixed at 1 adult — SpicyTerminal has no passenger UI.
+     * Passenger links use the compact adult-count selector in SpicyTerminal;
+       child/infant categories remain outside this lightweight handoff.
      * DDMMM years roll to the next year only when the DATE (not the time) is
        past; the source rolled same-day trips a year forward by accident.
      * Time-zone offsets and coordinates fall back to SPICY_DATA (1,600+
@@ -392,9 +394,19 @@ function qualify(engineSegs) {
   return { eligible: true, reason: "", carrier: c, kind: KIND_OF[c] };
 }
 
-/* ---------------- link builders (ported; pax fixed at 1 adult) ---------------- */
+/* ---------------- link builders (ported; adults selected in the UI) ---------------- */
 function enc(v) { return encodeURIComponent(v); }
 function trunc(n) { return n >= 0 ? Math.floor(n) : Math.ceil(n); }
+function normalizeAdultCount(value) {
+  var count = Number(value);
+  if (!isFinite(count) || Math.floor(count) !== count) return 1;
+  return Math.max(1, Math.min(9, count));
+}
+function estimatedTotalForAdults(segs, adults) {
+  // estimate() is a per-traveler fare; multiply the disclosed estimate for
+  // each adult the link sends to the airline checkout.
+  return (Math.round(estimate(segs).total * adults * 100) / 100).toFixed(2);
+}
 
 function unixMs(s) {
   var p = s.ymd.split("-");
@@ -418,9 +430,9 @@ function cabin(segs) {
        : best === "PREMIUM-COACH" ? "PREMIUM_ECONOMY" : "COACH";
 }
 
-function aaMetaUrl(segs) {
+function aaMetaUrl(segs, adults) {
   var first = segs[0];
-  var paxStr = "A1S0C0I0Y0L0"; /* 1 adult — SpicyTerminal has no passenger UI */
+  var paxStr = "A" + adults + "S0C0I0Y0L0"; /* selected adults; other passenger types default to zero */
   var legs = "", flights = "", i;
   for (i = 0; i < segs.length; i++)
     legs += "#" + segs[i].origin + "|" + segs[i].dest + "|0|0|" + unixMs(segs[i]);
@@ -435,14 +447,14 @@ function aaMetaUrl(segs) {
   return "https://www.aa.com/goto/metasearch?ITEN=" + enc(parts.join(","));
 }
 
-function unitedUrl(segs) {
+function unitedUrl(segs, adults) {
   var s0 = segs[0];
   var tt = tripType(segs) === "roundTrip" ? 2 : 1;
   var cb = cabin(segs);
   var sc = cb === "FIRST" ? 7 : cb === "BUSINESS" ? 4 : 1;
   var u = "https://www.united.com/en/us/fsr/choose-flights?f=" + enc(s0.origin) +
           "&t=" + enc(s0.dest) + "&d=" + enc(s0.ymd) +
-          "&tt=" + tt + "&at=1&sc=" + sc + "&px=1";
+          "&tt=" + tt + "&at=" + adults + "&sc=" + sc + "&px=" + adults;
   if (tt === 2) u += "&r=" + enc(segs[1].ymd);
   return u;
 }
@@ -482,7 +494,7 @@ function deltaSliceIndex(segs) {
   }
   return idx;
 }
-function baUrl(segs) {
+function baUrl(segs, adults) {
   if (!segs.length) return "";
   var idx = deltaSliceIndex(segs);
   var journeys = [], cur = -1, i;
@@ -498,10 +510,10 @@ function baUrl(segs) {
   for (i = 0; i < journeys.length; i++)
     onds.push(journeys[i].o + "-" + journeys[i].d + "_" + journeys[i].date);
   return "https://www.britishairways.com/travel/book/public/en_gb/processOffer?onds=" + onds.join(",") +
-         "&ad=1&yad=0&ch=0&inf=0&cabin=" + baCabin(segs) + "&flex=LOWEST&ond=" + journeys.length;
+         "&ad=" + adults + "&yad=0&ch=0&inf=0&cabin=" + baCabin(segs) + "&flex=LOWEST&ond=" + journeys.length;
 }
 
-function deltaTripUrl(segs) {
+function deltaTripUrl(segs, adults) {
   if (!segs.length) return "";
   var months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                 "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -521,7 +533,7 @@ function deltaTripUrl(segs) {
   var fb = fareBasis(segs[0].cls || "Y", segs[0].carrier, segs[0].num);
   var fbs = [];
   for (i = 0; i < segs.length; i++) fbs.push(fb);
-  var total = estimate(segs).total.toFixed(2);
+  var total = estimatedTotalForAdults(segs, adults);
   function uuid() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
       var r = Math.random() * 16 | 0;
@@ -533,13 +545,13 @@ function deltaTripUrl(segs) {
   for (i = 0; i < parts.length; i++)
     p.push(enc("itinSegment[" + i + "]") + "=" + enc(parts[i]));
   p.push("tripType=" + (segs.length === 1 ? "oneWay" : segs.length === 2 ? "roundTrip" : "multiCity"));
-  p.push("paxCount=1", "currencyCd=USD", "fareBasis=" + enc(fbs.join(":")), "price=" + total);
+  p.push("paxCount=" + adults, "currencyCd=USD", "fareBasis=" + enc(fbs.join(":")), "price=" + total);
   p.push("numOfSegments=" + segs.length, "exitCountry=US",
          "vendorReferrerUrl=" + enc("https://matrix.itasoftware.com"));
   return "https://www.delta.com/completepurchase/trip-summary?" + p.join("&");
 }
 
-function alaskaUrl(segs) {
+function alaskaUrl(segs, adults) {
   if (!segs.length) return "";
   var ft = segs.length === 1 ? "ow"
          : (segs[segs.length - 1].dest === segs[0].origin ? "rt" : "mc");
@@ -558,8 +570,8 @@ function alaskaUrl(segs) {
   } else {
     dest = segs[segs.length - 1].dest;
   }
-  var total = estimate(segs).total.toFixed(2);
-  var p = ["A=1", "C=0", "FT=" + ft].concat(fs);
+  var total = estimatedTotalForAdults(segs, adults);
+  var p = ["A=" + adults, "C=0", "FT=" + ft].concat(fs);
   p.push("DEST=" + enc(dest), "FARE=" + total, "frm=cart", "META=GOO_CS");
   return "https://www.alaskaair.com/planbook/shoppingstart?" + p.join("&");
 }
@@ -567,7 +579,7 @@ function alaskaUrl(segs) {
 var BUILDERS = { AA: aaMetaUrl, DL: deltaTripUrl, AS: alaskaUrl, UA: unitedUrl, BA: baUrl };
 
 /* ---------------- the one entry point ---------------- */
-function linkFor(engineSegs, nowMs) {
+function linkFor(engineSegs, nowMs, adultCount) {
   var q = qualify(engineSegs);
   if (!q.eligible) return q;
   // Use filtered segments if available (for mixed airline cases)
@@ -575,11 +587,12 @@ function linkFor(engineSegs, nowMs) {
   var segs = toLinkSegs(segsToUse, nowMs);
   if (!segs)
     return ineligible("Could not read this trip for linking — fix the paste or press AI FIX.");
-  var url = BUILDERS[q.carrier](segs);
+  var adults = normalizeAdultCount(adultCount);
+  var url = BUILDERS[q.carrier](segs, adults);
   if (!url)
     return ineligible("Could not build the " + q.carrier + " link for this trip.");
   return { eligible: true, reason: q.reason || "", carrier: q.carrier, kind: q.kind,
-           url: url, label: LABEL_OF[q.carrier], segs: segs };
+           url: url, label: LABEL_OF[q.carrier], segs: segs, adults: adults };
 }
 
 var SpicyLinks = {
@@ -589,6 +602,7 @@ var SpicyLinks = {
   ymdFromDdmmm: ymdFromDdmmm,
   parseGdsClock: parseGdsClock,
   cabinForCarrier: cabinForCarrier,
+  normalizeAdultCount: normalizeAdultCount,
   BOOKABLE_LIST: BOOKABLE_LIST
 };
 if (typeof module !== "undefined") module.exports = SpicyLinks;

@@ -59,6 +59,7 @@ function setOut(text) {
  * prefilled summary; none of them submits a booking or a purchase.
  */
 var BOOKING_LINK_MONTHS = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
+var BOOKING_LINK_MAX_ADULTS = 9;
 var BOOKING_LINK_SITES = {AA:"American Airlines", DL:"Delta", AS:"Alaska Airlines", UA:"United", BA:"British Airways"};
 /* Which checkouts pin the exact flights versus broad route/date searches —
    the disclosure must match what the airline site actually receives. */
@@ -76,6 +77,19 @@ function bookingLinkDateYmd(ddmmm, now) {
     return String(year).padStart(4, "0") + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
   }
   return "";
+}
+function bookingLinkAdultCount(value) {
+  if (value == null) {
+    var control = $("bookingAdults");
+    value = control ? control.value : 1;
+  }
+  var count = Number(value);
+  if (!isFinite(count) || Math.floor(count) !== count) count = 1;
+  return Math.max(1, Math.min(BOOKING_LINK_MAX_ADULTS, count));
+}
+function bookingLinkAdultLabel(count) {
+  var adults = bookingLinkAdultCount(count);
+  return adults + " adult" + (adults === 1 ? "" : "s");
 }
 function bookingClockValid(value) {
   var m = /^(\d{1,2})(\d{2})([APNM])$/.exec(String(value || "").trim().toUpperCase());
@@ -108,8 +122,9 @@ function bookingLinkSharedFields(carrier) {
   if (carrier === "DL") return ["flight numbers", "routes", "departure dates", "an estimated price"];
   return ["flight numbers", "routes", "departure dates"];
 }
-function bookingLinkFromOutput(text, sourceWarnings, now) {
+function bookingLinkFromOutput(text, sourceWarnings, now, adultCount) {
   text = String(text || "");
+  var adults = bookingLinkAdultCount(adultCount);
   if (!text.trim()) return {eligible:false, reason:"Convert a complete itinerary first."};
   var read;
   try {
@@ -151,7 +166,8 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
   }
   var links = bookingLinksEngine();
   if (!links) return {eligible:false, reason:"The booking-link engine is unavailable."};
-  var res = links.linkFor(segments, now && typeof now.getTime === "function" ? now.getTime() : undefined);
+  var linkNow = now && typeof now.getTime === "function" ? now.getTime() : Date.now();
+  var res = links.linkFor(segments, linkNow, adults);
   if (!res || !res.eligible || !res.url) {
     return {eligible:false, reason:(res && res.reason) ? res.reason : "No booking checkout is available for this itinerary."};
   }
@@ -176,6 +192,7 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
   return {
     eligible:true,
     url:res.url,
+    adults:adults,
     site:BOOKING_LINK_SITES[res.carrier] || res.carrier,
     carrier:res.carrier,
     kind:res.kind,
@@ -193,7 +210,7 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
 function bookingLinkCurrentDetails(text) {
   return bookingSourceDirty
     ? {eligible:false, reason:"Input changed — convert it before opening a booking link."}
-    : bookingLinkFromOutput(text, bookingSourceWarnings);
+    : bookingLinkFromOutput(text, bookingSourceWarnings, null, bookingLinkAdultCount());
 }
 function invalidateBookingLinkButton() {
   bookingSourceDirty = true;
@@ -215,7 +232,8 @@ function bookingLinkDisclosure(details) {
     base = "Opens the " + details.site + " search";
   }
   if (details.note) base += ". Note: " + details.note;
-  return base + ", for one adult. Verify availability and price on the airline site; no booking or purchase is made.";
+  return base + ", for " + bookingLinkAdultLabel(details.adults) +
+    ". This sets traveler count only; seat assignment is separate. Verify availability and price on the airline site; no booking or purchase is made.";
 }
 function refreshBookingLinkButton(text, knownDetails) {
   var button = $("btnBookingLink");
@@ -230,7 +248,7 @@ function refreshBookingLinkButton(text, knownDetails) {
   if (button.setAttribute) {
     button.setAttribute("aria-disabled", details.eligible ? "false" : "true");
     button.setAttribute("aria-label", details.eligible
-      ? "Open " + details.site + " for " + details.flight + ", " + details.origin + " to " + details.destination + " on " + details.date
+      ? "Open " + details.site + " for " + details.flight + ", " + details.origin + " to " + details.destination + " on " + details.date + " for " + bookingLinkAdultLabel(details.adults)
       : "Booking link unavailable: " + details.reason);
     button.setAttribute("aria-description", details.eligible ? bookingLinkDisclosure(details) : details.reason);
   }
@@ -276,7 +294,7 @@ function openBookingLink() {
   } catch (e) {
     try { tab.location.href = details.url; } catch (ignored) {}
   }
-  setStatus("OPENED " + details.site.toUpperCase() + " BOOKING SEARCH — FLIGHT DETAILS SHARED; NO BOOKING OR PURCHASE MADE");
+  setStatus("OPENED " + details.site.toUpperCase() + " BOOKING SEARCH FOR " + bookingLinkAdultLabel(details.adults).toUpperCase() + " — FLIGHT DETAILS SHARED; NO BOOKING OR PURCHASE MADE");
   return true;
 }
 /* BOOKING_LINK:END */
@@ -3128,6 +3146,9 @@ wireSeatMapGate();
 /* SEATMAP_GATE:END */
 
 /* ---------- UI events ---------- */
+if ($("bookingAdults")) $("bookingAdults").addEventListener("change", function() {
+  refreshBookingLinkButton(out ? out.textContent : "");
+});
 if ($("btnBookingLink")) $("btnBookingLink").addEventListener("click", openBookingLink);
 $("btnAttach").addEventListener("click", function() { $("filePick").click(); });
 $("filePick").addEventListener("change", function() {

@@ -79,6 +79,9 @@ button:focus-visible{outline:2px solid var(--green);outline-offset:3px}
 #st.warn::before{box-shadow:0 0 0 0 rgba(240,163,92,.42)}
 #report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnSeatMap:hover,#btnAbout:hover{color:#8fa6b2}
 .linkbtn{color:#3e4f59;font-size:11px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono);font-weight:400;flex:none;white-space:nowrap;min-height:auto}
+.booking-pax{display:inline-flex;align-items:center;gap:4px;color:#60747e;font-size:9px;letter-spacing:.35px;white-space:nowrap;flex:none;cursor:pointer}
+.booking-pax select{width:40px;height:22px;padding:1px 4px;background:#0a0f14;border:1px solid #24353d;border-radius:4px;color:#b9c9d0;font:10px var(--mono);cursor:pointer}
+.booking-pax select:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 #btnWeeklyReport{margin-right:12px}
 /* welcome — small card, app visible behind (translucent backdrop) */
 .welcome{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
@@ -371,7 +374,13 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 <div class="status">
   <span id="st">READY</span>
   <button id="btnAbout" class="linkbtn" type="button" aria-haspopup="dialog" aria-controls="aboutModal" title="What SpicyTerminal does, what it refuses to do, and who built it">About</button>
-  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert a complete American, Delta, Alaska, United or British Airways itinerary to enable its checkout link. Mixed-airline trips (more than one bookable airline), unsupported airlines and uncertain conversions keep it off. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made.">BOOKING LINK</button>
+  <label class="booking-pax" title="Adult travelers for the booking link; this does not assign seats">
+    <span aria-hidden="true">ADULTS</span>
+    <select id="bookingAdults" aria-label="Number of adult travelers for the booking link" title="Choose 1 to 9 adult travelers">
+      <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
+    </select>
+  </label>
+  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert a complete American, Delta, Alaska, United or British Airways itinerary to enable its checkout link. Mixed-airline trips (more than one bookable airline), unsupported airlines and uncertain conversions keep it off. Select the number of adult travelers (1–9) beside the link; seat assignment is not included. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made.">BOOKING LINK</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
   <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
   <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Seat Map preview">Seat Map</a>
@@ -437,7 +446,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
     </div>
 
     <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS ready to copy format to paste into Backoffice.</b>
-      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK lights up for a complete, certain itinerary on one bookable airline — American, Delta, Alaska, United or British Airways, one or several legs — using the same link engine as the production Spicy Link Generator. American links pin every flight via aa.com metasearch; Delta and Alaska links carry every leg (with an estimated price); United and British Airways links carry the route(s) and dates without pinning exact flights. A mixed-airline itinerary links only when exactly one of its airlines is bookable, and then covers that airline's legs. Clicking opens an external search or prefilled summary for one adult and shares the itinerary details with that site; unsupported airlines and uncertain conversions stay disabled. Check availability and price on the airline site — it never books or purchases a ticket automatically.</p>
+      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK lights up for a complete, certain itinerary on one bookable airline — American, Delta, Alaska, United or British Airways, one or several legs — using the same link engine as the production Spicy Link Generator. American links pin every flight via aa.com metasearch; Delta and Alaska links carry every leg (with an estimated price); United and British Airways links carry the route(s) and dates without pinning exact flights. A mixed-airline itinerary links only when exactly one of its airlines is bookable, and then covers that airline's legs. The compact Adults selector beside BOOKING LINK sets 1–9 adult travelers (not assigned seats). Clicking opens an external search or prefilled summary for that party and shares the itinerary details with that site; unsupported airlines and uncertain conversions stay disabled. Check availability and price on the airline site — it never books or purchases a ticket automatically.</p>
 
     <ul class="about-stats">
       <li><b>0</b> accounts · cookies · trackers</li>
@@ -455,7 +464,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3.2l1.7 4.7 4.7 1.7-4.7 1.7L11 16l-1.7-4.7L4.6 9.6l4.7-1.7z"/><path d="M18.4 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></svg></span>
             <span><b><code>AI FIX</code>.</b> When a first read cannot see the flights, it re-reads and repairs the output. Your key, your call.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
-            <span><b>Private.</b> Conversion stays in this tab. Clicking BOOKING LINK opens an external airline search or prefilled summary for one adult and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically; you always finish on the airline site.</span></li>
+            <span><b>Private.</b> Conversion stays in this tab. Choose 1–9 adult travelers in the small selector beside BOOKING LINK; seat assignment is not included. Clicking opens an external airline search or prefilled summary and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically; you always finish on the airline site.</span></li>
         </ul>
       </section>
 
@@ -9547,10 +9556,14 @@ function fullRe(reStr,tok){
    `DEP-???` rows for whatever token *happened* to look airline-shaped (a
    sell-status `TK2` in the next row became a phantom Turkish leg).  Inside a
    GDS *table* a leading segment number guarantees the columns, so an unknown
-   two-letter code there is the carrier.  Accepted only in that shape, never
+   two-character code there is the carrier. Accepted only in that shape, never
    for a word-shaped or airport-shaped token. */
 function _isTableCarrier(tok){
-  return /^[A-Z]{2}$/.test(tok) && !AIRLINES[tok] && !AIRPORTS[tok] &&
+  // IATA designators can contain a digit (H4, 7C, 9W), not only two letters.
+  // Numbered GDS rows still provide the table context needed to accept a
+  // carrier absent from our offline airline dictionary without mistaking a
+  // prose word or airport code for one.
+  return /^(?:[A-Z][A-Z0-9]|[0-9][A-Z])$/.test(tok) && !AIRLINES[tok] && !AIRPORTS[tok] &&
          !/^(AM|PM|OK|NO|ON|AT|TO|BY|OF|IN|IT|IS|US|AS|BE|ME|DE|LA|HA|WE|SO|DO|IF)$/.test(tok);
 }
 function _gluedAirportPair(tok){
@@ -9682,18 +9695,26 @@ function tryGdsLines(text, used){
     var acft="",dur="",dist="";
     while(i<toks.length){
       var t=toks[i], up=t.toUpperCase();
-      if(!acft && IATA_ACFT_CODES[up] && /\d/.test(up)) acft=up;
-      else if(!acft && up.length>=3 && up.length<=4){
+      if(!dur && /^\d{1,2}\.\d{2}$/.test(t)) dur=t;
+      else if(!dur && /^[0-9zZ][.][0-9oOsS]{1,2}$/.test(t)){
+        var _dt=up.replace(/Z/g,"2").replace(/O/g,"0").replace(/S/g,"5");
+        if(_dt.length<4) _dt=_dt+"0";    // "z.o" = 2.00
+        dur=_dt;
+      }
+      else if(!acft && IATA_ACFT_CODES[up] && /\d/.test(up)) acft=up;
+      else if(!acft && up.length>=3 && up.length<=4 && /[A-Z]/.test(up)){
         // OCR glyph repair for IATA aircraft codes (E7S->E75, 3ZN->32N)
         var up2=up.replace(/[OQ]/g,"0").replace(/[IL]/g,"1").replace(/S/g,"5")
           .replace(/Z/g,"2").replace(/B/g,"8").replace(/G/g,"9").replace(/T/g,"7");
         if(up2!==up && IATA_ACFT_CODES[up2] && /\d/.test(up2)) acft=up2;
       }
-      else if(!dur && /^\d{1,2}\.\d{2}$/.test(t)) dur=t;
-      else if(!dur && /^[0-9zZ][.][0-9oOsS]{1,2}$/.test(t)){
-        var _dt=up.replace(/Z/g,"2").replace(/O/g,"0").replace(/S/g,"5");
-        if(_dt.length<4) _dt=_dt+"0";    // "z.o" = 2.00
-        dur=_dt;
+      else if(!acft && !dur && /^[A-Z0-9]{3}$/.test(up) && /\d/.test(up) &&
+              i+1<toks.length && /^\d{1,2}\.\d{2}$/.test(toks[i+1])){
+        // Keep an explicit three-character IATA equipment token even when
+        // this offline data snapshot does not know it (e.g. a generic 330).
+        // Requiring the following GDS duration disambiguates it from a bare
+        // three-digit mileage when the equipment column is blank.
+        acft=up;
       }
       else if(!dist && /^\d{3,5}$/.test(t)) dist=t;
       i++;
@@ -10548,9 +10569,10 @@ if(typeof window!=="undefined") window.SpicyEngine=SpicyEngine;
    SpicyEngine segments directly, so no GDS text is re-parsed and no leg can
    be silently dropped or mis-read on the way in.
 
-   One entry point:  SpicyLinks.linkFor(engineSegs) ->
-     { eligible:true,  carrier:"DL", kind:"delta", url:"...", label:"..." }
+   One entry point:  SpicyLinks.linkFor(engineSegs, nowMs, adultCount) ->
+     { eligible:true,  carrier:"DL", kind:"delta", url:"...", label:"...", adults:2 }
      { eligible:false, reason:"why not (shown in the status line)" }
+   adultCount is clamped to 1–9 and defaults to one adult.
 
    Booking checkouts supported (one marketing carrier per link):
      AA -> aa.com metasearch (embeds every flight)      kind "aa-meta"
@@ -10563,7 +10585,8 @@ if(typeof window!=="undefined") window.SpicyEngine=SpicyEngine;
    from (SpicyLinkGenerator-main.zip, app.html):
      * ES5 throughout (no const/let/arrow/Set/BigInt/TextEncoder), matching
        spicy_engine.js, so the single-file page runs on the same browsers.
-     * Passengers are fixed at 1 adult — SpicyTerminal has no passenger UI.
+     * Passenger links use the compact adult-count selector in SpicyTerminal;
+       child/infant categories remain outside this lightweight handoff.
      * DDMMM years roll to the next year only when the DATE (not the time) is
        past; the source rolled same-day trips a year forward by accident.
      * Time-zone offsets and coordinates fall back to SPICY_DATA (1,600+
@@ -10934,9 +10957,19 @@ function qualify(engineSegs) {
   return { eligible: true, reason: "", carrier: c, kind: KIND_OF[c] };
 }
 
-/* ---------------- link builders (ported; pax fixed at 1 adult) ---------------- */
+/* ---------------- link builders (ported; adults selected in the UI) ---------------- */
 function enc(v) { return encodeURIComponent(v); }
 function trunc(n) { return n >= 0 ? Math.floor(n) : Math.ceil(n); }
+function normalizeAdultCount(value) {
+  var count = Number(value);
+  if (!isFinite(count) || Math.floor(count) !== count) return 1;
+  return Math.max(1, Math.min(9, count));
+}
+function estimatedTotalForAdults(segs, adults) {
+  // estimate() is a per-traveler fare; multiply the disclosed estimate for
+  // each adult the link sends to the airline checkout.
+  return (Math.round(estimate(segs).total * adults * 100) / 100).toFixed(2);
+}
 
 function unixMs(s) {
   var p = s.ymd.split("-");
@@ -10960,9 +10993,9 @@ function cabin(segs) {
        : best === "PREMIUM-COACH" ? "PREMIUM_ECONOMY" : "COACH";
 }
 
-function aaMetaUrl(segs) {
+function aaMetaUrl(segs, adults) {
   var first = segs[0];
-  var paxStr = "A1S0C0I0Y0L0"; /* 1 adult — SpicyTerminal has no passenger UI */
+  var paxStr = "A" + adults + "S0C0I0Y0L0"; /* selected adults; other passenger types default to zero */
   var legs = "", flights = "", i;
   for (i = 0; i < segs.length; i++)
     legs += "#" + segs[i].origin + "|" + segs[i].dest + "|0|0|" + unixMs(segs[i]);
@@ -10977,14 +11010,14 @@ function aaMetaUrl(segs) {
   return "https://www.aa.com/goto/metasearch?ITEN=" + enc(parts.join(","));
 }
 
-function unitedUrl(segs) {
+function unitedUrl(segs, adults) {
   var s0 = segs[0];
   var tt = tripType(segs) === "roundTrip" ? 2 : 1;
   var cb = cabin(segs);
   var sc = cb === "FIRST" ? 7 : cb === "BUSINESS" ? 4 : 1;
   var u = "https://www.united.com/en/us/fsr/choose-flights?f=" + enc(s0.origin) +
           "&t=" + enc(s0.dest) + "&d=" + enc(s0.ymd) +
-          "&tt=" + tt + "&at=1&sc=" + sc + "&px=1";
+          "&tt=" + tt + "&at=" + adults + "&sc=" + sc + "&px=" + adults;
   if (tt === 2) u += "&r=" + enc(segs[1].ymd);
   return u;
 }
@@ -11024,7 +11057,7 @@ function deltaSliceIndex(segs) {
   }
   return idx;
 }
-function baUrl(segs) {
+function baUrl(segs, adults) {
   if (!segs.length) return "";
   var idx = deltaSliceIndex(segs);
   var journeys = [], cur = -1, i;
@@ -11040,10 +11073,10 @@ function baUrl(segs) {
   for (i = 0; i < journeys.length; i++)
     onds.push(journeys[i].o + "-" + journeys[i].d + "_" + journeys[i].date);
   return "https://www.britishairways.com/travel/book/public/en_gb/processOffer?onds=" + onds.join(",") +
-         "&ad=1&yad=0&ch=0&inf=0&cabin=" + baCabin(segs) + "&flex=LOWEST&ond=" + journeys.length;
+         "&ad=" + adults + "&yad=0&ch=0&inf=0&cabin=" + baCabin(segs) + "&flex=LOWEST&ond=" + journeys.length;
 }
 
-function deltaTripUrl(segs) {
+function deltaTripUrl(segs, adults) {
   if (!segs.length) return "";
   var months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                 "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -11063,7 +11096,7 @@ function deltaTripUrl(segs) {
   var fb = fareBasis(segs[0].cls || "Y", segs[0].carrier, segs[0].num);
   var fbs = [];
   for (i = 0; i < segs.length; i++) fbs.push(fb);
-  var total = estimate(segs).total.toFixed(2);
+  var total = estimatedTotalForAdults(segs, adults);
   function uuid() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
       var r = Math.random() * 16 | 0;
@@ -11075,13 +11108,13 @@ function deltaTripUrl(segs) {
   for (i = 0; i < parts.length; i++)
     p.push(enc("itinSegment[" + i + "]") + "=" + enc(parts[i]));
   p.push("tripType=" + (segs.length === 1 ? "oneWay" : segs.length === 2 ? "roundTrip" : "multiCity"));
-  p.push("paxCount=1", "currencyCd=USD", "fareBasis=" + enc(fbs.join(":")), "price=" + total);
+  p.push("paxCount=" + adults, "currencyCd=USD", "fareBasis=" + enc(fbs.join(":")), "price=" + total);
   p.push("numOfSegments=" + segs.length, "exitCountry=US",
          "vendorReferrerUrl=" + enc("https://matrix.itasoftware.com"));
   return "https://www.delta.com/completepurchase/trip-summary?" + p.join("&");
 }
 
-function alaskaUrl(segs) {
+function alaskaUrl(segs, adults) {
   if (!segs.length) return "";
   var ft = segs.length === 1 ? "ow"
          : (segs[segs.length - 1].dest === segs[0].origin ? "rt" : "mc");
@@ -11100,8 +11133,8 @@ function alaskaUrl(segs) {
   } else {
     dest = segs[segs.length - 1].dest;
   }
-  var total = estimate(segs).total.toFixed(2);
-  var p = ["A=1", "C=0", "FT=" + ft].concat(fs);
+  var total = estimatedTotalForAdults(segs, adults);
+  var p = ["A=" + adults, "C=0", "FT=" + ft].concat(fs);
   p.push("DEST=" + enc(dest), "FARE=" + total, "frm=cart", "META=GOO_CS");
   return "https://www.alaskaair.com/planbook/shoppingstart?" + p.join("&");
 }
@@ -11109,7 +11142,7 @@ function alaskaUrl(segs) {
 var BUILDERS = { AA: aaMetaUrl, DL: deltaTripUrl, AS: alaskaUrl, UA: unitedUrl, BA: baUrl };
 
 /* ---------------- the one entry point ---------------- */
-function linkFor(engineSegs, nowMs) {
+function linkFor(engineSegs, nowMs, adultCount) {
   var q = qualify(engineSegs);
   if (!q.eligible) return q;
   // Use filtered segments if available (for mixed airline cases)
@@ -11117,11 +11150,12 @@ function linkFor(engineSegs, nowMs) {
   var segs = toLinkSegs(segsToUse, nowMs);
   if (!segs)
     return ineligible("Could not read this trip for linking — fix the paste or press AI FIX.");
-  var url = BUILDERS[q.carrier](segs);
+  var adults = normalizeAdultCount(adultCount);
+  var url = BUILDERS[q.carrier](segs, adults);
   if (!url)
     return ineligible("Could not build the " + q.carrier + " link for this trip.");
   return { eligible: true, reason: q.reason || "", carrier: q.carrier, kind: q.kind,
-           url: url, label: LABEL_OF[q.carrier], segs: segs };
+           url: url, label: LABEL_OF[q.carrier], segs: segs, adults: adults };
 }
 
 var SpicyLinks = {
@@ -11131,6 +11165,7 @@ var SpicyLinks = {
   ymdFromDdmmm: ymdFromDdmmm,
   parseGdsClock: parseGdsClock,
   cabinForCarrier: cabinForCarrier,
+  normalizeAdultCount: normalizeAdultCount,
   BOOKABLE_LIST: BOOKABLE_LIST
 };
 if (typeof module !== "undefined") module.exports = SpicyLinks;
@@ -11198,6 +11233,7 @@ function setOut(text) {
  * prefilled summary; none of them submits a booking or a purchase.
  */
 var BOOKING_LINK_MONTHS = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
+var BOOKING_LINK_MAX_ADULTS = 9;
 var BOOKING_LINK_SITES = {AA:"American Airlines", DL:"Delta", AS:"Alaska Airlines", UA:"United", BA:"British Airways"};
 /* Which checkouts pin the exact flights versus broad route/date searches —
    the disclosure must match what the airline site actually receives. */
@@ -11215,6 +11251,19 @@ function bookingLinkDateYmd(ddmmm, now) {
     return String(year).padStart(4, "0") + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
   }
   return "";
+}
+function bookingLinkAdultCount(value) {
+  if (value == null) {
+    var control = $("bookingAdults");
+    value = control ? control.value : 1;
+  }
+  var count = Number(value);
+  if (!isFinite(count) || Math.floor(count) !== count) count = 1;
+  return Math.max(1, Math.min(BOOKING_LINK_MAX_ADULTS, count));
+}
+function bookingLinkAdultLabel(count) {
+  var adults = bookingLinkAdultCount(count);
+  return adults + " adult" + (adults === 1 ? "" : "s");
 }
 function bookingClockValid(value) {
   var m = /^(\d{1,2})(\d{2})([APNM])$/.exec(String(value || "").trim().toUpperCase());
@@ -11247,8 +11296,9 @@ function bookingLinkSharedFields(carrier) {
   if (carrier === "DL") return ["flight numbers", "routes", "departure dates", "an estimated price"];
   return ["flight numbers", "routes", "departure dates"];
 }
-function bookingLinkFromOutput(text, sourceWarnings, now) {
+function bookingLinkFromOutput(text, sourceWarnings, now, adultCount) {
   text = String(text || "");
+  var adults = bookingLinkAdultCount(adultCount);
   if (!text.trim()) return {eligible:false, reason:"Convert a complete itinerary first."};
   var read;
   try {
@@ -11290,7 +11340,8 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
   }
   var links = bookingLinksEngine();
   if (!links) return {eligible:false, reason:"The booking-link engine is unavailable."};
-  var res = links.linkFor(segments, now && typeof now.getTime === "function" ? now.getTime() : undefined);
+  var linkNow = now && typeof now.getTime === "function" ? now.getTime() : Date.now();
+  var res = links.linkFor(segments, linkNow, adults);
   if (!res || !res.eligible || !res.url) {
     return {eligible:false, reason:(res && res.reason) ? res.reason : "No booking checkout is available for this itinerary."};
   }
@@ -11315,6 +11366,7 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
   return {
     eligible:true,
     url:res.url,
+    adults:adults,
     site:BOOKING_LINK_SITES[res.carrier] || res.carrier,
     carrier:res.carrier,
     kind:res.kind,
@@ -11332,7 +11384,7 @@ function bookingLinkFromOutput(text, sourceWarnings, now) {
 function bookingLinkCurrentDetails(text) {
   return bookingSourceDirty
     ? {eligible:false, reason:"Input changed — convert it before opening a booking link."}
-    : bookingLinkFromOutput(text, bookingSourceWarnings);
+    : bookingLinkFromOutput(text, bookingSourceWarnings, null, bookingLinkAdultCount());
 }
 function invalidateBookingLinkButton() {
   bookingSourceDirty = true;
@@ -11354,7 +11406,8 @@ function bookingLinkDisclosure(details) {
     base = "Opens the " + details.site + " search";
   }
   if (details.note) base += ". Note: " + details.note;
-  return base + ", for one adult. Verify availability and price on the airline site; no booking or purchase is made.";
+  return base + ", for " + bookingLinkAdultLabel(details.adults) +
+    ". This sets traveler count only; seat assignment is separate. Verify availability and price on the airline site; no booking or purchase is made.";
 }
 function refreshBookingLinkButton(text, knownDetails) {
   var button = $("btnBookingLink");
@@ -11369,7 +11422,7 @@ function refreshBookingLinkButton(text, knownDetails) {
   if (button.setAttribute) {
     button.setAttribute("aria-disabled", details.eligible ? "false" : "true");
     button.setAttribute("aria-label", details.eligible
-      ? "Open " + details.site + " for " + details.flight + ", " + details.origin + " to " + details.destination + " on " + details.date
+      ? "Open " + details.site + " for " + details.flight + ", " + details.origin + " to " + details.destination + " on " + details.date + " for " + bookingLinkAdultLabel(details.adults)
       : "Booking link unavailable: " + details.reason);
     button.setAttribute("aria-description", details.eligible ? bookingLinkDisclosure(details) : details.reason);
   }
@@ -11415,7 +11468,7 @@ function openBookingLink() {
   } catch (e) {
     try { tab.location.href = details.url; } catch (ignored) {}
   }
-  setStatus("OPENED " + details.site.toUpperCase() + " BOOKING SEARCH — FLIGHT DETAILS SHARED; NO BOOKING OR PURCHASE MADE");
+  setStatus("OPENED " + details.site.toUpperCase() + " BOOKING SEARCH FOR " + bookingLinkAdultLabel(details.adults).toUpperCase() + " — FLIGHT DETAILS SHARED; NO BOOKING OR PURCHASE MADE");
   return true;
 }
 /* BOOKING_LINK:END */
@@ -14267,6 +14320,9 @@ wireSeatMapGate();
 /* SEATMAP_GATE:END */
 
 /* ---------- UI events ---------- */
+if ($("bookingAdults")) $("bookingAdults").addEventListener("change", function() {
+  refreshBookingLinkButton(out ? out.textContent : "");
+});
 if ($("btnBookingLink")) $("btnBookingLink").addEventListener("click", openBookingLink);
 $("btnAttach").addEventListener("click", function() { $("filePick").click(); });
 $("filePick").addEventListener("change", function() {

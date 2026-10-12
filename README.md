@@ -32,7 +32,9 @@ hallucinations, no re-rolling the dice.
   `15 SEP`, the flight-time column `6.10` is no longer mistaken for a clock, the
   sell-status column `HK2`/`TK2` no longer becomes a phantom Turkish leg, a glued
   `MIAVVI` is unrolled into its two airports, and a carrier the data file does
-  not know yet (IberoJet `OB`) is still read instead of dropped.
+  not know yet (IberoJet `OB`, or alphanumeric `H4`) is still read in a numbered
+  row. Explicit three-character equipment such as `330` and published mileage
+  are preserved even when the local equipment table does not list the code.
 - **`AI FIX` — the repair button, not the default path**: pasting converts on its own, no click needed.
   When that automatic offline pass cannot read an image (handwritten, cropped, garbage-scanned) or only
   half-reads it, `AI FIX` re-reads the same input with Gemini and repairs the result; the deterministic
@@ -83,9 +85,10 @@ hallucinations, no re-rolling the dice.
   Delta trip summaries and Alaska planbook links carry every leg (plus an estimated price);
   United and British Airways links carry the route(s) and dates without pinning exact flights.
   A mixed-airline itinerary links only when exactly one of its airlines is bookable, and the
-  disclosure says that only that airline's legs are linked. One click copies the URL and opens
-  the external search or prefilled summary for one adult in one tab; it never books or
-  purchases, and stays disabled for partial, invalid, uncertain, unsupported, mixed-bookable,
+  disclosure says that only that airline's legs are linked. A compact adult selector beside
+  `BOOKING LINK` sets 1–9 travelers on the airline handoff; it does not assign seats. One click
+  copies the URL and opens the external search or prefilled summary in one tab; it never books
+  or purchases, and stays disabled for partial, invalid, uncertain, unsupported, mixed-bookable,
   or stale input. There is no Google Flights fallback.
 - **Seat Map preview**: the status-row link sits between Weekly Report and Report a bug, deliberately dimmed while the feature is under development — it opens `/seatmap` (with the under-development notice) after ten consecutive clicks, without displaying a countdown; a slower click silently restarts the count. The viewer uses static aircraft layouts and browser-generated sample availability; the 30-second refresh is simulated, no airline API is called, and selecting a seat never reserves it.
 - **No animations**: the interface is completely still. There are no pane entrance effects,
@@ -100,7 +103,7 @@ hallucinations, no re-rolling the dice.
   terminal green, on a dark track (the INPUT textarea used to keep whatever bar the browser
   ships). Both bars are always drawn: there is no switch to hide them, and scrolling itself
   is plain native behaviour — wheel, arrow keys, PageUp/PageDown, drag-select and touch.
-- Conversion and screenshot OCR run in the browser. A `BOOKING LINK` click opens an external airline search or prefilled summary for one adult and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically.
+- Conversion and screenshot OCR run in the browser. `BOOKING LINK` opens an external airline search or prefilled summary for the selected party of 1–9 adults and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). The selector changes traveler count only; it does not choose assigned seats, and the link never books or purchases automatically.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.
 
@@ -145,10 +148,11 @@ files and archives are never shipped.
 | `test_10k_pic_convert.js` | 10,000-iteration screenshot-card fuzz (uses the real `cleanOcrText`) — `npm run test:10k`, add `--seed=N` for a reproducible run |
 | `test_offline_images.js` | OCR cleaner + real-image OCR speed tests |
 | `test_attachment_pipeline.js` | end-to-end attachment pipeline tests (drop / paste / picker / PDF / HEIC / cache) |
+| `test_lamar_h4.js` | 2026-10-11 H4 GDS report regression: unknown alphanumeric carrier rows, supplied 330/mileage preservation, and re-paste safety — `node test_lamar_h4.js` |
 | `test_lax_man.js` | LAX–MAN round-trip regression (no phantom TO 105, Manchester is MAN not MHT) — `node test_lax_man.js` |
 | `test_mistake_learner.js` | self-learning safety + GDS re-paste regression for the 2026-09-07 weekly report — `node test_mistake_learner.js` |
 | `test_about_dialog.js` | About dialog: exact `About` label, focus trap, ESC/backdrop close, and that opening it cannot disturb a conversion — `node test_about_dialog.js` |
-| `test_booking_link.js` | per-airline checkout handoffs (AA / DL / AS / UA / BA), multi-leg and mixed-airline gating, unsupported-carrier refusals, stale-input/warning protections, and one-tab/one-copy behavior — `node test_booking_link.js` |
+| `test_booking_link.js` | per-airline checkout handoffs (AA / DL / AS / UA / BA), selected 1–9 adult counts, multi-leg and mixed-airline gating, unsupported-carrier refusals, stale-input/warning protections, and one-tab/one-copy behavior — `node test_booking_link.js` |
 | `test_seatmap.js` | sample layout counts, deterministic simulated availability, accessibility/disclosure markup, `/seatmap` route, and local exports — `node test_seatmap.js` |
 | `test_seatmap_gate.js` | the dimmed Seat Map button only opens after ten consecutive clicks: countdown copy, gap reset, unlock reset, and the gate/dim shipping in the built pages — `node test_seatmap_gate.js` |
 | `test_ai_fix_label.js` | the AI FIX label is on the button and in every user-facing hint, with no legacy name left in the chrome, and the id stays `btnAi` — `node test_ai_fix_label.js` |
@@ -159,9 +163,10 @@ files and archives are never shipped.
 
 No accounts, no cookies, no tracking. Text conversion and screenshot OCR run in the browser;
 those inputs are not uploaded by the local conversion path. A `BOOKING LINK` click explicitly
-opens an external airline search or prefilled summary for one adult and shares the itinerary
-details with that site — flight numbers, routes and dates (American, Delta and Alaska links;
-Delta and Alaska also carry an estimated price), or routes and dates only (United, British
-Airways). The links never book or purchase automatically. The AI fallback sends the user-selected content only when
-the user explicitly provides and uses their own Gemini key. Weekly reports and bug reports open
+opens an external airline search or prefilled summary for the selected party of 1–9 adults and shares
+the itinerary details with that site — flight numbers, routes and dates (American, Delta and
+Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United,
+British Airways). The passenger selector does not assign seats; links never book or purchase
+automatically. The AI fallback sends the user-selected content only when the user explicitly
+provides and uses their own Gemini key. Weekly reports and bug reports open
 in the user's email client to `adhambadraan@gmail.com`. The Seat Map is an in-development preview: it calls no airline API, and layouts, seat statuses, and 30-second refreshes are simulated locally. Selecting a sample seat never reserves or books anything.
