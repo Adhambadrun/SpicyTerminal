@@ -40,89 +40,11 @@ function setOut(text) {
   out.textContent = text;
   flashPane(outPane);
   if (typeof refreshBookingLinkButton === "function") refreshBookingLinkButton(text);
-  if (typeof scheduleLiveBadges === "function") scheduleLiveBadges(text);
 }
 
-/* LIVE_BADGES:BEGIN */
-/*
- * Free verification badges (spicy_live_free.js). Three rules, in order:
- *
- *   1. The conversion is already finished and correct offline. These badges are
- *      decoration; they never block, never re-render the output, and never turn
- *      a failure into an error box.
- *   2. Everything is debounced 800 ms and cached for 10 minutes by the module,
- *      so pasting twice costs one round of requests and a free quota is never
- *      hammered. Simulated availability says SIMULATED; only a configured live
- *      provider may say LIVE, and none is configured by default.
- *   3. With the module missing or the device offline the strip stays empty and
- *      the app behaves exactly as it did before this feature existed.
- */
-var liveBadgeTimer = null;
-function liveFreeApi() {
-  return (typeof window !== "undefined" && window.SpicyLiveFree) ? window.SpicyLiveFree : null;
-}
-function liveBadgeStrip() {
-  var strip = document.getElementById("liveBadges");
-  if (strip) return strip;
-  if (!outPane || !outPane.parentNode) return null;
-  strip = document.createElement("div");
-  strip.className = "live-badges";
-  strip.id = "liveBadges";
-  strip.setAttribute("role", "status");
-  strip.setAttribute("aria-live", "polite");
-  /* Under the OUTPUT pane, not inside it: the pane holds the GDS text byte for
-     byte and nothing else is allowed to touch that. */
-  outPane.parentNode.insertBefore(strip, outPane.nextSibling);
-  return strip;
-}
-function renderLiveBadges(badges) {
-  var strip = liveBadgeStrip();
-  if (!strip) return;
-  strip.innerHTML = "";
-  var api = liveFreeApi();
-  (badges || []).forEach(function (badge) {
-    var chip = document.createElement("span");
-    chip.className = "live-badge" + (badge.failed ? " live-badge-weak" : "") + (badge.live ? " live-badge-live" : "");
-    chip.title = badge.provenance || "";
-    var provenance = document.createElement("b");
-    provenance.textContent = badge.provenance || "";
-    chip.appendChild(provenance);
-    chip.appendChild(document.createTextNode(" " + (badge.text || "")));
-    strip.appendChild(chip);
-  });
-  var note = document.createElement("span");
-  note.className = "live-badge live-badge-note";
-  note.textContent = api ? api.availabilityDisclaimer() : "";
-  strip.appendChild(note);
-}
-function scheduleLiveBadges(text) {
-  var api = liveFreeApi();
-  if (!api || !text) return;
-  var segs = [];
-  try { segs = (window.SpicyEngine.parse(text)[0] || []); } catch (error) { segs = []; }
-  if (!segs.length) { var strip = document.getElementById("liveBadges"); if (strip) strip.innerHTML = ""; return; }
-  if (liveBadgeTimer) clearTimeout(liveBadgeTimer);
-  liveBadgeTimer = setTimeout(function () {
-    liveBadgeTimer = null;
-    var first = segs[0];
-    var distance = 0;
-    try {
-      var p = window.SpicyEngine.parse(text)[0] || [];
-      if (p.length && p[0].orig && p[0].dest) distance = window.SpicyEngine.haversineMiles(p[0].orig, p[0].dest) || 0;
-    } catch (error) { distance = 0; }
-    api.updateBadges(segs, {
-      data: (typeof SPICY_DATA !== "undefined" ? SPICY_DATA : null),
-      cabin: (first.cabin || "").toLowerCase() || null,
-      aircraft: first.aircraft || null,
-      distanceMiles: distance,
-      checkSeatmap: false                  /* the seat map's own page asks for it */
-    }).then(function (badges) {
-      if (out.textContent !== text) return;   /* a newer paste owns the strip */
-      renderLiveBadges(badges);
-    })["catch"](function () { /* a badge failure is never a conversion failure */ });
-  }, api.DEBOUNCE_MS || 800);
-}
-/* LIVE_BADGES:END */
+/* The old LIVE_BADGES strip is retired: no badge row renders under the
+   OUTPUT pane, and nothing decorates a finished conversion. */
+
 
 /* BOOKING_LINK:BEGIN */
 /*
@@ -553,6 +475,7 @@ function recordStat(type, durationMs) {
       if (s.period.durations.length > 50) s.period.durations.shift();
     }
     statsSave(s);
+    if (bump.total) autoSaveWeeklyReport();
   } catch (e) {}
 }
 
@@ -2383,10 +2306,11 @@ function renderAttachmentResults(results, token, batch, started) {
     bookingSourceDirty = false;
     setOut(outText);
     var ms = Math.round(((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - started);
-    // An attached PDF cannot be read offline; say so instead of letting the
-    // user assume it was part of this result.
+    // One note still rides along, and only when the job did NOT finish: an
+    // attached PDF cannot be read offline, and silence would imply it was part
+    // of this result. A completed conversion says nothing else.
     var pdfNote = (readyDocuments().length && !gemKey()) ? "  ·  PDF needs Gemini (AI FIX)" : "";
-    setStatus("IMAGE PARSED — " + allSegs.length + " seg(s) (" + ms + "ms)" + (warns.length ? "  ·  " + warns.join(" · ") : "") + pdfNote, warns.length > 0);
+    setStatus("CONVERSION DONE" + pdfNote);
     var imgs = readyImages();
     if (imgs.length === 1 && imgs[0]._hash && !(inp.value || "").trim() && !readyDocuments().length) {
       imgCacheSet(imgs[0]._hash, outText, bookingSourceWarnings);
@@ -2437,7 +2361,7 @@ function convertImageAttachments(batch) {
       bookingSourceWarnings = cached.warnings.slice();
       bookingSourceDirty = false;
       setOut(cached.out);
-      setStatus("CACHED IMAGE — instant");
+      setStatus("CONVERSION DONE");
       imageParsePromise = null;
       return;
     }
@@ -2596,9 +2520,10 @@ function renderDirectSync(text, opts){
   var outText = window.SpicyEngine.renderItinerary(segs);
   lastOut = outText;
   setOut(outText);
-  var msg = "CONVERTED — "+segs.length+" segment(s)";
-  if(warns.length) msg+="  ·  "+warns.join(" · ");
-  setStatus(msg, warns.length>0);
+  // The status bar says one thing on success: the conversion is done. The
+  // engine's per-segment notes stay internal (bookingSourceWarnings feeds the
+  // booking link + seat map); they are no longer printed to the user.
+  setStatus("CONVERSION DONE");
   tCacheSet(fp(text), outText, bookingSourceWarnings);
   if (counted) recordStat("text_direct");
   return {segs:segs,warns:warns,out:outText};
@@ -2635,7 +2560,7 @@ function convert(auto) {
     if (h === lastTextFp && lastOut) {
       bookingSourceDirty = false;
       refreshBookingLinkButton(lastOut);
-      setStatus("CACHED — instant");
+      setStatus("CONVERSION DONE");
       return;
     }
     var tc = tCacheGet(h);
@@ -2651,7 +2576,7 @@ function convert(auto) {
       bookingSourceDirty = false;
       setOut(tc.out);
       lastTextFp = h;
-      setStatus("CACHED TEXT — instant — " + (tc.out.split("\n").filter(function(l) { return / N$/.test(l); }).length) + " segs");
+      setStatus("CONVERSION DONE");
       recordStat("text_cached");      // a press that produced output, instantly
       return;
     }
@@ -3077,15 +3002,30 @@ function generateWeeklyReportText() {
   return lines.join("\n");
 }
 
+/* The weekly report has no button and waits for nobody. Every counted
+   conversion refreshes a stored snapshot (throttled to one write a minute),
+   and the bug-report email carries that snapshot to the author on its own —
+   the numbers reach our end without the user doing anything extra. */
+var AUTO_REPORT_KEY = "spicy_weekly_report_v1";
+var autoReportAt = 0;
+function autoSaveWeeklyReport() {
+  var now = Date.now();
+  if (now - autoReportAt < 60000) return;
+  autoReportAt = now;
+  try {
+    localStorage.setItem(AUTO_REPORT_KEY, JSON.stringify({
+      generatedAt: new Date(now).toISOString(),
+      text: generateWeeklyReportText()
+    }));
+  } catch (e) {}
+}
 /* REPORT:END */
-var REPORT_MAIL_SUBJECT = "SpicyTerminal Weekly Report — Performance & AI Mistake Learning";
 /* Gmail compose in a new tab. Two ways this used to look broken:
    - a blocked pop-up returns null from window.open, so the click looked dead
-     while the modal sat there with no explanation;
-   - the whole report travels in the query string, and browsers refuse or
+     with no explanation;
+   - the whole payload travels in the query string, and browsers refuse or
      truncate URLs past their length cap, so a long report could arrive half
-     missing. Past the guard the body is left out and the copy button is the
-     way to move it. */
+     missing. Past the guard the body is left out. */
 var MAIL_URL_SOFT_LIMIT = 60000;
 function openGmailCompose(subject, body, blockedHint) {
   var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(AUTHOR_EMAIL) +
@@ -3093,20 +3033,11 @@ function openGmailCompose(subject, body, blockedHint) {
   var withBody = url + "&body=" + encodeURIComponent(body || "");
   if (withBody.length <= MAIL_URL_SOFT_LIMIT) url = withBody;
   else url += "&body=" + encodeURIComponent("Report too long for a compose link (" +
-            (body || "").length + " characters) — copy it from the report box and paste it here.");
+            (body || "").length + " characters) — paste the details into this email manually.");
   var win = null;
   try { win = window.open(url, "_blank"); } catch (e) { win = null; }
-  if (!win) setStatus(blockedHint || "POP-UP BLOCKED — allow pop-ups for this site, or use COPY REPORT", true);
+  if (!win) setStatus(blockedHint || "POP-UP BLOCKED — allow pop-ups for this site and press again", true);
   return !!win;
-}
-function openWeeklyReport() {
-  var reportText = generateWeeklyReportText();
-  $("reportContent").value = reportText;
-  $("reportModal").classList.remove("hidden");
-
-  // Also pre-open Gmail compose in new tab
-  openGmailCompose(REPORT_MAIL_SUBJECT, reportText,
-                   "POP-UP BLOCKED — press EMAIL ADHAM again, or COPY REPORT and paste it");
 }
 
 /* ABOUT:BEGIN */
@@ -3441,19 +3372,8 @@ function openGenKey(){
 }
 $("genKey").addEventListener("click", openGenKey);
 
-// Weekly Report Modal & Buttons
-if ($("btnWeeklyReport")) $("btnWeeklyReport").addEventListener("click", openWeeklyReport);
-if ($("reportClose")) $("reportClose").addEventListener("click", function(){ $("reportModal").classList.add("hidden"); });
-if ($("reportCopy")) $("reportCopy").addEventListener("click", function(){
-  var txt = $("reportContent").value;
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(txt).then(function(){ setStatus("WEEKLY REPORT COPIED ✓"); });
-  }
-});
-if ($("reportSend")) $("reportSend").addEventListener("click", function(){
-  openGmailCompose(REPORT_MAIL_SUBJECT, $("reportContent").value,
-                   "POP-UP BLOCKED — allow pop-ups for this site, or COPY REPORT and paste it into a new email");
-});
+// The weekly report button + modal are retired: the snapshot refreshes itself
+// on every counted conversion and rides out with the bug report below.
 
 // Bug Report: Send to adhambadraan@gmail.com
 $("report").addEventListener("click", function(){
@@ -3463,6 +3383,13 @@ $("report").addEventListener("click", function(){
   var learnTxt=learn.length ? "\n=== ENGINE LEARN LOG ("+learn.length+") ===\n"+ learn.slice(0,3).map(function(l,i){ return (i+1)+") "+l.when+" — "+l.why+"\nIN : "+l.in+"\nOUT: "+l.out; }).join("\n") : "";
   var mistakes = loadMistakes();
   var mistakeTxt = mistakes.length ? "\n=== RECENT DETECTED MISTAKES ("+mistakes.length+") ===\n" + mistakes.slice(0, 3).map(function(m, i){ return (i+1)+") "+m.when+" — "+m.summary; }).join("\n") : "";
+  // The weekly numbers arrive with the report automatically — no separate
+  // button, nothing to remember to press.
+  var autoReport = "";
+  try {
+    var snap = JSON.parse(localStorage.getItem(AUTO_REPORT_KEY) || "null");
+    if (snap && snap.text) autoReport = "\n=== WEEKLY REPORT (AUTO, generated " + snap.generatedAt + ") ===\n" + snap.text;
+  } catch (e) {}
 
   var body="=== SPICY TERMINAL BUG REPORT ===\nTO: "+AUTHOR_EMAIL+"\nWHEN: "+new Date().toISOString().replace("T"," ").slice(0,19)+" UTC\nAI MODEL: "+(window._aiModel||aiModelGet()||"(none used)")+"\n\n=== WHAT I PASTED ===\n"+(cap(input,1300)||"(empty)")+"\n\n=== WHAT THE APP PRODUCED ===\n"+(cap(output,1300)||"(empty)")+"\n\n=== WHAT I EXPECTED INSTEAD ===\n\n\n=== ANY OTHER DETAILS ===\n"+learnTxt+mistakeTxt;
   openGmailCompose("SpicyTerminal bug report", body,

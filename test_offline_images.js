@@ -175,8 +175,8 @@ assert(cleanedLearned.includes("XY 1337"), "Tool applied learned rule to fix fli
 console.log("\n=== 5. Weekly Report & Destination Email Verification ===");
 const html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
 assert(html.includes("adhambadraan@gmail.com"), "index.html contains author email adhambadraan@gmail.com");
-assert(html.includes("btnWeeklyReport"), "index.html contains btnWeeklyReport button");
-assert(html.includes("reportModal"), "index.html contains reportModal dialog");
+assert(!html.includes("btnWeeklyReport"), "index.html retires the btnWeeklyReport button — the snapshot refreshes itself");
+assert(!html.includes('id="reportModal"'), "index.html retires the reportModal dialog with it");
 assert(html.includes("OCRAD"), "index.html has bundled OCRAD engine");
 assert(html.includes('id="ocradSource" type="text/plain"'), "index.html defers OCRAD compilation until a screenshot needs it");
 assert(html.includes("attachmentReviewModal"), "index.html includes the screenshot review dialog");

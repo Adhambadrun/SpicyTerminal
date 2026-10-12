@@ -77,12 +77,11 @@ button:focus-visible{outline:2px solid var(--green);outline-offset:3px}
 #st::before{content:"";display:inline-block;width:6px;height:6px;margin:0 8px 1px 1px;border-radius:50%;background:currentColor;vertical-align:middle}
 #st.warn{color:#f0a35c}
 #st.warn::before{box-shadow:0 0 0 0 rgba(240,163,92,.42)}
-#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnSeatMap:hover,#btnAbout:hover{color:#8fa6b2}
+#report:hover,#genKey:hover,#btnSeatMap:hover,#btnAbout:hover{color:#8fa6b2}
 .linkbtn{color:#3e4f59;font-size:11px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono);font-weight:400;flex:none;white-space:nowrap;min-height:auto}
 .booking-pax{display:inline-flex;align-items:center;gap:4px;color:#60747e;font-size:9px;letter-spacing:.35px;white-space:nowrap;flex:none;cursor:pointer}
 .booking-pax select{width:40px;height:22px;padding:1px 4px;background:#0a0f14;border:1px solid #24353d;border-radius:4px;color:#b9c9d0;font:10px var(--mono);cursor:pointer}
 .booking-pax select:focus-visible{outline:2px solid var(--green);outline-offset:2px}
-#btnWeeklyReport{margin-right:12px}
 /* welcome — small card, app visible behind (translucent backdrop) */
 .welcome{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
 background:rgba(4,8,12,.35);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
@@ -127,7 +126,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 /* About is the first control of the status row group, so it carries the
    `margin-left:auto` that used to sit on Generate Api — the group stays
    right-aligned and keeps the order About / Booking Link / Generate Api /
-   Weekly Report / Report a bug at every width. */
+   Report a bug at every width. */
 #btnAbout{margin-left:auto}
 #genKey{margin-right:12px}
 #btnBookingLink{border-radius:999px}
@@ -191,15 +190,7 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
    wordmark looked worse than a quiet header. */
 @media (max-width:560px){.status{gap:6px 10px}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}}
-__SEATMAP_CSS__
-  .live-badges { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 0; }
-  .live-badge { font-size: 11px; line-height: 1.5; padding: 3px 7px; border: 1px solid #2a3441; border-radius: 3px;
-    color: #cbd5e1; background: #0f172a; max-width: 100%; overflow-wrap: anywhere; }
-  .live-badge b { color: #7dd3a0; font-weight: 600; margin-right: 4px; }
-  .live-badge-live b { color: #facc15; }
-  .live-badge-weak { color: #94a3b8; border-color: #334155; }
-  .live-badge-note { color: #94a3b8; border-style: dashed; }
-</style>
+__SEATMAP_CSS__</style>
 </head>
 <body>
 <header>
@@ -234,8 +225,7 @@ __SEATMAP_CSS__
   </label>
   <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert a complete American, Delta, Alaska, United or British Airways itinerary to enable its checkout link. Mixed-airline trips (more than one bookable airline), unsupported airlines and uncertain conversions keep it off. Select the number of passengers (1–9) beside the link; seat assignment is not included. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made.">BOOKING LINK</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
-  <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
-  <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Seat map for the flight you converted — real aircraft type and layout tier, simulated seat statuses (no airline inventory is connected).">Seat Map</a>
+  <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Seat map for the flight you converted — real aircraft type, labelled layout tier, and the airline’s own seat link.">Seat Map</a>
   <button id="report" class="linkbtn">Report a bug</button>
 </div>
 
@@ -265,19 +255,6 @@ __SEATMAP_CSS__
     <div class="row">
       <button class="ghost" id="setClose">CLOSE</button>
       <button class="save" id="setSave">SAVE</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal hidden" id="reportModal">
-  <div class="card" style="width:560px;max-width:94vw">
-    <h3>WEEKLY PERFORMANCE &amp; LEARNING REPORT</h3>
-    <p>Weekly report for <strong style="color:#53d977">adhambadraan@gmail.com</strong> — covers this week (from Monday, UTC) and tracks conversion speed, detected mistakes, and self-learning fixes to enhance the tool.</p>
-    <textarea id="reportContent" readonly style="width:100%;height:220px;background:#070b0f;border:1px solid #22313c;border-radius:6px;color:#dbe7de;font-family:var(--mono);font-size:11px;padding:8px;margin-bottom:12px;outline:0;white-space:pre-wrap"></textarea>
-    <div class="row">
-      <button class="ghost" id="reportClose">CLOSE</button>
-      <button class="ghost" id="reportCopy">COPY REPORT</button>
-      <button class="save" id="reportSend">EMAIL ADHAM</button>
     </div>
   </div>
 </div>
@@ -362,7 +339,7 @@ __SEATMAP_CSS__
     <a class="seatmap-back" id="seatmapBackLink" href="/" aria-label="Return to SpicyTerminal">← TERMINAL</a>
     <img class="seatmap-wordmark-img" id="wordmarkSeatMap" src="" alt="SpicyTerminal">
     <span class="seatmap-wordmark">SEAT MAP VIEWER</span>
-    <span class="seatmap-top-tag" id="seatmapTopTag">REAL FLIGHT · SIMULATED SEATS · NOTHING RESERVED</span>
+    <span class="seatmap-top-tag" id="seatmapTopTag">REAL FLIGHT · LABELLED LAYOUT</span>
   </div>
 
   <div class="seatmap-main" id="seatmapContent">
@@ -370,13 +347,12 @@ __SEATMAP_CSS__
       <div>
         <h1 class="seatmap-title" id="seatmapPageTitle">SEAT MAP</h1>
         <p class="seatmap-subtitle">Your converted itinerary loads straight in here — airline, flight number, route, date, cabin and aircraft type, re-read from the OUTPUT you just converted with the same engine, so the two cannot disagree. The cabin is drawn from a layout that says, on the map, how well it is verified.</p>
-        <p class="seatmap-subtitle" style="margin-top:5px">The seat colours are invented in this tab. No airline inventory is connected, and picking a seat reserves nothing — not even a preference. Want a real seat? Take the airline link on the map and ask the airline.</p>
         <p class="seatmap-subtitle" style="margin-top:5px">No conversion to read, or after something else? Look a flight up by number below — or pick an aircraft type and I will draw that type.</p>
       </div>
     </div>
     <div class="seatmap-dev-banner" role="status">
       <span class="seatmap-dev-mark">WHAT IS REAL HERE</span>
-      <span><strong>Flight data is real; seat status is not.</strong> The flight identity and aircraft type come from your converted itinerary, and the cabin layout is labelled by tier: an airline-verified configuration when one has been checked, otherwise a reference layout for that aircraft type. Seat availability is simulated in this browser — never live airline inventory — and selecting a seat reserves nothing. I would rather say that four times than have you believe one green square.</span>
+      <span><strong>Flight data is real.</strong> The flight identity and aircraft type come from your converted itinerary, and the cabin layout is labelled by tier: an airline-verified configuration when one has been checked, otherwise a reference layout for that aircraft type. When the seat itself matters, the airline link on the map takes you to the airline.</span>
     </div>
 
     <section class="seatmap-card" aria-labelledby="seatmapFindTitle">
@@ -580,12 +556,11 @@ __SEATMAP_CSS__
   <div class="seatmap-notice" id="seatmapNotice" role="dialog" aria-modal="true" aria-labelledby="seatmapNoticeTitle" aria-describedby="seatmapNoticeBody">
     <div class="seatmap-notice-card">
       <div class="seatmap-notice-kicker">WHAT THIS PAGE KNOWS · AND WHAT IT DOES NOT</div>
-      <h2 id="seatmapNoticeTitle">Seat Map: real flight, reference layout, simulated seats</h2>
+      <h2 id="seatmapNoticeTitle">Seat Map: real flight, labelled layout</h2>
       <div id="seatmapNoticeBody">
-        <p><strong>Real:</strong> the airline, flight number, route, date, cabin, booking class and aircraft type come from the itinerary you converted. The aircraft type's provenance is shown — stated in your itinerary, or inferred by the converter (and how).</p>
+        <p><strong>Real:</strong> the airline, flight number, route, date, cabin, booking class and aircraft type come from the itinerary you converted. The aircraft type's provenance is shown on the map.</p>
         <p><strong>Layout:</strong> the cabin configuration is labelled by tier. <em>Verified</em> means it was checked against that airline's own seat map; <em>reference</em> means it is the typical configuration for the aircraft type and has not been verified for the airline; <em>generic</em> means only the cabin cross-section is known. The badge on the map says which one you are looking at. Layouts are never invented to fill a gap.</p>
-        <p><strong>Simulated:</strong> seat availability, counts and refreshes are generated in this browser — not live airline data, pricing, or a reservation. Selecting a seat reserves nothing. Nothing is sent to an airline, and no API key is required.</p>
-        <p><strong>Short version:</strong> the flight is real, the cabin is a labelled best effort, and the seat colours are a coin flip tossed in your browser. When the seat actually matters, the airline's own site is where seats live — the link on the map walks you there.</p>
+        <p><strong>Short version:</strong> the flight is real and the cabin layout says how well it is verified — no API key, no setup. When the seat actually matters, the airline's own site is where seats live — the link on the map walks you there.</p>
       </div>
       <div class="seatmap-notice-actions">
         <a href="/" id="seatmapNoticeBack">BACK TO SPICYTERMINAL</a>
@@ -627,7 +602,6 @@ __SEATMAP_CSS__
 <script>__SPICY_DATA__</script>
 <script>__SPICY_ENGINE__</script>
 <script>__SPICY_LINKS__</script>
-<script>__SPICY_LIVE_FREE__</script>
 <!-- No Seat Map gate ships any more: seatmap_gate.js stays in the repository as
      a retired module, and the open-door wiring lives in app.js (SEATMAP_GATE). -->
 <script>__APP_JS__</script>

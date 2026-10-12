@@ -73,9 +73,15 @@ hallucinations, no re-rolling the dice.
   3179 — and near-antipodal pairs fall back to the spherical value rather than
   failing.
 - **Text and PDF attachments**: `.txt`, `.eml`, `.csv`, `.json`, `.html`, `.ics`, and similar text exports are read instantly; PDFs are passed to AI only when the user explicitly supplies a Gemini key.
-- **Weekly report**: One-click weekly performance and enhancement reports sent to `adhambadraan@gmail.com` to improve and enhance the tool to the max. Each report covers one week (Monday 00:00 UTC → now), compares it with the previous week, and keeps a separate lifetime total — a closed week is archived, never mixed into the current one. A *conversion* is a result shown to the user: live re-renders while typing and AI replies the direct read beat are counted as neither.
+- **Weekly report, no button**: the counters refresh on their own with every conversion the user was
+  shown, and a weekly snapshot (Monday 00:00 UTC → now, previous week compared, lifetime total kept
+  separately, closed weeks archived — never mixed into the current one) is stored in `localStorage`
+  (`spicy_weekly_report_v1`, throttled to one write a minute). The `Report a bug` email carries that
+  snapshot to `adhambadraan@gmail.com` automatically — nothing to press, nothing to remember. A
+  *conversion* is a result shown to the user: live re-renders while typing and AI replies the direct read
+  beat are counted as neither.
 - **About, in one click**: the `About` link leads the status row (`About / Booking Link / Generate Api /
-  Weekly Report / Seat Map / Report a bug`) and opens a dialog that says what the engine does, what it
+  Seat Map / Report a bug`) and opens a dialog that says what the engine does, what it
   deliberately refuses to do, and who built it — no marketing, no fluff, `Esc` closes it and
   focus goes back where it was.
 - **Booking checkout links**: a `BOOKING LINK` control sits next to About and lights green for a
@@ -90,12 +96,12 @@ hallucinations, no re-rolling the dice.
   copies the URL and opens the external search or prefilled summary in one tab; it never books
   or purchases, and stays disabled for partial, invalid, uncertain, unsupported, mixed-bookable,
   or stale input. There is no Google Flights fallback.
-- **Seat Map for the flight you converted** — sealed for now: the status-row link between Weekly Report and Report a bug is **dimmed and opens on the tenth click**, and `/seatmap` checks the same count before it draws anything, so typing the URL gets you a card that says the page is not finished. The lock is a `sessionStorage` counter for the tab — no account, no password, no server; a reload keeps the unlock, a new tab starts over. It is temporary on purpose: to open the Seat Map to everyone, delete the `SEATMAP_GATE` block in `app.js` and the gate check in `seatmap.js`. Once open, the page reads the itinerary you just converted (`app.js` mirrors the OUTPUT pane into `sessionStorage`, and the seat map re-parses it with the real engine, so the two can never disagree) and shows the airline, flight number, route, date, departure clock, cabin, booking class, aircraft type **and how that type was determined** — stated in your itinerary, or inferred by the converter and by which method. Multi-leg itineraries get a leg switcher (`?leg=N` opens a leg directly).
-  - **Layouts are tiered, never guessed.** `seatmap_layouts.js` holds 40+ reference cabin layouts covering every aircraft type the converter's own equipment tables can emit, plus `(airline, type)`-verified configurations (the list ships empty until an entry is checked against the airline's own seat map — the schema and integrity suite are in place for that). Resolution order is: verified airline configuration → reference layout for the type → generic cabin cross-section → an honest refusal for freighters and unknown types. The badge on the map says which tier you are looking at, and a reference layout is never presented as the airline's own configuration. Seat letters follow the airline alphabet (`I` is never used).
-  - **What stays simulated, and says so.** Seat statuses, counts and the 30-second refresh are generated deterministically in the browser — no airline or inventory provider is called, no key is needed, and seat prices are never shown. Selecting a seat reserves nothing. The page repeats this in its notice, its banner, its badge classes, its exports and its "check the airline" link (one curated home-page link per airline, offered because live seats live in your booking).
-  - **It reads your converted flight, or looks one up.** Land on `/seatmap` after a conversion and that itinerary is what you get: airline, flight number, route, date, cabin, booking class, aircraft type and how that type was determined. Or search it the way seatmaps.com does — type `BA117`, `BA 117 LHR JFK` or `CAI LHR` — and the lookup answers in layers, each one labelled: the local flight table (published route + the type usually assigned), the aircraft this converter has read out of real itineraries (`flightEquipment` in `spicy_data.js`), what it can infer for that airline on that route, and then an honest "not in the local tables". There is no schedule feed in the tab and no tail number is claimed: the airline link on the map is where today's aircraft lives.
-  - **Every cabin the aircraft actually flies, First included.** A two-class reference layout is not proof that a type has no First cabin — the same 787-9 flies four cabins at another operator — so every wide body also carries its four-class configuration as a variant (`TYPE_LAYOUT_VARIANTS`). Ask for First or Premium Economy and the variant that has it is drawn, with a note saying the configuration was switched and that it is still a reference layout, not that airline's own. The manual picker now offers all 42 types the registry can draw, not three presets.
-  - **It dresses like the terminal, and talks like it.** The Seat Map is not a second product: it wears the same shell — near-black panes, the green/red hairline, uppercase mono labels, green for what is real, amber for what is only verified by someone other than the airline, red for a refusal — and it speaks in the same voice: the flight is real, the cabin is a labelled best effort, the seat colours are a coin flip tossed in your browser, and the airline's own site is where seats actually live.
+- **Seat Map for the flight you converted** — open for every tab: the status-row `Seat Map` link (and
+  `/seatmap` directly) draws immediately, no clicks to earn. The page reads the itinerary you just
+  converted (`app.js` mirrors the OUTPUT pane into `sessionStorage`, and the seat map re-parses it with
+  the real engine, so the two can never disagree) and shows the airline, flight number, route, date,
+  departure clock, cabin, booking class and aircraft type; the badge on the map says how well the cabin
+  layout is verified. Multi-leg itineraries get a leg switcher (`?leg=N` opens a leg directly).
 - **No animations**: the interface is completely still (the Seat Map's flight strip, leg switcher and tier badges are plain instant updates too). There are no pane entrance effects,
   change sweeps, per-line glow bars, spinning edge glow, result-print effects, pulsing status
   dot, blinking cursor or hover transitions — a change simply updates the text. Nothing is
@@ -143,7 +149,7 @@ files and archives are never shipped.
 | `seatmap_flights.js` | the Seat Map's flight lookup: a local table of published flight numbers + the layered fallbacks (converter's own table → route → airline) behind the `BA117` search box; inlined by the build |
 | `spicy_engine.js` | the conversion engine |
 | `spicy_links.js` | booking checkout link engine (AA / DL / AS / UA / BA), ported from the Spicy Link Generator; feeds the BOOKING LINK button |
-| `spicy_live_free.js` | free live verification: keyless-first providers (OpenSky, Open-Meteo, Frankfurter, FlightSeatMap's free MCP, the local ICAO CO2 formula and the shipped visa table) plus optional BYOK free keys (AviationStack, AeroDataBox, Travelpayouts); 10-minute cache, token buckets, 800 ms debounce, provenance on every badge; inlined by the build |
+| `spicy_live_free.js` | the same provider layer for offline tooling: keyless-first providers (OpenSky, Open-Meteo, Frankfurter, FlightSeatMap's free MCP, the local ICAO CO2 formula and the shipped visa table) plus optional BYOK free keys (AviationStack, AeroDataBox, Travelpayouts); 10-minute cache, token buckets, 800 ms debounce, provenance on every value; **not inlined by the build** |
 | `spicy_data.js` | airports / airlines / aircraft data, merged from free open data (see below) |
 | `update_spicy_data_free.py` | the free-data merge into `spicy_data.js`: OurAirports (Unlicense) + OpenFlights (ODbL) + Passport Index (MIT) + mledoze/countries (ODbL) — `python3 update_spicy_data_free.py` |
 | `index_template.html` | page template |
@@ -179,11 +185,11 @@ files and archives are never shipped.
 ## Free live verification ($0, no card, no account)
 
 The converter never needs the network: an itinerary converts offline in about 50 ms and the GDS
-block it prints is final. On top of that, `spicy_live_free.js` adds *badges* — one-line facts about
-the flight that a free provider can confirm — under the OUTPUT pane. Badges never block, never
-re-render the output, and a provider that fails produces a single honest line instead of an error.
+block it prints is final. The optional `spicy_live_free.js` provider layer still lives in the repo
+for tooling and its own test suite, but it is no longer inlined into the built page — the shipped
+app renders no provider rows under the OUTPUT pane and asks for nothing.
 
-Two kinds of free provider, labelled differently everywhere they appear:
+Two kinds of free provider, labelled differently everywhere the module reports them:
 
 | kind | providers | key | what it is |
 |---|---|---|---|
@@ -192,16 +198,14 @@ Two kinds of free provider, labelled differently everywhere they appear:
 
 Rules the module enforces:
 
-* every value carries its `provenance` string — `OPENSKY_LIVE`, `AVIATIONSTACK_FREE`,
-  `AERODATABOX_FREE`, `FLIGHTSEATMAP_FREE (hosted MCP, not live booking inventory)`,
-  `OPEN_METEO_FREE`, `FRANKFURTER_FREE`, `LOCAL_ICAO_CO2`, `VISA_TABLE_LOCAL`, `SIMULATED (deterministic hash)`;
+* every value carries its `provenance` string, so a number can always be traced to its source;
 * responses are cached 10 minutes in memory and `localStorage`, calls are debounced 800 ms and
   deduplicated, and each provider has a token bucket, so a free quota cannot be burned by pasting;
 * a 429 stops that provider for an hour with the exact line
   “Free API limit reached — offline conversion still perfect, try in 1h”; a FlightSeatMap outage is
   reported as “FlightSeatMap free unavailable (CORS) — showing verified local layout”;
-* availability is `SIMULATED` unless a live provider is configured, and none is configured by
-  default; selecting a seat reserves nothing and the page says so;
+* availability stays local unless a live provider is configured, and none is configured by
+  default;
 * no paid endpoint, paid plan or paid feature is referenced anywhere in the code or the UI.
 
 ## Free airport data

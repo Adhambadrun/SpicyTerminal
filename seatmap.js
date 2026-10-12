@@ -21,7 +21,7 @@
  *      and the refresh counter. Real seat availability needs an airline/GDS
  *      inventory feed, which this app (a converter, not a booking tool) has
  *      no access to, so statuses are labelled SIMULATED everywhere they
- *      appear. Selecting a seat reserves nothing.
+ *      appear.
  */
 (function (root) {
   "use strict";
