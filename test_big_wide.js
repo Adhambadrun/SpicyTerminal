@@ -500,7 +500,12 @@ AA 200 J 02JAN LHR JFK 100P 1000P`;
     const dest = allAps[Math.floor(Math.random()*allAps.length)];
     if(orig===dest) continue;
     const miles = E.haversineMiles(orig,dest);
-    assert(miles===null || (miles>0 && miles<15000), `haversine ${orig}-${dest} ${miles}`);
+    // Two distinct codes can share one physical airport (DSS/DKR are both
+    // Blaise Diagne Intl in the data file), so 0 is legitimate for those.
+    // test_very_wide.js applies the same rule; a bare `miles>0` here made this
+    // fuzz fail at random on that pair.
+    const sameSpot = miles===0 && D.airports[orig].lat===D.airports[dest].lat && D.airports[orig].lon===D.airports[dest].lon;
+    assert(miles===null || sameSpot || (miles>0 && miles<15000), `haversine ${orig}-${dest} ${miles}`);
   }
 })();
 
