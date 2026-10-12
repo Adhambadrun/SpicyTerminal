@@ -135,9 +135,13 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 #btnBookingLink.booking-link-ready{padding:4px 9px;color:#72f39b;text-decoration:none;font-weight:700;letter-spacing:.45px;background:rgba(31,157,85,.13);border:1px solid rgba(83,217,119,.6);box-shadow:0 0 11px rgba(83,217,119,.2),inset 0 0 8px rgba(83,217,119,.08);text-shadow:0 0 8px rgba(83,217,119,.42)}
 #btnBookingLink.booking-link-ready:hover{color:#eaffef;background:rgba(31,157,85,.24);border-color:#8af5a8;box-shadow:0 0 16px rgba(83,217,119,.36),inset 0 0 9px rgba(83,217,119,.14);filter:none}
 #btnBookingLink:focus-visible{outline:2px solid #53d977;outline-offset:3px}
-/* The Seat Map link opens on an ordinary click. It carries the flight you
-   just converted; seat availability inside is simulated and says so. */
+/* The Seat Map is sealed while it is still being finished: the link is dimmed
+   and only opens on the tenth click (see SEATMAP_GATE in app.js). Hover and
+   focus still lift it to full contrast, so the dim is a label and never a
+   contrast trap; once the tenth click lands the link is painted normally. */
+#btnSeatMap{opacity:.35}
 #btnSeatMap:hover,#btnSeatMap:focus-visible{opacity:1}
+#btnSeatMap.is-unlocked{opacity:1}
 .about-modal{z-index:56;padding:16px;align-items:flex-start}
 .about-card{position:relative;width:min(880px,100%);max-height:calc(100dvh - 32px);overflow:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(180deg,#0d141a,#080c11);border:1px solid #1e2b34;border-radius:16px;padding:26px 26px 20px;box-shadow:0 30px 90px rgba(0,0,0,.72)}
 .about-card::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:16px 16px 0 0;background:linear-gradient(90deg,transparent,rgba(83,217,119,.55) 30%,#e2574b 72%,transparent);opacity:.6;pointer-events:none}
@@ -330,24 +334,49 @@ __SEATMAP_CSS__
   </div>
 </div>
 
-<!-- Seat Map is a separate static route. Its data is a local illustration, not airline inventory. -->
+<!-- Seat Map is a separate static route. Its data is a local illustration, not
+     airline inventory, and it is sealed behind the ten-click gate until it is
+     finished: the gate is honoured here as well as on the link, because a URL
+     that opens the map anyway is not a gate. -->
 <div class="seatmap-page hidden" id="seatmapPage">
   <div class="seatmap-topbar">
-    <a class="seatmap-back" id="seatmapBackLink" href="/" aria-label="Return to SpicyTerminal">← SPICYTERMINAL</a>
+    <a class="seatmap-back" id="seatmapBackLink" href="/" aria-label="Return to SpicyTerminal">← TERMINAL</a>
+    <img class="seatmap-wordmark-img" id="wordmarkSeatMap" src="" alt="SpicyTerminal">
     <span class="seatmap-wordmark">SEAT MAP VIEWER</span>
-    <span class="seatmap-top-tag">REAL FLIGHT DATA · SIMULATED SEAT STATUS</span>
+    <span class="seatmap-top-tag" id="seatmapTopTag">REAL FLIGHT · SIMULATED SEATS · NOTHING RESERVED</span>
   </div>
+
+  <!-- Shown instead of the map when this tab has not knocked ten times yet. -->
+  <section class="seatmap-lock hidden" id="seatmapLock" aria-labelledby="seatmapLockTitle">
+    <div class="seatmap-lock-card">
+      <div class="seatmap-lock-kicker">SEALED · NOT FINISHED</div>
+      <h2 class="seatmap-lock-title" id="seatmapLockTitle">Seat Map is mine for now.</h2>
+      <div class="seatmap-lock-body" id="seatmapLockBody">
+        <p>Not a password, not an account, not security — a door with a count on it. The
+          <strong>Seat Map</strong> link in the status row opens on its <strong>tenth</strong> click, and this page
+          checks the same count, so typing the URL gets you exactly this sentence.</p>
+        <p><strong id="seatmapLockCount">0 / 10</strong> clicks heard in this tab. A new tab starts over at zero.
+          Treat it as a sign that says <em>still building</em>, because that is all it is.</p>
+        <p>Everything else here converts normally. Go paste something and let the engine do its job.</p>
+      </div>
+      <div class="seatmap-lock-actions">
+        <a href="/" id="seatmapLockBack">← BACK TO THE TERMINAL</a>
+      </div>
+    </div>
+  </section>
+
   <div class="seatmap-main" id="seatmapContent">
     <div class="seatmap-title-row">
       <div>
         <h1 class="seatmap-title" id="seatmapPageTitle">SEAT MAP</h1>
-        <p class="seatmap-subtitle">Your converted itinerary loads automatically: the seat map reads that flight directly — airline, flight number, route, date, cabin and aircraft type — and draws the aircraft's cabin from a layout labelled by how well it is verified. Seat <em>statuses</em> are simulated — no airline seat-availability feed is connected.</p>
-        <p class="seatmap-subtitle" style="margin-top:5px">Nothing converted yet, or want to try a layout by hand? Use the manual entry form below.</p>
+        <p class="seatmap-subtitle">Your converted itinerary loads straight in here — airline, flight number, route, date, cabin and aircraft type, re-read from the OUTPUT you just converted with the same engine, so the two cannot disagree. The cabin is drawn from a layout that says, on the map, how well it is verified.</p>
+        <p class="seatmap-subtitle" style="margin-top:5px">The seat colours are invented in this tab. No airline inventory is connected, and picking a seat reserves nothing — not even a preference. Want a real seat? Take the airline link on the map and ask the airline.</p>
+        <p class="seatmap-subtitle" style="margin-top:5px">Nothing converted yet, or want to poke a layout by hand? The form below does not need a flight.</p>
       </div>
     </div>
     <div class="seatmap-dev-banner" role="status">
       <span class="seatmap-dev-mark">WHAT IS REAL HERE</span>
-      <span><strong>Flight data is real; seat status is not.</strong> The flight identity and aircraft type come from your converted itinerary, and the cabin layout is labelled by tier: an airline-verified configuration when one has been checked, otherwise a reference layout for that aircraft type. Seat availability is simulated in this browser — never live airline inventory — and selecting a seat reserves nothing.</span>
+      <span><strong>Flight data is real; seat status is not.</strong> The flight identity and aircraft type come from your converted itinerary, and the cabin layout is labelled by tier: an airline-verified configuration when one has been checked, otherwise a reference layout for that aircraft type. Seat availability is simulated in this browser — never live airline inventory — and selecting a seat reserves nothing. I would rather say that four times than have you believe one green square.</span>
     </div>
 
     <section class="seatmap-card" aria-labelledby="seatmapSearchTitle">
@@ -466,7 +495,7 @@ __SEATMAP_CSS__
             <div class="seatmap-tooltip hidden" id="seatmapTooltip" role="status"></div>
           </div>
           <div class="seatmap-map-foot">
-            <span>Click a seat for sample details · drag to pan · use controls to zoom</span>
+            <span>Click a seat for its details · drag to pan · <kbd>+</kbd> and <kbd>−</kbd> to zoom. Still a drawing, still not inventory.</span>
             <span id="seatmapLastUpdated">NO SAMPLE GENERATED</span>
           </div>
         </div>
@@ -475,7 +504,7 @@ __SEATMAP_CSS__
           <section class="seatmap-panel">
             <h3 class="seatmap-panel-title">SEAT DETAILS</h3>
             <div class="seatmap-panel-body">
-              <div class="seatmap-details" id="seatmapSeatDetails" aria-live="polite"><p class="seatmap-empty-detail">Choose a seat to inspect its sample status and layout features.</p></div>
+              <div class="seatmap-details" id="seatmapSeatDetails" aria-live="polite"><p class="seatmap-empty-detail">Click a seat. I will tell you what it is, what it is not, and nothing at all about who is sitting in it.</p></div>
               <button class="seatmap-btn" id="seatmapDemoSelect" type="button" disabled>SELECT A SAMPLE SEAT</button>
               <p class="seatmap-selection-status" id="seatmapSelectionStatus">NO SEAT SELECTED</p>
             </div>
@@ -513,6 +542,7 @@ __SEATMAP_CSS__
         <p><strong>Real:</strong> the airline, flight number, route, date, cabin, booking class and aircraft type come from the itinerary you converted. The aircraft type's provenance is shown — stated in your itinerary, or inferred by the converter (and how).</p>
         <p><strong>Layout:</strong> the cabin configuration is labelled by tier. <em>Verified</em> means it was checked against that airline's own seat map; <em>reference</em> means it is the typical configuration for the aircraft type and has not been verified for the airline; <em>generic</em> means only the cabin cross-section is known. The badge on the map says which one you are looking at. Layouts are never invented to fill a gap.</p>
         <p><strong>Simulated:</strong> seat availability, counts and refreshes are generated in this browser — not live airline data, pricing, or a reservation. Selecting a seat reserves nothing. Nothing is sent to an airline, and no API key is required.</p>
+        <p><strong>Short version:</strong> the flight is real, the cabin is a labelled best effort, and the seat colours are a coin flip tossed in your browser. When the seat actually matters, the airline's own site is where seats live — the link on the map walks you there.</p>
       </div>
       <div class="seatmap-notice-actions">
         <a href="/" id="seatmapNoticeBack">BACK TO SPICYTERMINAL</a>
@@ -554,6 +584,10 @@ __SEATMAP_CSS__
 <script>__SPICY_DATA__</script>
 <script>__SPICY_ENGINE__</script>
 <script>__SPICY_LINKS__</script>
+<!-- The Seat Map gate ships ahead of app.js so the link can be painted dimmed
+     on the very first frame, and ahead of seatmap.js so the /seatmap page
+     honours the same lock. -->
+<script>__SEATMAP_GATE__</script>
 <script>__APP_JS__</script>
 <script>__SEATMAP_LAYOUTS__</script>
 <script>__SEATMAP_JS__</script>

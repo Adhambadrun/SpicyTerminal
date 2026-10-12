@@ -23,7 +23,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-page button{min-height:0;border-radius:0;font-family:var(--mono);font-weight:500;}
 .seatmap-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px!important;padding:7px 11px;border:1px solid #33434d;background:#090e12;color:#c9d8ce;font-size:10px;letter-spacing:.65px;text-align:center;text-decoration:none;white-space:nowrap;cursor:pointer;}
 .seatmap-btn:hover:not(:disabled){background:#c9d8ce;color:#05080b;filter:none;}
-.seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
+.seatmap-page .seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
 .seatmap-btn:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline:2px solid #c9d8ce;outline-offset:2px;}
 .seatmap-btn-primary{border-color:#8fa6b2;color:#e0e9e3;}
 .seatmap-examples{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:12px;}
@@ -129,38 +129,89 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 @media(max-width:520px){.seatmap-topbar{padding:8px 11px;}.seatmap-wordmark{font-size:9px;letter-spacing:.8px;}.seatmap-top-tag{font-size:8px;padding:4px 5px;}.seatmap-form{grid-template-columns:repeat(2,minmax(0,1fr));}.seatmap-form .seatmap-btn{grid-column:1 / -1;}.seatmap-side-panel-left,.seatmap-side-panel-right{grid-template-columns:1fr;}.seatmap-toolbar{display:grid;grid-template-columns:1fr;}.seatmap-toolbar-group{justify-content:flex-start;}.seatmap-canvas{height:60vh;min-height:390px;}.seatmap-notice-card{padding:18px 15px;}.seatmap-notice-card h2{font-size:15px;}.seatmap-examples-label{flex-basis:100%;}}
 @media(prefers-reduced-motion:reduce){.seatmap-page *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 
-/* The new route keeps the requested black-and-white chrome; only seat-state
-   swatches and seat cells intentionally use status colors. */
-.seatmap-page{background:#000;color:#f3f3f3;}
-.seatmap-topbar,.seatmap-card,.seatmap-panel,.seatmap-flight-heading,.seatmap-toolbar,.seatmap-notice-card,.seatmap-summary-card{background:#000;border-color:#3a3a3a;}
-.seatmap-canvas-wrap,.seatmap-canvas,.seatmap-field input,.seatmap-field select,.seatmap-filter-select,.seatmap-tooltip{background:#000;border-color:#4a4a4a;color:#f2f2f2;}
-.seatmap-canvas{scrollbar-color:#555 #000;}
-.seatmap-dev-banner{border-color:#555;background:#000;color:#ddd;}
-.seatmap-dev-mark,.seatmap-source-pill{border-color:#777;color:#eee;}
-.seatmap-notice-kicker,.seatmap-notice-card p strong{color:#fff;}
-.seatmap-notice-card p,.seatmap-notice-actions a{color:#d0d0d0;}
-.seatmap-notice-actions a{border-color:#666;}
-.seatmap-btn,.seatmap-example{border-color:#666;background:#000;color:#f2f2f2;}
-.seatmap-btn-primary{border-color:#fff;color:#fff;}
-.seatmap-btn:hover:not(:disabled),.seatmap-example:hover{border-color:#fff;background:#fff;color:#000;}
-.seatmap-btn:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline-color:#fff;}
-.seatmap-field input:focus,.seatmap-field select:focus,.seatmap-filter-select:focus{border-color:#fff;outline-color:#fff;}
-.seatmap-back,.seatmap-wordmark,.seatmap-title,.seatmap-flight-name,.seatmap-detail-name,.seatmap-count,.seatmap-notice-card h2{color:#f2f2f2;}
-.seatmap-subtitle,.seatmap-flight-meta,.seatmap-panel-title,.seatmap-field label,.seatmap-overline,.seatmap-examples-label,.seatmap-zoom-value,.seatmap-refresh-info,.seatmap-filter,.seatmap-legend-item,.seatmap-availability-summary,.seatmap-map-foot,.seatmap-count-caption,.seatmap-empty-detail,.seatmap-detail-list dt,.seatmap-detail-list dd,.seatmap-selection-status,.seatmap-disclaimer,.seatmap-summary-card h2,.seatmap-summary-card pre{color:#bdbdbd;}
-.seatmap-fuselage{fill:#050505;stroke:#777;}
-.seatmap-centerline{stroke:#383838;}
-.seatmap-wing{fill:#080808;stroke:#393939;}
-.seatmap-facility,.seatmap-cabin-label,.seatmap-row-label{fill:#c5c5c5;}
-.seatmap-filter input{accent-color:#fff;}
-.seatmap-exit-label{fill:#f6e19c;}
-.seatmap-top-tag{border-color:#666;color:#ddd;}
-.seatmap-panel-title{border-color:#333;}
-.seatmap-form-status{color:#bdbdbd;}
-.seatmap-form-status.is-error{color:#f2a8a0;}
-.seatmap-back:hover{color:#fff;}
-.seatmap-disclaimer{border-color:#3a3a3a;}
-.seatmap-disclaimer strong{color:#eee;}
-@media(max-width:1120px){.seatmap-side-panel-right{border-color:#3a3a3a;}}
+/* ---------- SpicyTerminal chrome ----------
+   The Seat Map is not a second product: it wears the terminal's own shell —
+   near-black, hairline panes, terminal green for what is real, amber for what
+   is verified by someone other than the airline, red for a refusal, and the
+   plain dim grey the app uses for everything that is only furniture. Seat
+   swatches keep their colours because the colours mean something; every other
+   surface is the terminal's. No motion here either, same as the app. */
+.seatmap-page{background:var(--bg);color:#c9d8ce;}
+.seatmap-topbar{position:sticky;background:linear-gradient(180deg,#080d12,#05080b);border-bottom:1px solid var(--line);}
+.seatmap-topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(83,217,119,.5) 26%,rgba(226,87,75,.45) 74%,transparent);}
+.seatmap-wordmark-img{height:20px;width:auto;max-width:44vw;display:block;object-fit:contain;flex:none;}
+.seatmap-back{color:#5b6e77;font-size:10px;letter-spacing:1.1px;}
+.seatmap-back:hover{color:#8fa6b2;}
+/* Four items share the bar; the auto margin keeps the wordmark group left
+   and parks the tag on the right, the way the masthead does. */
+.seatmap-wordmark{color:#7f95a0;font-size:10px;letter-spacing:2px;margin-right:auto;}
+.seatmap-top-tag{border:1px solid var(--line);background:#0a0f14;color:#7f95a0;}
+.seatmap-card,.seatmap-panel{border:1px solid var(--line);border-radius:6px;background:var(--pane);}
+.seatmap-panel-title{border-bottom:1px solid var(--line);color:#7f95a0;font-size:9px;letter-spacing:1.6px;}
+.seatmap-title{color:#e6f3ea;letter-spacing:1.6px;}
+.seatmap-subtitle{color:#7d919a;}
+.seatmap-flight-heading{border:1px solid var(--line);border-radius:6px 6px 0 0;background:var(--pane);}
+.seatmap-flight-name{color:#e6f3ea;letter-spacing:1.1px;}
+.seatmap-flight-meta{color:#8498a0;}
+.seatmap-toolbar{border:1px solid var(--line);border-radius:6px;background:var(--pane);}
+.seatmap-legs{border:1px solid var(--line);border-radius:6px;background:var(--pane);}
+.seatmap-canvas-wrap{position:relative;border:1px solid var(--line);border-radius:6px;background:#05080b;}
+.seatmap-canvas-wrap::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:6px 6px 0 0;pointer-events:none;z-index:2;background:linear-gradient(90deg,transparent,rgba(83,217,119,.45) 30%,rgba(226,87,75,.35) 72%,transparent);}
+.seatmap-canvas{scrollbar-color:rgba(81,224,124,.42) #05080b;}
+.seatmap-canvas::-webkit-scrollbar{width:8px;height:8px}
+.seatmap-canvas::-webkit-scrollbar-track{background:rgba(7,12,16,.72)}
+.seatmap-canvas::-webkit-scrollbar-thumb{background:rgba(81,224,124,.34);border:2px solid #05080b;border-radius:8px}
+.seatmap-canvas::-webkit-scrollbar-thumb:hover{background:rgba(81,224,124,.68)}
+/* `.seatmap-page button` resets every button on this route (radius 0, weight
+   500), so the seat-map buttons are declared one class deeper to be heard. */
+.seatmap-page .seatmap-btn{border:1px solid #22313c;border-radius:4px;background:#18222b;color:#9fb4bf;font-weight:700;letter-spacing:.9px;}
+.seatmap-page .seatmap-btn:hover:not(:disabled){border-color:#53d977;background:#15231c;color:#dff3e4;filter:none;}
+.seatmap-page .seatmap-btn:disabled{opacity:.45;cursor:not-allowed;}
+.seatmap-page .seatmap-btn-primary{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 4px 16px rgba(226,87,75,.12);}
+.seatmap-page .seatmap-btn-primary:hover:not(:disabled){background:var(--red);border-color:#ff847b;color:#fff;filter:brightness(1.12);}
+.seatmap-page .seatmap-example{border:1px solid #22313c;border-radius:4px;background:transparent;color:#7f95a0;}
+.seatmap-page .seatmap-example:hover{border-color:#53d977;color:#dff3e4;background:#15231c;filter:none;}
+.seatmap-page button:focus-visible,.seatmap-page a:focus-visible,.seatmap-page input:focus-visible,.seatmap-page select:focus-visible,.seatmap-page [tabindex="0"]:focus-visible{outline:2px solid var(--green);outline-offset:2px;}
+.seatmap-field input,.seatmap-field select,.seatmap-filter-select{border:1px solid #22313c;border-radius:4px;background:#05080b;color:#dbe7de;}
+.seatmap-field input:focus,.seatmap-field select:focus,.seatmap-filter-select:focus{border-color:#53d977;outline:1px solid #53d977;outline-offset:1px;}
+.seatmap-field label,.seatmap-overline{color:#7f95a0;}
+.seatmap-tooltip{border:1px solid #52626a;border-radius:4px;background:#05080b;color:#e1ebe4;}
+.seatmap-dev-banner{border:1px solid #66572d;border-radius:6px;background:#15130d;color:#ddc77f;}
+.seatmap-dev-mark{border:1px solid #806b34;color:#efd77e;}
+.seatmap-source-pill{border:1px solid #66572d;color:#ddc77f;}
+.seatmap-notice{background:rgba(4,8,12,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.seatmap-notice-card{border:1px solid #1e2b34;border-radius:14px;background:#0c1218;box-shadow:0 30px 90px rgba(0,0,0,.72);}
+.seatmap-notice-kicker{color:#7f95a0;}
+.seatmap-notice-card h2{color:#e6f3ea;font-weight:500;letter-spacing:1.2px;}
+.seatmap-notice-card p{color:#a8bdc7;}
+.seatmap-notice-card p strong{color:#e6f3ea;}
+.seatmap-notice-actions a{border:1px solid #22313c;border-radius:4px;color:#9fb4bf;}
+.seatmap-notice-actions a:hover{border-color:#53d977;color:#dff3e4;background:#15231c;}
+.seatmap-summary-dialog{background:rgba(4,8,12,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.seatmap-summary-card{border:1px solid #1e2b34;border-radius:12px;background:#0c1218;}
+.seatmap-summary-card h2{color:#e6f3ea;}
+.seatmap-summary-card pre{color:#a8bdc7;}
+.seatmap-disclaimer{border:1px solid var(--line);border-radius:6px;color:#89999e;}
+.seatmap-disclaimer strong{color:#c7d3ce;}
+.seatmap-map-foot kbd{border:1px solid #22313c;border-radius:3px;padding:0 3px;background:#0a0f14;color:#9fb4bf;font-family:var(--mono);font-size:9px;}
+
+/* ---------- the sealed state ----------
+   Shown instead of the map when this tab has not knocked ten times. It is the
+   terminal's own voice: it says the door is shut, says why, and does not
+   pretend a click counter is a lock. */
+.seatmap-lock{display:flex;align-items:center;justify-content:center;min-height:100%;padding:clamp(18px,6vh,64px) clamp(14px,3vw,28px);}
+.seatmap-lock.hidden{display:none!important}
+.seatmap-lock-card{width:min(620px,100%);border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0d141a,#080c11);padding:26px 26px 20px;box-shadow:0 30px 90px rgba(0,0,0,.72);position:relative;}
+.seatmap-lock-card::before{content:"";position:absolute;inset:0 0 auto;height:2px;border-radius:14px 14px 0 0;background:linear-gradient(90deg,transparent,rgba(226,87,75,.6) 32%,rgba(83,217,119,.45) 74%,transparent);opacity:.7;pointer-events:none;}
+.seatmap-lock-kicker{margin-bottom:12px;color:var(--red);font-size:9px;letter-spacing:1.8px;}
+.seatmap-lock-title{margin-bottom:12px;color:#e6f3ea;font-size:clamp(17px,2.4vw,22px);font-weight:500;letter-spacing:.75px;}
+.seatmap-lock-body p{margin-bottom:10px;color:#a8bdc7;font-size:11.5px;line-height:1.75;}
+.seatmap-lock-body p strong{color:#e6f3ea;font-weight:600;}
+.seatmap-lock-body p em{color:#9fb4bf;font-style:italic;}
+.seatmap-lock-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;margin-top:17px;}
+.seatmap-lock-actions a{display:inline-flex;align-items:center;min-height:34px;padding:7px 11px;border:1px solid #22313c;border-radius:4px;color:#9fb4bf;text-decoration:none;font-size:10px;letter-spacing:.65px;}
+.seatmap-lock-actions a:hover{border-color:#53d977;color:#dff3e4;background:#15231c;}
+@media(max-width:560px){.seatmap-wordmark-img{display:none}.seatmap-lock-card{padding:20px 16px 16px;border-radius:12px}}
 
 /* ---------- real-flight strip, leg switcher, and tier badges ----------
    The seat map now carries the converted itinerary's own flight. These styles

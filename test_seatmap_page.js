@@ -18,9 +18,20 @@ const vm = require("vm");
 
 const ROOT = __dirname;
 const SEATMAP_JS = fs.readFileSync(path.join(ROOT, "seatmap.js"), "utf8");
+const GATE_JS = fs.readFileSync(path.join(ROOT, "seatmap_gate.js"), "utf8");
 const LAYOUTS_JS = fs.readFileSync(path.join(ROOT, "seatmap_layouts.js"), "utf8");
 const DATA_JS = fs.readFileSync(path.join(ROOT, "spicy_data.js"), "utf8");
 const Engine = require("./spicy_engine.js");
+
+/** The gate's stored flag: {clicks, unlocked} — what the browser would hold
+ *  after a tab has knocked ten times (or not). */
+function gateFlag(options) {
+  const opts = options || {};
+  return JSON.stringify({
+    clicks: opts.unlocked === false ? 0 : 10,
+    unlocked: opts.unlocked !== false
+  });
+}
 
 let checks = 0;
 function test(name, callback) {
@@ -143,6 +154,10 @@ function openPage(options) {
   if (opts.routeText !== null) {
     store.set("spicy_seatmap_route", JSON.stringify({ savedAt: Date.UTC(2026, 9, 12, 9, 30), text: opts.routeText || ROUTE_TEXT }));
   }
+  /* The Seat Map is sealed behind the ten-click gate. Every page in this file
+     arrives through the open door unless a test asks for a locked tab, so the
+     seat-map behaviour under test is the same as the owner's. */
+  if (opts.unlocked !== false) store.set("spicy_seatmap_gate", gateFlag(opts));
   const sandbox = {
     console,
     document: doc,
@@ -181,6 +196,7 @@ function openPage(options) {
   sandbox.window = sandbox;
   sandbox.self = sandbox;
   vm.createContext(sandbox);
+  vm.runInContext(GATE_JS, sandbox, { filename: "seatmap_gate.js" });
   vm.runInContext(DATA_JS, sandbox, { filename: "spicy_data.js" });
   vm.runInContext(LAYOUTS_JS, sandbox, { filename: "seatmap_layouts.js" });
   vm.runInContext(SEATMAP_JS, sandbox, { filename: "seatmap.js" });
@@ -312,6 +328,50 @@ test("every layout tier the page can render has its own badge class", () => {
   ["airline_verified", "type_reference", "category_generic", "no_passenger_cabin", "unknown_type"].forEach(tier => {
     assert(css.indexOf(".seatmap-strip-layout.tier-" + tier) >= 0, "the " + tier + " tier has a style");
   });
+});
+
+/* ---------- a tab that has not knocked ten times ---------- */
+
+test("a sealed tab gets the locked card, not the map", () => {
+  const page = openPage({ unlocked: false });
+  assert(!page.el("seatmapLock").classList.contains("hidden"), "the sealed card is shown");
+  assert(page.el("seatmapContent").classList.contains("hidden"), "the map itself is not");
+  assert(page.el("seatmapContent").attributes["aria-hidden"] === "true", "and it is hidden from assistive tech too");
+  assert(page.el("seatmapNotice").classList.contains("hidden"), "no 'what this page knows' dialog behind the lock");
+  assert(page.el("seatmapSvg").innerHTML === "", "nothing is drawn — no seats, no cabin, no legend");
+  assert(page.el("seatmapStripSource").textContent === "", "and the converted flight is not leaked into the lock screen");
+  assert(/SEALED/.test(page.doc.body.className) === false, "the page still owns the screen (seatmap-active)");
+});
+
+test("the locked card counts the clicks this tab has already made", () => {
+  const page = openPage({ unlocked: false });
+  const count = page.el("seatmapLockCount").textContent;
+  assert(count === "0 / 10", "a fresh tab has knocked zero times (found: " + count + ")");
+});
+
+test("a missing gate module leaves the page locked, never open", () => {
+  const doc = makeDocument();
+  const sandbox = {
+    console, document: doc, location: { pathname: "/seatmap", search: "" }, navigator: {},
+    sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    setInterval: () => 1, clearInterval: () => {}, setTimeout: () => 1, clearTimeout: () => {},
+    SpicyEngine: Engine, Date, JSON, Math, Number, String, Array, Object, RegExp, Set, Map,
+    isFinite, parseInt, parseFloat, encodeURIComponent
+  };
+  sandbox.window = sandbox;
+  sandbox.self = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(LAYOUTS_JS, sandbox, { filename: "seatmap_layouts.js" });
+  vm.runInContext(SEATMAP_JS, sandbox, { filename: "seatmap.js" });   // no gate module at all
+  assert(!doc.getElementById("seatmapLock").classList.contains("hidden"), "the lock wins when the gate is absent");
+  assert(doc.getElementById("seatmapSvg").innerHTML === "", "and no map is drawn");
+});
+
+test("the gate's flag holds a count and nothing else", () => {
+  const page = openPage({});
+  const raw = page.store.get("spicy_seatmap_gate") || "";
+  assert(raw.indexOf("spicy") < 0 && raw.indexOf("QR 704") < 0, "no itinerary is written to the gate key");
+  assert(Object.keys(JSON.parse(raw)).sort().join(",") === "clicks,unlocked", "only clicks and unlocked live there");
 });
 
 console.log("\nSeat Map page checks: " + checks + " passed.");
