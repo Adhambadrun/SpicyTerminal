@@ -44,11 +44,11 @@ assert(!/btnAbout/.test(HEADER), "About is no longer in the header (it moved to 
 
 const SB_START = TPL.indexOf('<div class="status">');
 const SB = TPL.slice(SB_START, TPL.indexOf('</div>', SB_START));
-const ORDER_IDS = ["btnAbout", "btnBookingLink", "genKey", "btnWeeklyReport", "btnSeatMap", "report"];
+const ORDER_IDS = ["btnAbout", "btnBookingLink", "genKey", "btnSeatMap", "report"];
 const AT = ORDER_IDS.map(id => SB.indexOf('id="' + id + '"'));
-assert(AT.every(i => i >= 0), "all six status controls are present");
+assert(AT.every(i => i >= 0), "all five status controls are present");
 assert(String(AT) === String(AT.slice().sort((a, b) => a - b)),
-       "order is About / Booking Link / Generate Api / Weekly Report / Seat Map / Report a bug (found: " +
+       "order is About / Booking Link / Generate Api / Seat Map / Report a bug (found: " +
        ORDER_IDS.slice().sort((a, b) => AT[ORDER_IDS.indexOf(a)] - AT[ORDER_IDS.indexOf(b)]).join(" / ") + ")");
 const btnTag = (SB.match(/<button[^>]*id="btnAbout"[\s\S]*?<\/button>/) || [""])[0];
 assert(/>About<\/button>/.test(btnTag), "the button label is exactly 'About'");
@@ -74,9 +74,9 @@ assert((TPL.match(/id="btnSeatMap"/g) || []).length === 1, "Seat Map is declared
 const CSS0 = TPL.slice(TPL.indexOf("<style>"), TPL.indexOf("</style>"));
 assert(/#btnAbout\{margin-left:auto\}/.test(CSS0) && !/#genKey\{[^}]*margin-left:auto/.test(CSS0),
        "the right-alignment moved with the group: About owns margin-left:auto, Generate Api no longer does");
-assert(/#genKey\{margin-right:12px\}/.test(CSS0) && /#btnWeeklyReport\{margin-right:12px\}/.test(CSS0),
-       "the row keeps its 12px separators between the links");
-assert(/#report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnSeatMap:hover,#btnAbout:hover\{/.test(CSS0),
+assert(/#genKey\{margin-right:12px\}/.test(CSS0),
+       "the row keeps its 12px separator between the links");
+assert(/#report:hover,#genKey:hover,#btnSeatMap:hover,#btnAbout:hover\{/.test(CSS0),
        "About shares the row's single hover rule instead of inventing a bespoke one");
 assert(!/\.about-btn/.test(CSS0), "no leftover header-pill styling behind");
 
@@ -121,7 +121,8 @@ assert(/if a first pass ever cannot read it|first pass ever cannot read it/i.tes
        "the welcome card names the failure case people hit: nothing read the first time")
 assert(/only what|only powers|only runs on/i.test(WELCOME) && /free, takes 20 seconds/.test(WELCOME),
        "the welcome card says the key is only for AI FIX, and that it is free")
-const KEYMODAL = TPL.slice(TPL.indexOf('id="setModal"'), TPL.indexOf('id="reportModal"'))
+const KEYMODAL = TPL.slice(TPL.indexOf('id="setModal"'), TPL.indexOf('<!-- ABOUT:BEGIN'))
+assert(!/btnWeeklyReport|reportModal/.test(TPL), "the weekly report button and dialog are fully retired")
 assert(/AI FIX is the button you press when the auto read cannot/.test(KEYMODAL),
        "the key dialog defines AI FIX rather than assuming it is understood")
 const BTN_AI = (TPL.match(/<button[^>]*id="btnAi"[\s\S]*?<\/button>/) || [""])[0]

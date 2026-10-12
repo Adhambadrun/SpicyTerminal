@@ -133,21 +133,24 @@ test("text, CSV, and summary exports identify the simulated source", () => {
   assert(summary.includes("No seat was reserved or booked."));
 });
 
-test("navbar places the .linkbtn Seat Map route between Weekly Report and Report a bug", () => {
-  const weekly = template.indexOf('id="btnWeeklyReport"');
+test("navbar places the .linkbtn Seat Map route between Generate Api and Report a bug", () => {
+  const gen = template.indexOf('id="genKey"');
   const seat = template.indexOf('id="btnSeatMap"');
   const report = template.indexOf('id="report"');
-  assert(weekly >= 0 && seat > weekly && report > seat);
+  assert(gen >= 0 && seat > gen && report > seat);
   assert(/<a[^>]*id="btnSeatMap"[^>]*class="linkbtn"[^>]*href="\/seatmap"/.test(template));
   assert.strictEqual((template.match(/id="btnSeatMap"/g) || []).length, 1);
 });
 
-test("route notice separates real flight data, layout tier, and simulated seats", () => {
-  assert(/real flight, reference layout, simulated seats/i.test(template));
+test("route notice states real flight data and the layout tier, with no disclaimer copy", () => {
+  assert(/real flight, labelled layout/i.test(template));
   assert(/airline-verified configuration when one has been checked/i.test(template));
-  assert(/seat availability is simulated in this browser/i.test(template));
-  assert(/not live airline data/i.test(template));
-  assert(/selecting a seat reserves nothing/i.test(template));
+  assert(!/seat availability is simulated in this browser/i.test(template),
+    "the simulated-availability banner line is retired");
+  assert(!/selecting a seat reserves nothing/i.test(template),
+    "the reserves-nothing disclaimer is retired from the route notice");
+  assert(!/liveBadges/.test(template) && !/live-badges \{/.test(template),
+    "and the badge strip styles never ship");
   assert(/role="dialog" aria-modal="true" aria-labelledby="seatmapNoticeTitle"/.test(template));
   assert(template.includes("CONTINUE TO THE SEAT MAP"));
   assert(!/fetch\s*\(/i.test(source), "the local viewer should not call a remote data service");
@@ -156,7 +159,7 @@ test("route notice separates real flight data, layout tier, and simulated seats"
 test("static build emits the same self-contained page at /seatmap", () => {
   assert(built.includes('id="seatmapPage"'));
   assert(built.includes("SEAT MAP VIEWER"));
-  assert(publicRoute.includes("real flight, reference layout, simulated seats"));
+  assert(publicRoute.includes("real flight, labelled layout"));
   assert.strictEqual(publicRoute, publicIndex);
   assert.strictEqual(publicRoute, built);
   assert(!built.includes("__SEATMAP_JS__") && !built.includes("__SEATMAP_CSS__") && !built.includes("__SEATMAP_LAYOUTS__"));

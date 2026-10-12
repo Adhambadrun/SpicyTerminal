@@ -399,9 +399,9 @@ async function settle(label) {
   console.log("=== Attachment pipeline: single screenshot drop ===");
   clearAll();
   drop([fakeFile({ name: "qatar.png", type: "image/png", pixels: qrPixels })]);
-  assert(await waitUntil(() => /IMAGE PARSED|CACHED IMAGE|FAILED/.test(status())), true, "drop: reached a terminal state");
+  assert(await waitUntil(() => /CONVERSION DONE|FAILED/.test(status())), true, "drop: reached a terminal state");
   await settle("drop");
-  assert(/IMAGE PARSED/.test(status()), `drop: offline OCR parsed (status: "${status()}")`);
+  assert(/CONVERSION DONE/.test(status()), `drop: offline OCR parsed (status: "${status()}")`);
   assert(/QR/.test(outText()) && /1059/.test(outText()), "drop: output contains QR 1059");
   assert(thumbs() === 1, `drop: one thumbnail rendered (${thumbs()})`);
 
@@ -420,7 +420,7 @@ async function settle(label) {
 
   console.log("\n=== Screenshot thumbnail red × direct remove ===");
   drop([fakeFile({ name: "direct_remove.png", type: "image/png", pixels: qrPixels })]);
-  await waitUntil(() => /IMAGE PARSED|CACHED IMAGE|FAILED/.test(status()));
+  await waitUntil(() => /CONVERSION DONE|FAILED/.test(status()));
   const directThumb = el("thumbs")._kids[0];
   const directRemove = directThumb && directThumb._kids[1];
   directRemove.fire("click", { preventDefault() {}, stopPropagation() {} });
@@ -443,9 +443,9 @@ async function settle(label) {
   sandbox.TextDetector = class { detect() { return new Promise(() => {}); } };
   const timeoutStarted = Date.now();
   drop([fakeFile({ name: "native_timeout.png", type: "image/png", pixels: timeoutPixels })]);
-  await waitUntil(() => /IMAGE PARSED|FAILED|ATTACHMENT NOT READ/.test(status()), 5000);
+  await waitUntil(() => /CONVERSION DONE|FAILED|ATTACHMENT NOT READ/.test(status()), 5000);
   const nativeElapsed = Date.now() - timeoutStarted;
-  assert(/IMAGE PARSED/.test(status()) && /1059/.test(outText()), `hung TextDetector falls back to OCRAD (status: "${status()}")`);
+  assert(/CONVERSION DONE/.test(status()) && /1059/.test(outText()), `hung TextDetector falls back to OCRAD (status: "${status()}")`);
   assert(nativeElapsed >= 150 && nativeElapsed < 3000, `native OCR deadline bounds the wait (${nativeElapsed}ms)`);
   sandbox.TextDetector = undefined;
 
@@ -453,9 +453,10 @@ async function settle(label) {
   clearAll();
   drop([fakeFile({ name: "a_qatar.png", type: "image/png", pixels: qrPixels }),
         fakeFile({ name: "b_iberia.png", type: "image/png", pixels: ibPixels })]);
-  await waitUntil(() => /IMAGE PARSED|FAILED/.test(status()));
+  await waitUntil(() => /CONVERSION DONE|FAILED/.test(status()));
   await settle("two images");
-  assert(/2 seg/.test(status()), `two images: both segments parsed (status: "${status()}")`);
+  assert(/CONVERSION DONE/.test(status()), `two images: the status says done and nothing more (status: "${status()}")`);
+  assert(/1059[\s\S]*4237/.test(outText()), "two images: both segments are in the output");
   assert(outText().indexOf("1059") < outText().indexOf("4237"), "two images: QR seg rendered before IB seg");
   assert(thumbs() === 2, `two images: two thumbnails (${thumbs()})`);
 
@@ -463,23 +464,23 @@ async function settle(label) {
   clearAll();
   drop([fakeFile({ name: "b_iberia.png", type: "image/png", pixels: ibPixels }),
         fakeFile({ name: "a_qatar.png", type: "image/png", pixels: qrPixels })]);
-  await waitUntil(() => /IMAGE PARSED|FAILED/.test(status()));
+  await waitUntil(() => /CONVERSION DONE|FAILED/.test(status()));
   await settle("reversed");
   assert(outText().indexOf("4237") < outText().indexOf("1059"), "reversed: IB seg rendered before QR seg");
 
   console.log("\n=== Attachment pipeline: clipboard screenshot paste ===");
   clearAll();
   pasteImage(fakeFile({ name: "image.png", type: "image/png", pixels: qrPixels }));
-  await waitUntil(() => /IMAGE PARSED|CACHED IMAGE|FAILED/.test(status()));
+  await waitUntil(() => /CONVERSION DONE|FAILED/.test(status()));
   await settle("paste");
-  assert(/CACHED IMAGE|IMAGE PARSED/.test(status()), `paste: screenshot converted (status: "${status()}")`);
+  assert(/CONVERSION DONE/.test(status()), `paste: screenshot converted (status: "${status()}")`);
   assert(/1059/.test(outText()), "paste: output contains the flight");
 
   console.log("\n=== Attachment pipeline: repeated image served from cache ===");
   clearAll();
   drop([fakeFile({ name: "qatar_again.png", type: "image/png", pixels: qrPixels })]);
-  await waitUntil(() => /CACHED IMAGE|IMAGE PARSED|FAILED/.test(status()));
-  assert(/CACHED IMAGE/.test(status()), `cache: repeated screenshot is instant (status: "${status()}")`);
+  await waitUntil(() => /CONVERSION DONE|FAILED/.test(status()));
+  assert(/CONVERSION DONE/.test(status()), `cache: repeated screenshot reports the same done state (status: "${status()}")`);
 
   console.log("\n=== Attachment pipeline: text file attachment ===");
   clearAll();
@@ -491,7 +492,7 @@ async function settle(label) {
   console.log("\n=== Attachment pipeline: nameless PNG (empty MIME, no extension) ===");
   clearAll();
   drop([fakeFile({ name: "attachment", type: "", bytes: tickets.qrPngMagic, pixels: qrPixels })]);
-  await waitUntil(() => /CACHED IMAGE|IMAGE PARSED|FAILED|UNSUPPORTED/.test(status()));
+  await waitUntil(() => /CONVERSION DONE|FAILED|UNSUPPORTED/.test(status()));
   await settle("signature");
   assert(!/UNSUPPORTED/.test(status()), `signature: file was not rejected (status: "${status()}")`);
 
@@ -506,7 +507,7 @@ async function settle(label) {
   clearAll();
   drop([fakeFile({ name: "shot.png", type: "image/png", pixels: ibPixels }),
         fakeFile({ name: "ticket.pdf", type: "application/pdf", bytes: Buffer.from("%PDF-1.4 test") })]);
-  await waitUntil(() => /IMAGE PARSED|FAILED/.test(status()));
+  await waitUntil(() => /CONVERSION DONE|FAILED/.test(status()));
   await settle("image+pdf");
   assert(/4237/.test(outText()), `image+pdf: offline image result still produced (status: "${status()}")`);
   assert(/PDF/.test(status()), `image+pdf: PDF presence is reported (status: "${status()}")`);
@@ -521,11 +522,11 @@ async function settle(label) {
   console.log("\n=== Attachment pipeline: second drop merges with earlier images ===");
   clearAll();
   drop([fakeFile({ name: "one.png", type: "image/png", pixels: qrPixels })]);
-  await waitUntil(() => /CACHED IMAGE|IMAGE PARSED|FAILED/.test(status()));
+  await waitUntil(() => /CONVERSION DONE|FAILED/.test(status()));
   picker([fakeFile({ name: "two.png", type: "image/png", pixels: ibPixels })]);
-  await waitUntil(() => /IMAGE PARSED/.test(status()));
+  await waitUntil(() => /CONVERSION DONE/.test(status()));
   await settle("second batch");
-  assert(/2 seg/.test(status()), `second batch: merged conversion (status: "${status()}")`);
+  assert(/CONVERSION DONE/.test(status()), `second batch: merged conversion reported as done (status: "${status()}")`);
   assert(outText().indexOf("1059") < outText().indexOf("4237"), "second batch: picker order preserved");
 
   console.log("\n=== Attachment pipeline: convert pressed while still decoding ===");
@@ -534,18 +535,18 @@ async function settle(label) {
   await new Promise(r => setTimeout(r, 80));
   el("btnConvert").fire("click");
   assert(/STILL LOADING/.test(status()), `mid-decode: convert waits (status: "${status()}")`);
-  await waitUntil(() => /IMAGE PARSED|CACHED IMAGE|FAILED/.test(status()));
+  await waitUntil(() => /CONVERSION DONE|FAILED/.test(status()));
   await settle("slow decode");
   assert(/4237/.test(outText()), `mid-decode: converted after decode finished (status: "${status()}")`);
-  assert(/IMAGE PARSED|CACHED IMAGE/.test(status()), "mid-decode: terminal conversion state reached");
+  assert(/CONVERSION DONE/.test(status()), "mid-decode: terminal conversion state reached");
 
   console.log("\n=== Attachment pipeline: clear resets everything ===");
   clearAll();
   assert(status() === "READY", `clear: status READY (${status()})`);
   assert(outText() === "" && thumbs() === 0 && el("inp").value === "", "clear: output, thumbs and input emptied");
   drop([fakeFile({ name: "after_clear.png", type: "image/png", pixels: ibPixels })]);
-  await waitUntil(() => /IMAGE PARSED|CACHED IMAGE|FAILED/.test(status()));
-  assert(/IMAGE PARSED|CACHED IMAGE/.test(status()), `clear: attachments still work afterwards (status: "${status()}")`);
+  await waitUntil(() => /CONVERSION DONE|FAILED/.test(status()));
+  assert(/CONVERSION DONE/.test(status()), `clear: attachments still work afterwards (status: "${status()}")`);
 
   console.log(`\n=== SUMMARY: ${PASS} passed, ${FAIL} failed ===`);
   process.exit(FAIL > 0 ? 1 : 0);

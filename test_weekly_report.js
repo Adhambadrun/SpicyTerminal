@@ -11,7 +11,10 @@
  *   - a fresh install printed "0 (100% instant rate)";
  *   - the counters never reset, so a lifetime total was printed under a heading
  *     that says WEEKLY, and the mistake log mixed every week together;
- *   - a blocked pop-up returned null from window.open and the click looked dead.
+ *   - a blocked pop-up returned null from window.open and the click looked dead;
+ *   - the report waited behind a button nobody pressed, so a quiet week looked
+ *     like a healthy one — now every counted conversion refreshes the stored
+ *     snapshot by itself, and the bug report carries it to the author.
  *
  * Everything below runs the REAL app.js code in a vm sandbox (the same slicing
  * test_mistake_learner.js uses), so the assertions cover the browser's path.
@@ -54,7 +57,7 @@ const REPORT_SRC = APP.slice(APP.indexOf("/* REPORT:BEGIN */"), APP.indexOf("/* 
 const CACHE_SRC = APP.slice(APP.indexOf("var TCACHE_KEY ="), APP.indexOf("function imgCacheAll"));
 /* the subject + URL guard that live between the report generator and its opener */
 const MAIL_MARK = "/* REPORT:END */";
-const MAIL_CONSTS_SRC = APP.slice(APP.indexOf(MAIL_MARK) + MAIL_MARK.length, APP.indexOf("function openWeeklyReport"));
+const MAIL_CONSTS_SRC = APP.slice(APP.indexOf(MAIL_MARK) + MAIL_MARK.length, APP.indexOf("/* ABOUT:BEGIN */"));
 const DOLLAR_AT = APP.indexOf("var $ = function");
 const DOLLAR_SRC = APP.slice(DOLLAR_AT, APP.indexOf("};", DOLLAR_AT) + 2);
 
@@ -83,10 +86,7 @@ const LAST_WEEK = dayKey(utcMonday(Date.now() - 7 * 864e5));
  * with a DOM exactly as small as the functions under test need. */
 function loadApp(store, opts) {
   opts = opts || {};
-  const els = {
-    reportContent: { value: "" },
-    reportModal: { classList: { remove() {}, add() {} } }
-  };
+  const els = {};
   const sandbox = {
     console, Date, JSON, Math, Object, Array, String, Number, RegExp, Boolean, isNaN, parseInt, parseFloat,
     AUTHOR_EMAIL: EMAIL,
@@ -122,10 +122,9 @@ function loadApp(store, opts) {
   vm.runInContext(REPORT_SRC, sandbox, { filename: "report.js" });
   vm.runInContext(MAIL_CONSTS_SRC, sandbox, { filename: "mailConsts.js" });
   vm.runInContext(fnSrc("openGmailCompose"), sandbox, { filename: "openGmailCompose.js" });
-  vm.runInContext(fnSrc("openWeeklyReport"), sandbox, { filename: "openWeeklyReport.js" });
   vm.runInContext(
     "this.__api = { loadStats: loadStats, recordStat: recordStat, renderDirectSync: renderDirectSync," +
-    " generateWeeklyReportText: generateWeeklyReportText, openWeeklyReport: openWeeklyReport," +
+    " generateWeeklyReportText: generateWeeklyReportText, openGmailCompose: openGmailCompose," +
     " loadMistakes: loadMistakes, recordMistake: recordMistake, weekStart: statsWeekStart, dayKey: statsDayKey };",
     sandbox);
   return sandbox;
@@ -244,24 +243,37 @@ section("6. the mistake log is scoped to the week the report covers");
   assert(!/LAX-SFO/.test(report), "last week's mistake is not mixed into this week's report");
 }
 
-section("7. a blocked pop-up says so instead of looking dead");
+section("7. the report writes itself — a counted conversion refreshes the stored snapshot");
+{
+  const store = makeStore();
+  const A = loadApp(store).__api;
+  assert(!store.data.spicy_weekly_report_v1, "a fresh install has nothing snapshotted yet");
+  A.recordStat("ai_call");
+  assert(!store.data.spicy_weekly_report_v1, "an AI call that painted nothing is not a conversion, and stores nothing");
+  A.renderDirectSync(PASTE);
+  const snap = JSON.parse(store.data.spicy_weekly_report_v1 || "null");
+  assert(snap && snap.text.indexOf("=== SPICYTERMINAL WEEKLY PERFORMANCE") === 0,
+    "the conversion the user was shown refreshed the snapshot on its own");
+  assert(/Total Conversions: 1 /.test(snap.text), "the snapshot counts what happened this minute: " +
+    ((snap && snap.text.match(/• Total Conversions:.*/) || ["(missing)"])[0]));
+  assert(typeof snap.generatedAt === "string" && snap.generatedAt.indexOf("T") > 0,
+    "the snapshot carries its own timestamp");
+}
+
+section("7b. a blocked pop-up still says so instead of looking dead");
 {
   const blocked = loadApp(makeStore(), { open: () => null });   // what a browser returns
-  blocked.__api.openWeeklyReport();
+  blocked.__api.openGmailCompose("A subject", "the report body");
   assert(blocked.st.className === "warn", "the status bar flags it: " + blocked.st.textContent);
-  assert(/POP-UP BLOCKED/.test(blocked.st.textContent) && /COPY REPORT/.test(blocked.st.textContent),
+  assert(/POP-UP BLOCKED/.test(blocked.st.textContent),
     "and tells the user the way out: " + blocked.st.textContent);
-  assert(blocked.__els.reportContent.value.indexOf("=== SPICYTERMINAL WEEKLY PERFORMANCE") === 0,
-    "the report itself is still in the modal box");
 
   const allowed = loadApp(makeStore());
-  allowed.__api.openWeeklyReport();
+  allowed.__api.openGmailCompose("A subject", "the report body");
   assert(allowed.st.className !== "warn", "no warning when the tab opens");
   const url = allowed._opened[0] || "";
   assert(url.indexOf("https://mail.google.com/mail/?view=cm") === 0 &&
          url.indexOf("to=" + encodeURIComponent(EMAIL)) > 0, "compose opens addressed to " + EMAIL);
-  assert(decodeURIComponent(url).indexOf("SPICYTERMINAL WEEKLY PERFORMANCE") > 0,
-    "with the report in the body");
 }
 
 console.log("\n=== SUMMARY: " + PASS + " passed, " + FAIL + " failed ===");

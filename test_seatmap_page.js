@@ -336,8 +336,8 @@ test("every tab draws the map: no lock screen exists to land on", () => {
      real, and the map is already drawn behind it. */
   assert(!page.el("seatmapNotice").classList.contains("hidden"), "the disclosure notice is the only thing in front");
   const noticeTitle = /<h2 id="seatmapNoticeTitle">([^<]*)<\/h2>/.exec(TEMPLATE);
-  assert(!!noticeTitle && /simulated seats/i.test(noticeTitle[1]),
-    "and it is about honesty, not access");
+  assert(!!noticeTitle && /real flight, labelled layout/i.test(noticeTitle[1]),
+    "and it names what is real, which is disclosure, not access");
 });
 
 test("with no gate module in the page, the map still draws", () => {
