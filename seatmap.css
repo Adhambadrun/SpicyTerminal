@@ -254,3 +254,12 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-leg-equipment{color:#8498a0;}
 .seatmap-leg.is-active .seatmap-leg-equipment{color:#8af5a8;}
 .seatmap-seat.is-outside-cabin{opacity:.32}
+
+/* ---------- PRICE button + result panel ---------- */
+.seatmap-price{display:flex;flex-direction:column;gap:8px;margin:10px 0;padding:12px 14px;border:1px solid #1e2b34;background:#070c10;}
+.seatmap-price > .seatmap-btn{align-self:flex-start;min-height:32px!important;padding:5px 12px;font-size:10px;letter-spacing:.9px;}
+.seatmap-price-panel{min-height:18px;color:#c9d8ce;font-size:11px;line-height:1.7;letter-spacing:.15px;}
+.seatmap-price-panel:empty{display:none}
+.seatmap-price-line{margin:0 0 4px;padding:0;}
+.seatmap-price-line:last-child{margin-bottom:0}
+.seatmap-price-note{color:#647983;font-size:9px;line-height:1.6;letter-spacing:.2px;margin:0;}

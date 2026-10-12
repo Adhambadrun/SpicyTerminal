@@ -448,6 +448,15 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 .seatmap-leg.is-active .seatmap-leg-equipment{color:#8af5a8;}
 .seatmap-seat.is-outside-cabin{opacity:.32}
 
+/* ---------- PRICE button + result panel ---------- */
+.seatmap-price{display:flex;flex-direction:column;gap:8px;margin:10px 0;padding:12px 14px;border:1px solid #1e2b34;background:#070c10;}
+.seatmap-price > .seatmap-btn{align-self:flex-start;min-height:32px!important;padding:5px 12px;font-size:10px;letter-spacing:.9px;}
+.seatmap-price-panel{min-height:18px;color:#c9d8ce;font-size:11px;line-height:1.7;letter-spacing:.15px;}
+.seatmap-price-panel:empty{display:none}
+.seatmap-price-line{margin:0 0 4px;padding:0;}
+.seatmap-price-line:last-child{margin-bottom:0}
+.seatmap-price-note{color:#647983;font-size:9px;line-height:1.6;letter-spacing:.2px;margin:0;}
+
   .live-badges { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 0; }
   .live-badge { font-size: 11px; line-height: 1.5; padding: 3px 7px; border: 1px solid #2a3441; border-radius: 3px;
     color: #cbd5e1; background: #0f172a; max-width: 100%; overflow-wrap: anywhere; }
@@ -729,6 +738,11 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
         <div class="seatmap-strip-layout tier-unknown" id="seatmapStripLayout"></div>
         <div class="seatmap-strip-note" id="seatmapStripNote"></div>
         <a class="seatmap-strip-link hidden" id="seatmapStripLink" href="https://www.aa.com/" target="_blank" rel="noopener noreferrer"></a>
+      </div>
+      <div class="seatmap-price" role="group" aria-labelledby="seatmapPriceTitle">
+        <button class="seatmap-btn" id="seatmapPriceButton" type="button">PRICE</button>
+        <div class="seatmap-price-panel" id="seatmapPriceResult" role="status" aria-live="polite"></div>
+        <p class="seatmap-price-note" id="seatmapPriceNote">The price is a published fare, not a hold — nothing is reserved, and no money changes hands here.</p>
       </div>
       <div class="seatmap-legs hidden" id="seatmapLegs" role="group" aria-label="Legs in your converted itinerary"></div>
       <div class="seatmap-toolbar">
@@ -24662,6 +24676,396 @@ try {
     }
   }
 })(typeof window !== "undefined" ? window : null);
+</script>
+<script>window.SPICY_PRICE_ENDPOINT="/api/flights/price";</script>
+<script>/* seatmap_price.js — the PRICE button on the Seat Map page.
+ *
+ * One button. One panel. One request. One flat sentence for every failure.
+ *
+ *   - the request is built from the active leg (converted itinerary or
+ *     search result), only origin / destination / date / cabin / currency /
+ *     adults. Nothing else from the converted itinerary is forwarded;
+ *     conversion stays local;
+ *   - the response is allowlisted: only source / amount / currency /
+ *     fetchedAt / verdict / summary / scope make it onto the page;
+ *   - every failure is mapped to a single flat sentence. The button never
+ *     exposes the endpoint, the host, the port, the status code, the
+ *     upstream body, the JSON key, or a traceback. If the page can't
+ *     tell the user what is wrong in one human sentence, it says
+ *     something general and stops.
+ *
+ * window.SPICY_PRICE_ENDPOINT is set at build time by build_web.py. The
+ * empty string means "not connected on this site" — the button is still
+ * rendered, but it never tries to fetch and the panel just says so.
+ *
+ * Exports as window.SpicySeatMapPrice (browser) and module.exports
+ * (Node, for tests).
+ */
+(function (root) {
+  "use strict";
+
+  /* ---------------------------------------------------------------- *
+   * Allowlists
+   * ---------------------------------------------------------------- */
+
+  /* The only fields the page can ever render. Anything else from the
+     service is dropped silently. */
+  var REPLY_FIELDS = ["source", "amount", "currency", "fetchedAt", "verdict", "summary", "scope"];
+
+  /* The only fields the client can ever send. The service validates these
+     too, but the client keeps the contract tight so a future build can
+     never accidentally forward something. */
+  var REQUEST_FIELDS = ["origin", "destination", "departure_date", "cabin_class", "currency", "adults"];
+
+  /* The verdict values the page knows how to render. Anything else becomes
+     "no verdict" and the panel still shows the amount. */
+  var VERDICT_LABELS = {
+    low:      "below the typical fare for this route and date",
+    typical:  "around the typical fare for this route and date",
+    high:     "above the typical fare for this route and date"
+  };
+
+  /* The same message in every case, the same shape on the page. The
+     service returns ok=true / ok=false + kind, and the client never
+     branches on the wire status. */
+  var MESSAGES = {
+    notConnected: "Price lookup is not connected on this site yet.",
+    fetching:     "Looking up the fare now.",
+    unavailable:  "The fare lookup is unavailable right now — it is not your flight, nothing is wrong with it.",
+    noFare:       "No fare came back for this route and date — try a different date or check the airline.",
+    notOnRoute:   "This is the cheapest on this route and date — not necessarily the flight drawn above.",
+    notABooking:  "This is a quote, not a booking — no seat is reserved and no money changes hands here."
+  };
+
+  /* ---------------------------------------------------------------- *
+   * Tiny helpers (no dependencies, no logging)
+   * ---------------------------------------------------------------- */
+
+  function $(id) { return (root.document || root).getElementById(id); }
+
+  /* Read the endpoint at build-time. Empty string == not connected. */
+  function endpoint() {
+    if (typeof SPICY_PRICE_ENDPOINT !== "undefined" && SPICY_PRICE_ENDPOINT) return SPICY_PRICE_ENDPOINT;
+    if (root && typeof root.SPICY_PRICE_ENDPOINT === "string") return root.SPICY_PRICE_ENDPOINT;
+    return "";
+  }
+
+  function escapeText(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function cabinFor(cabinCode) {
+    /* The engine writes cabins as "economy" / "premium_economy" /
+       "business" / "first" already; unknown values become "economy"
+       so the service still answers and the page still shows a fare. */
+    var c = (cabinCode || "").toLowerCase();
+    if (c === "economy" || c === "premium_economy" || c === "business" || c === "first") return c;
+    return "economy";
+  }
+
+  function pickLeg(state) {
+    /* The active source of truth: a converted itinerary leg, or a
+       search-result flight, or the manual form. Only the identity is
+       read; the converted itinerary's other fields never leave. */
+    if (state && state.legs && state.legs.length) {
+      var i = state.legIndex || 0;
+      var leg = state.legs[i];
+      if (leg && leg.origin && leg.destination && leg.departureDate) {
+        return {
+          source: "converted itinerary",
+          airline: (leg.airline || "") + " " + (leg.flightNumber || ""),
+          origin: leg.origin,
+          destination: leg.destination,
+          date: leg.departureDate,
+          cabin: cabinFor(leg.cabin || leg.cabinCode),
+          adults: 1
+        };
+      }
+    }
+    if (state && state.searched) {
+      var f = state.searched;
+      if (f.origin && f.destination) {
+        var date = f.date || "";
+        if (!date) {
+          var t = new Date();
+          t.setDate(t.getDate() + 1);
+          date = t.toISOString().slice(0, 10);
+        }
+        var cabin = "";
+        if (root.document) {
+          var sel = root.document.getElementById("seatmapSearchCabin");
+          if (sel) cabin = sel.value || "";
+        }
+        return {
+          source: "search result",
+          airline: (f.airline || "") + " " + (f.number || f.flightNumber || ""),
+          origin: f.origin,
+          destination: f.destination,
+          date: date,
+          cabin: cabinFor(cabin || "economy"),
+          adults: 1
+        };
+      }
+    }
+    if (root.document) {
+      var o = root.document.getElementById("seatmapOrigin");
+      var d = root.document.getElementById("seatmapDestination");
+      var dt = root.document.getElementById("seatmapDate");
+      var cb = root.document.getElementById("seatmapManualCabin");
+      if (o && d && o.value && d.value) {
+        return {
+          source: "manual form",
+          airline: "",
+          origin: (o.value || "").toUpperCase(),
+          destination: (d.value || "").toUpperCase(),
+          date: (dt && dt.value) || new Date().toISOString().slice(0, 10),
+          cabin: cabinFor(cb && cb.value),
+          adults: 1
+        };
+      }
+    }
+    return null;
+  }
+
+  function buildQuery(leg) {
+    if (!leg) return null;
+    var cabin = leg.cabin;
+    /* A cabin value is one of "economy" / "premium_economy" / "business" /
+       "first" when given. An explicit null means "do not send a cabin"
+       (the field is dropped — the service refuses the request anyway).
+       An undefined or missing value defaults to "economy" so the common
+       case just works. */
+    if (cabin === null) {
+      cabin = null;
+    } else if (typeof cabin === "string") {
+      cabin = cabin.toLowerCase();
+      if (cabin !== "economy" && cabin !== "premium_economy" && cabin !== "business" && cabin !== "first") {
+        cabin = "economy";
+      }
+    } else {
+      cabin = "economy";
+    }
+    var q = {
+      origin: (leg.origin || "").toUpperCase(),
+      destination: (leg.destination || "").toUpperCase(),
+      departure_date: leg.date,
+      cabin_class: cabin,
+      currency: "USD",
+      adults: leg.adults || 1
+    };
+    REQUEST_FIELDS.forEach(function (k) {
+      if (q[k] == null || q[k] === "") delete q[k];
+    });
+    return q;
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Render
+   * ---------------------------------------------------------------- */
+
+  function renderNotice(panel, lines) {
+    if (!panel) return;
+    panel.innerHTML = lines.map(function (line) {
+      return "<p class=\"seatmap-price-line\">" + escapeText(line) + "</p>";
+    }).join("");
+  }
+
+  function fetchMinute(fetchedAt) {
+    /* "2026-10-12T08:34Z" -> "08:34 UTC". Anything weird -> "". */
+    if (!fetchedAt || typeof fetchedAt !== "string") return "";
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(fetchedAt);
+    if (!m) return "";
+    return m[4] + ":" + m[5] + " UTC";
+  }
+
+  function render(panel, fields, extraLines) {
+    if (!panel) return;
+    var amountNum = (typeof fields.amount === "number" && fields.amount > 0) ? fields.amount : null;
+    var amount = amountNum != null ? String(amountNum) : "";
+    var currency = fields.currency || "USD";
+    var fmt = amount ? (currency + " " + amount) : "";
+    var verdict = VERDICT_LABELS[fields.verdict] || "";
+    var minute = fetchMinute(fields.fetchedAt);
+    var lines = [];
+    if (fields.source) {
+      lines.push("Source: " + fields.source + (minute ? ", fetched at " + minute : "."));
+    } else {
+      lines.push("Source: a price-quote service, fetched just now.");
+    }
+    if (fmt) {
+      lines.push("Fare: " + fmt + (verdict ? " — " + verdict + "." : "."));
+    }
+    if (fields.summary) {
+      lines.push("Flight: " + fields.summary + ".");
+    }
+    if (fields.scope) {
+      lines.push("Scope: " + fields.scope);
+    }
+    if (extraLines && extraLines.length) {
+      extraLines.forEach(function (l) { lines.push(l); });
+    }
+    lines.push(MESSAGES.notABooking);
+    panel.innerHTML = lines.map(function (line) {
+      return "<p class=\"seatmap-price-line\">" + escapeText(line) + "</p>";
+    }).join("");
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The button
+   * ---------------------------------------------------------------- */
+
+  function isActiveLegMatchingReply(leg, fields) {
+    /* The service returns the cheapest fare on the route/date, not
+       necessarily the flight the user is looking at. The page surfaces
+       that honestly when the airline/flight number on the reply doesn't
+       match the airline/flight number of the leg the user picked. */
+    if (!leg || !fields || !fields.summary) return false;
+    var wanted = ((leg.airline || "").replace(/\s+/g, " ")).trim();
+    if (!wanted) return false;
+    return fields.summary.indexOf(wanted) >= 0;
+  }
+
+  function doLookup(doc, state) {
+    var panel = $("seatmapPriceResult");
+    var button = $("seatmapPriceButton");
+    var url = endpoint();
+    if (!url) {
+      renderNotice(panel, [MESSAGES.notConnected]);
+      return;
+    }
+    var leg = pickLeg(state);
+    if (!leg) {
+      renderNotice(panel, ["No flight is loaded yet. Convert an itinerary or search by flight number, then try the price."]);
+      return;
+    }
+    var query = buildQuery(leg);
+    if (!query || !query.origin || !query.destination || !query.departure_date) {
+      renderNotice(panel, ["The flight is missing a route or a date. Pick one above and try the price."]);
+      return;
+    }
+    if (button) button.disabled = true;
+    renderNotice(panel, [MESSAGES.fetching]);
+
+    var qs = [];
+    REQUEST_FIELDS.forEach(function (k) {
+      if (query[k] != null) qs.push(encodeURIComponent(k) + "=" + encodeURIComponent(query[k]));
+    });
+    var fullUrl = url + (url.indexOf("?") >= 0 ? "&" : "?") + qs.join("&");
+
+    var xhr = new XMLHttpRequest();
+    var settled = false;
+    try {
+      xhr.open("GET", fullUrl, true);
+    } catch (e) {
+      if (button) button.disabled = false;
+      renderNotice(panel, [MESSAGES.unavailable]);
+      return;
+    }
+    xhr.timeout = 35000;
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4 || settled) return;
+      settled = true;
+      if (button) button.disabled = false;
+
+      var ok = false;
+      var body = null;
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch (e) {
+        body = null;
+      }
+      /* The client never branches on the HTTP status. It only branches on
+         the trimmed JSON the service promised to return. */
+      if (body && typeof body === "object") {
+        if (body.ok === true) {
+          var fields = {};
+          REPLY_FIELDS.forEach(function (k) {
+            if (body[k] != null) fields[k] = body[k];
+          });
+          var extras = [];
+          if (!isActiveLegMatchingReply(leg, fields)) {
+            extras.push(MESSAGES.notOnRoute);
+          }
+          render(panel, fields, extras);
+          ok = true;
+        } else if (body.ok === false && body.kind === "no_fare") {
+          renderNotice(panel, [MESSAGES.noFare]);
+          ok = true;
+        }
+      }
+      if (!ok) {
+        /* Network error, non-JSON reply, or anything we don't recognise:
+           the service is unavailable. One sentence, nothing else. */
+        renderNotice(panel, [MESSAGES.unavailable]);
+      }
+    };
+    xhr.ontimeout = function () {
+      if (settled) return;
+      settled = true;
+      if (button) button.disabled = false;
+      renderNotice(panel, [MESSAGES.unavailable]);
+    };
+    xhr.onerror = function () {
+      if (settled) return;
+      settled = true;
+      if (button) button.disabled = false;
+      renderNotice(panel, [MESSAGES.unavailable]);
+    };
+    try {
+      xhr.send();
+    } catch (e) {
+      if (settled) return;
+      settled = true;
+      if (button) button.disabled = false;
+      renderNotice(panel, [MESSAGES.unavailable]);
+    }
+  }
+
+  function attach(doc, state) {
+    var button = $("seatmapPriceButton");
+    if (!button) return;
+    button.addEventListener("click", function () { doLookup(doc, state); });
+    /* Render the initial "not connected" state so the page does not flash. */
+    if (!endpoint()) {
+      var panel = $("seatmapPriceResult");
+      renderNotice(panel, [MESSAGES.notConnected]);
+    }
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Exposed surface (for tests under Node and for the page under the
+   * browser). The test suite reads every method and every constant
+   * below, so additions must keep the names.
+   * ---------------------------------------------------------------- */
+
+  var api = {
+    REPLY_FIELDS: REPLY_FIELDS,
+    REQUEST_FIELDS: REQUEST_FIELDS,
+    VERDICT_LABELS: VERDICT_LABELS,
+    MESSAGES: MESSAGES,
+    endpoint: endpoint,
+    pickLeg: pickLeg,
+    buildQuery: buildQuery,
+    isActiveLegMatchingReply: isActiveLegMatchingReply,
+    fetchMinute: fetchMinute,
+    render: render,
+    renderNotice: renderNotice,
+    escapeText: escapeText,
+    doLookup: doLookup,
+    attach: attach
+  };
+
+  if (typeof module === "object" && module && module.exports) {
+    module.exports = api;
+  } else {
+    root.SpicySeatMapPrice = api;
+  }
+}(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : this)));
 </script>
 </body>
 </html>
