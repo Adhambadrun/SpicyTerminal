@@ -166,11 +166,20 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
 .about-feats code{font-size:10.5px;color:#c9d8ce;background:#0b1218;border:1px solid #1e2b34;border-radius:3px;padding:0 4px}
 .about-ic{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-top:1px;border:1px solid rgba(83,217,119,.3);border-radius:6px;background:rgba(31,157,85,.12)}
 .about-ic svg{width:13px;height:13px;fill:none;stroke:var(--green);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+/* The NEXT column ships nothing yet, so its marker is amber, not green: what
+   exists and what is planned must not look like the same thing. */
+.about-ic-next{border-color:rgba(240,163,92,.34);background:rgba(240,163,92,.1)}
+.about-ic-next svg{stroke:#f0a35c}
 .about-dev{display:flex;align-items:center;gap:11px;margin:0 0 10px}
 .about-avatar{flex:none;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;border:1px solid rgba(83,217,119,.35);background:radial-gradient(120% 120% at 30% 0,rgba(83,217,119,.22),rgba(10,15,20,.9));color:var(--green);font-size:13px;letter-spacing:.5px}
 .about-name{color:#eef4f7;font-size:13px;letter-spacing:.2px}
 .about-role{color:#63788a;font-size:10px;letter-spacing:.5px;margin-top:2px}
 .about-panel p.about-why{color:#8fa6b2;font-size:11px;line-height:1.75;margin:0 0 12px}
+/* The author sits on his own row under both columns: he built what is shipping
+   and what is coming, so he does not belong inside either list. */
+.about-author{display:flex;flex-wrap:wrap;align-items:center;gap:11px 14px;margin-top:14px;padding-top:13px;border-top:1px solid #141e26;}
+.about-author .about-why,.about-author .about-links{flex:1 1 100%;}
+.about-author .about-links{margin-top:0;}
 .about-links{display:flex;flex-wrap:wrap;gap:7px}
 .about-links a,.about-links button{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:#9fb4bf;text-decoration:none;border:1px solid #22313c;border-radius:6px;background:#101920;padding:6px 10px;min-height:0;letter-spacing:.4px}
 .about-copy-lbl{white-space:nowrap}
@@ -232,13 +241,9 @@ __SEATMAP_CSS__
          base64 isn't duplicated in the single-file artifact. -->
     <img id="wordmarkWelcome" src="" alt="SpicyTerminal">
     <div class="made">Made with <span class="heart">♥</span> love by Adham Badran</div>
-    <div class="sub">Paste or drop a screenshot and it converts on its own — no stuck scans.
-      If a first pass ever cannot read it, <b style="color:#53d977">AI FIX</b> re-reads it and repairs the result.</div>
+    <div class="sub">Paste or drop a screenshot and it converts on its own. If a first pass ever cannot read it, <b style="color:#53d977">AI FIX</b> re-reads it and repairs the result.</div>
     <div class="keybox">
-      <p class="how">Everything below converts automatically with no key. The key is only what
-        <b style="color:#c9d8ce">AI FIX</b> runs on — the fallback re-read for an unreadable screenshot or paste.
-        Get one — <a id="genKey3" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Generate Api</a>
-        (free, takes 20 seconds) — and paste it here.</p>
+      <p class="how">Everything converts with no key. The key is <b style="color:#c9d8ce">only what AI FIX runs on</b> — the re-read for an unreadable screenshot or paste. Get one — <a id="genKey3" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Generate Api</a> (free, takes 20 seconds) — and paste it here.</p>
       <input id="gemKeyWelcome" placeholder="Paste your Gemini API key (powers AI FIX)" autocomplete="off" spellcheck="false">
       <div class="keywarnmsg hidden" id="welcomeKeyWarn"></div>
     </div>
@@ -273,7 +278,8 @@ __SEATMAP_CSS__
   </div>
 </div>
 
-<!-- ABOUT:BEGIN — one dialog, two columns: what the engine does, who built it.
+<!-- ABOUT:BEGIN — one short dialog: what it does today, what is coming, who
+     built it. Two columns so it reads in one screen and closes in one click.
      The wordmark is filled from the header image at runtime (see app.js) so the
      ~66KB base64 is not embedded a third time in the single-file artifact. -->
 <div class="modal hidden about-modal" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-describedby="aboutTagline">
@@ -285,7 +291,7 @@ __SEATMAP_CSS__
     </div>
 
     <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS ready to copy format to paste into Backoffice.</b>
-      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK lights up for a complete, certain itinerary on one bookable airline — American, Delta, Alaska, United or British Airways, one or several legs — using the same link engine as the production Spicy Link Generator. American links pin every flight via aa.com metasearch; Delta and Alaska links carry every leg (with an estimated price); United and British Airways links carry the route(s) and dates without pinning exact flights. A mixed-airline itinerary links only when exactly one of its airlines is bookable, and then covers that airline's legs. The compact Passengers selector beside BOOKING LINK sets 1–9 passengers (not assigned seats). Clicking opens an external search or prefilled summary for that party and shares the itinerary details with that site; unsupported airlines and uncertain conversions stay disabled. Check availability and price on the airline site — it never books or purchases a ticket automatically.</p>
+      Paste a Google Flights option, an airline email or a photo and it converts the moment it lands — a deterministic engine that runs entirely inside this tab.</p>
 
     <ul class="about-stats">
       <li><b>0</b> accounts · cookies · trackers</li>
@@ -294,7 +300,7 @@ __SEATMAP_CSS__
 
     <div class="about-cols">
       <section class="about-panel">
-        <h4>WHAT IT DOES</h4>
+        <h4>NOW</h4>
         <ul class="about-feats">
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
             <span><b>Copy-ready GDS output.</b> Ticket order, 12-hour clocks, overnight <code>+1</code> markers, real IATA codes — byte-identical every time.</span></li>
@@ -303,26 +309,36 @@ __SEATMAP_CSS__
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3.2l1.7 4.7 4.7 1.7-4.7 1.7L11 16l-1.7-4.7L4.6 9.6l4.7-1.7z"/><path d="M18.4 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></svg></span>
             <span><b><code>AI FIX</code>.</b> When a first read cannot see the flights, it re-reads and repairs the output. Your key, your call.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
-            <span><b>Private.</b> Conversion stays in this tab. Choose 1–9 passengers in the small selector beside BOOKING LINK; seat assignment is not included. Clicking opens an external airline search or prefilled summary and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically; you always finish on the airline site.</span></li>
+            <span><b>Booking link.</b> A complete, certain itinerary on American, Delta, Alaska, United or British Airways lights up <code>BOOKING LINK</code>. Choose 1–9 passengers in the small selector beside BOOKING LINK; seat assignment is not included. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made, and it never books or purchases a ticket automatically.</span></li>
+          <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
+            <span><b>Private.</b> Conversion stays in this tab. No account, no cookies, no trackers.</span></li>
         </ul>
       </section>
 
       <section class="about-panel">
-        <h4>MADE BY</h4>
-        <div class="about-dev">
-          <span class="about-avatar" aria-hidden="true">AB</span>
-          <div>
-            <div class="about-name">Adham Badran</div>
-            <div class="about-role">Solo developer</div>
-          </div>
-        </div>
-        <p class="about-why">Every layer here — the parser, the aviation dictionary, the OCR cleaner, the self-learning guardrails and this UI — is hand-written by one person, with no backend behind it.
-          SpicyTerminal exists because re-typing it — and bug reports and weekly reports — should not be manual work.</p>
-        <div class="about-links">
-          <a href="mailto:adhambadraan@gmail.com?subject=SpicyTerminal%20feedback"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7.2l8.5 5.9 8.5-5.9"/></svg>Email Adham</a>
-          <button id="aboutCopyMail" type="button" aria-label="Copy the author email address"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5.5 15H4.5a2 2 0 0 1-2-2V4.5a2 2 0 0 1 2-2H13a2 2 0 0 1 2 2v1"/></svg><span class="about-copy-lbl">COPY EMAIL</span></button>
-        </div>
+        <h4>NEXT</h4>
+        <ul class="about-feats">
+          <li><span class="about-ic about-ic-next" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 12h6"/></svg></span>
+            <span><b>Seat Map, airline-verified.</b> The cabin layouts are reference-grade today; the airline's own configurations are being checked in one aircraft at a time.</span></li>
+          <li><span class="about-ic about-ic-next" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 12h6"/></svg></span>
+            <span><b>More airlines on Booking link.</b> Wider coverage than the five carriers it links today, one bookable itinerary at a time.</span></li>
+          <li><span class="about-ic about-ic-next" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 12h6"/></svg></span>
+            <span><b>More formats in, more formats out.</b> PDFs and exports beyond text, and a copy profile per back office.</span></li>
+        </ul>
       </section>
+    </div>
+
+    <div class="about-author">
+      <span class="about-avatar" aria-hidden="true">AB</span>
+      <div>
+        <div class="about-name">Adham Badran</div>
+        <div class="about-role">Solo developer</div>
+      </div>
+      <p class="about-why">Every layer here — the parser, the dictionary, the OCR cleaner, the self-learning guardrails and this UI — is hand-written by one person, with no backend behind it.</p>
+      <div class="about-links">
+        <a id="aboutEmailLink" href="mailto:adhambadraan@gmail.com?subject=SpicyTerminal%20feedback"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7.2l8.5 5.9 8.5-5.9"/></svg>Email Adham</a>
+        <button id="aboutCopyMail" type="button" aria-label="Copy the author email address"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5.5 15H4.5a2 2 0 0 1-2-2V4.5a2 2 0 0 1 2-2H13a2 2 0 0 1 2 2v1"/></svg><span class="about-copy-lbl">COPY EMAIL</span></button>
+      </div>
     </div>
 
     <div class="about-foot">
@@ -371,7 +387,7 @@ __SEATMAP_CSS__
         <h1 class="seatmap-title" id="seatmapPageTitle">SEAT MAP</h1>
         <p class="seatmap-subtitle">Your converted itinerary loads straight in here — airline, flight number, route, date, cabin and aircraft type, re-read from the OUTPUT you just converted with the same engine, so the two cannot disagree. The cabin is drawn from a layout that says, on the map, how well it is verified.</p>
         <p class="seatmap-subtitle" style="margin-top:5px">The seat colours are invented in this tab. No airline inventory is connected, and picking a seat reserves nothing — not even a preference. Want a real seat? Take the airline link on the map and ask the airline.</p>
-        <p class="seatmap-subtitle" style="margin-top:5px">Nothing converted yet, or want to poke a layout by hand? The form below does not need a flight.</p>
+        <p class="seatmap-subtitle" style="margin-top:5px">No conversion to read, or after something else? Look a flight up by number below — or pick an aircraft type and I will draw that type.</p>
       </div>
     </div>
     <div class="seatmap-dev-banner" role="status">
@@ -379,8 +395,38 @@ __SEATMAP_CSS__
       <span><strong>Flight data is real; seat status is not.</strong> The flight identity and aircraft type come from your converted itinerary, and the cabin layout is labelled by tier: an airline-verified configuration when one has been checked, otherwise a reference layout for that aircraft type. Seat availability is simulated in this browser — never live airline inventory — and selecting a seat reserves nothing. I would rather say that four times than have you believe one green square.</span>
     </div>
 
+    <section class="seatmap-card" aria-labelledby="seatmapFindTitle">
+      <h2 class="seatmap-panel-title" id="seatmapFindTitle" style="padding:0 0 11px;border:0">FIND A FLIGHT</h2>
+      <form class="seatmap-find" id="seatmapFindForm" novalidate>
+        <div class="seatmap-field">
+          <label for="seatmapFlightQuery">Flight number or route</label>
+          <input id="seatmapFlightQuery" name="query" type="text" value="BA117" placeholder="BA117 · BA 117 LHR JFK · CAI LHR" inputmode="text" autocomplete="off" spellcheck="false" maxlength="28" aria-describedby="seatmapFormStatus">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapFindDate">Date</label>
+          <input id="seatmapFindDate" name="findDate" type="date" autocomplete="off">
+        </div>
+        <div class="seatmap-field">
+          <label for="seatmapSearchCabin">Cabin</label>
+          <select id="seatmapSearchCabin" name="cabin">
+            <option value="" selected>Whole aircraft</option>
+            <option value="first">First</option>
+            <option value="business">Business</option>
+            <option value="premium_economy">Premium Economy</option>
+            <option value="economy">Economy</option>
+          </select>
+        </div>
+        <button class="seatmap-btn seatmap-btn-primary" id="seatmapFindButton" type="submit">FIND THE CABIN</button>
+      </form>
+      <div class="seatmap-search-results hidden" id="seatmapSearchResults" role="status" aria-live="polite"></div>
+      <div class="seatmap-find-actions">
+        <button class="seatmap-btn hidden" id="seatmapUseConverted" type="button">← BACK TO THE FLIGHT I CONVERTED</button>
+      </div>
+      <p class="seatmap-find-note">The lookup is local: a short table of published flight numbers, the aircraft this converter has read out of real itineraries, and what it can infer for the airline on a route. There is no schedule feed in this tab, and the type drawn is the one usually assigned — airlines swap aircraft, so check the airline for today&#39;s.</p>
+    </section>
+
     <section class="seatmap-card" aria-labelledby="seatmapSearchTitle">
-      <h2 class="seatmap-panel-title" id="seatmapSearchTitle" style="padding:0 0 11px;border:0">MANUAL ENTRY · SAMPLE VIEWER</h2>
+      <h2 class="seatmap-panel-title" id="seatmapSearchTitle" style="padding:0 0 11px;border:0">OR DRAW AN AIRCRAFT TYPE</h2>
       <form class="seatmap-form" id="seatmapForm" novalidate>
         <div class="seatmap-field">
           <label for="seatmapFlightNumber">Flight number</label>
@@ -399,20 +445,28 @@ __SEATMAP_CSS__
           <input id="seatmapDate" name="date" type="date" autocomplete="off">
         </div>
         <div class="seatmap-field">
-          <label for="seatmapAircraft">Aircraft layout · sample</label>
+          <label for="seatmapAircraft">Aircraft type</label>
           <select id="seatmapAircraft" name="aircraftCode">
-            <option value="738">Boeing 737-800 · 738</option>
-            <option value="320">Airbus A320 · 320</option>
-            <option value="77W">Boeing 777-300ER · 77W</option>
+            <option value="">Choose an aircraft type…</option>
           </select>
         </div>
-        <button class="seatmap-btn seatmap-btn-primary" id="seatmapSearchButton" type="submit">GENERATE SAMPLE MAP</button>
+        <div class="seatmap-field">
+          <label for="seatmapManualCabin">Cabin</label>
+          <select id="seatmapManualCabin" name="cabinCode">
+            <option value="" selected>Whole aircraft</option>
+            <option value="first">First</option>
+            <option value="business">Business</option>
+            <option value="premium_economy">Premium Economy</option>
+            <option value="economy">Economy</option>
+          </select>
+        </div>
+        <button class="seatmap-btn seatmap-btn-primary" id="seatmapSearchButton" type="submit">DRAW IT</button>
       </form>
       <div class="seatmap-examples" aria-label="Example sample flights">
         <span class="seatmap-examples-label">QUICK EXAMPLES</span>
         <button class="seatmap-example" type="button" data-seatmap-example data-flight="AS100" data-origin="SEA" data-destination="LAX" data-aircraft="738">AS100 · 738</button>
         <button class="seatmap-example" type="button" data-seatmap-example data-flight="BA117" data-origin="LHR" data-destination="JFK" data-aircraft="77W">BA117 · 77W</button>
-        <button class="seatmap-example" type="button" data-seatmap-example data-flight="DL2305" data-origin="JFK" data-destination="BOS" data-aircraft="320">DL2305 · 320</button>
+        <button class="seatmap-example" type="button" data-seatmap-example data-flight="MS777" data-origin="CAI" data-destination="LHR" data-aircraft="77W">MS777 · 77W</button>
       </div>
       <div class="seatmap-form-status" id="seatmapFormStatus" role="status" aria-live="polite"></div>
     </section>
@@ -589,6 +643,7 @@ __SEATMAP_CSS__
      honours the same lock. -->
 <script>__SEATMAP_GATE__</script>
 <script>__APP_JS__</script>
+<script>__SEATMAP_FLIGHTS__</script>
 <script>__SEATMAP_LAYOUTS__</script>
 <script>__SEATMAP_JS__</script>
 </body>

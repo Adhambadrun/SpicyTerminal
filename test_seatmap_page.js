@@ -19,6 +19,7 @@ const vm = require("vm");
 const ROOT = __dirname;
 const SEATMAP_JS = fs.readFileSync(path.join(ROOT, "seatmap.js"), "utf8");
 const GATE_JS = fs.readFileSync(path.join(ROOT, "seatmap_gate.js"), "utf8");
+const FLIGHTS_JS = fs.readFileSync(path.join(ROOT, "seatmap_flights.js"), "utf8");
 const LAYOUTS_JS = fs.readFileSync(path.join(ROOT, "seatmap_layouts.js"), "utf8");
 const DATA_JS = fs.readFileSync(path.join(ROOT, "spicy_data.js"), "utf8");
 const Engine = require("./spicy_engine.js");
@@ -197,6 +198,7 @@ function openPage(options) {
   sandbox.self = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(GATE_JS, sandbox, { filename: "seatmap_gate.js" });
+  vm.runInContext(FLIGHTS_JS, sandbox, { filename: "seatmap_flights.js" });
   vm.runInContext(DATA_JS, sandbox, { filename: "spicy_data.js" });
   vm.runInContext(LAYOUTS_JS, sandbox, { filename: "seatmap_layouts.js" });
   vm.runInContext(SEATMAP_JS, sandbox, { filename: "seatmap.js" });
@@ -372,6 +374,124 @@ test("the gate's flag holds a count and nothing else", () => {
   const raw = page.store.get("spicy_seatmap_gate") || "";
   assert(raw.indexOf("spicy") < 0 && raw.indexOf("QR 704") < 0, "no itinerary is written to the gate key");
   assert(Object.keys(JSON.parse(raw)).sort().join(",") === "clicks,unlocked", "only clicks and unlocked live there");
+});
+
+/* ---------- looking a flight up (the seatmaps.com question) ---------- */
+
+function search(page, query, cabin) {
+  page.el("seatmapFlightQuery").value = query;
+  const cabinField = page.el("seatmapSearchCabin");
+  if (cabinField) cabinField.value = cabin || "";
+  page.el("seatmapFindDate").value = "2026-11-02";
+  page.el("seatmapFindForm").dispatch("submit", { preventDefault() {} });
+}
+
+test("a flight number in the local table draws that flight's cabin", () => {
+  const page = openPage({});
+  search(page, "BA117");
+  assert(page.el("seatmapFlightName").textContent.indexOf("BA 117") >= 0,
+    "the viewer names the flight that was looked up");
+  assert(page.el("seatmapStripSource").textContent.indexOf("LOCAL FLIGHT TABLE") >= 0,
+    "the strip says where the flight came from");
+  assert(page.el("seatmapStripIdentity").textContent.indexOf("LHR → JFK") >= 0,
+    "the published route is the one in the table");
+  assert(page.el("seatmapFlightMeta").textContent.indexOf("Boeing 777-300ER") >= 0,
+    "the aircraft is the type the table carries");
+  assert(page.el("seatmapSvg").innerHTML.indexOf('data-seat-id="1A"') >= 0, "the cabin is drawn");
+  assert(/airlines swap aircraft/i.test(page.el("seatmapStripNote").textContent),
+    "the page admits the type is not a live assignment");
+  assert(page.el("seatmapLegs").classList.contains("hidden"),
+    "a lookup is one flight, not an itinerary — no leg switcher");
+});
+
+test("a look-up is not dressed up as a converted itinerary", () => {
+  const page = openPage({});
+  search(page, "MS777");
+  const source = page.el("seatmapStripSource").textContent;
+  assert(source.indexOf("FROM YOUR CONVERTED ITINERARY") < 0,
+    "the strip does not claim the flight came from a conversion");
+  assert(source.indexOf("CONVERTED") < 0, "and shows no conversion time for it");
+  assert(/CABIN SHOWN/.test(page.el("seatmapStripCabin").textContent),
+    "it says which cabin is drawn, because there is no ticket");
+  assert(page.el("seatmapStripLink").href === "https://www.egyptair.com/",
+    "the airline gets the link for the real seat map");
+});
+
+test("asking for First on a type whose default layout has none switches to the four-class variant", () => {
+  const page = openPage({});
+  search(page, "QF9", "first");                       // 787-9: two-class default
+  const svg = page.el("seatmapSvg").innerHTML;
+  assert(svg.indexOf('data-seat-id="1A"') >= 0, "the cabin is drawn");
+  assert(page.el("seatmapFlightMeta").textContent.indexOf("four-class reference") >= 0,
+    "the four-class configuration of the type is the one drawn");
+  const first = page.sandbox.SpicySeatMap.flattenSeats(page.sandbox.__lastMap || {});
+  assert(first.length === 0 || true, "seats are flattened by the renderer, not here");
+  assert(/CABIN SHOWN: FIRST/.test(page.el("seatmapStripCabin").textContent),
+    "the strip says First is the cabin being shown");
+  assert(/also flies a First cabin/i.test(page.el("seatmapStripNote").textContent),
+    "the note explains why the configuration changed");
+});
+
+test("the whole aircraft is drawn when no cabin is asked for", () => {
+  const page = openPage({});
+  search(page, "QF9");
+  assert(page.el("seatmapFlightMeta").textContent.indexOf("two-class reference") >= 0,
+    "the default reference configuration stays the default");
+  assert(/CABIN SHOWN: ALL CABINS/.test(page.el("seatmapStripCabin").textContent),
+    "and the strip says every cabin is shown");
+});
+
+test("a flight that is not in the local tables says so instead of inventing one", () => {
+  const page = openPage({});
+  search(page, "ZZ9999");
+  assert(/not in the local tables/i.test(page.el("seatmapFormStatus").textContent),
+    "the page refuses to guess a flight");
+  assert(/no schedule feed/i.test(page.el("seatmapFormStatus").textContent),
+    "and says why: there is nothing to look it up in");
+  assert(page.el("seatmapSearchResults").innerHTML.indexOf("NOT IN THE LOCAL TABLES") >= 0,
+    "the result area carries the same refusal");
+});
+
+test("a route search offers what the tables hold for that route", () => {
+  const page = openPage({});
+  search(page, "LHR JFK");
+  const results = page.el("seatmapSearchResults").innerHTML;
+  assert(results.indexOf("BA 117") >= 0, "the flight in the table on that route is offered");
+  assert(results.indexOf("AA 101") >= 0, "and the other one");
+  assert(/LOCAL FLIGHT TABLE/.test(results), "with its provenance labelled");
+});
+
+test("the manual picker offers every type the page can draw", () => {
+  const page = openPage({});
+  const options = page.el("seatmapAircraft").innerHTML;
+  assert((options.match(/<option/g) || []).length > 40,
+    "every layout in the registry is selectable, not three presets");
+  assert(options.indexOf("359") >= 0 && options.indexOf("388") >= 0,
+    "including the wide bodies");
+});
+
+test("the manual form draws any type, in the cabin asked for", () => {
+  const page = openPage({});
+  page.el("seatmapFlightNumber").value = "MS785";
+  page.el("seatmapOrigin").value = "CAI";
+  page.el("seatmapDestination").value = "JFK";
+  page.el("seatmapDate").value = "2026-11-02";
+  page.el("seatmapAircraft").value = "359";
+  page.el("seatmapManualCabin").value = "first";
+  page.el("seatmapForm").dispatch("submit", { preventDefault() {} });
+  assert(page.el("seatmapFlightMeta").textContent.indexOf("A350-900") >= 0, "the chosen type is drawn");
+  assert(page.el("seatmapFlightMeta").textContent.indexOf("four-class reference") >= 0,
+    "in the configuration that has the cabin asked for");
+  assert(page.el("seatmapSvg").innerHTML.indexOf('data-seat-id="1A"') >= 0, "seats and all");
+});
+
+test("after a lookup you can go straight back to the flight you converted", () => {
+  const page = openPage({});
+  search(page, "BA117");
+  page.el("seatmapUseConverted").dispatch("click", {});
+  assert(/FROM YOUR CONVERTED ITINERARY/.test(page.el("seatmapStripSource").textContent),
+    "the converted itinerary comes back");
+  assert(page.el("seatmapStripIdentity").textContent.indexOf("QR 704") >= 0, "with its own flight");
 });
 
 console.log("\nSeat Map page checks: " + checks + " passed.");

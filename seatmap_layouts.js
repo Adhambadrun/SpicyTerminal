@@ -496,6 +496,180 @@
     })
   };
 
+  /* ------------------------------------------------------------------ *
+   * TIER 2b — four-class reference variants.
+   *
+   * One reference layout per type cannot be right for every airline: the same
+   * 787-9 flies two cabins at one carrier and four at another, and an A350
+   * that is all Business and Economy at one operator has a First cabin at the
+   * next. Drawing "no First cabin" for a First ticket would be a lie of
+   * omission, so each wide body that is also operated with a First and a
+   * Premium Economy cabin carries that configuration here as a VARIANT.
+   *
+   * A variant is used only when the cabin being asked for is missing from the
+   * type's default layout, it keeps the same (reference) tier, and the page
+   * says it switched. Nothing here is claimed as any airline's own
+   * configuration — that is still what AIRLINE_LAYOUTS is for.
+   * ------------------------------------------------------------------ */
+  var TYPE_LAYOUT_VARIANTS = {
+    "763": lay({
+      name: "Boeing 767-300ER", icao: "B763", family: "767", manufacturer: "Boeing", category: "widebody",
+      seatCount: 192, configLabel: "four-class reference · 8 First / 16 Business / 28 Premium Economy / 140 Economy (2-3-2)",
+      wingStartRow: 13, wingEndRow: 21,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 62, 21, ["LIE-FLAT", "POWER"]),
+        cab("business", "Business", 3, 6, g(1, 2, 1), [], 42, 20, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 7, 10, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 11, 30, g(2, 3, 2), [16, 17], 32, 18, ["STANDARD LEGROOM"])
+      ]
+    }),
+    "764": lay({
+      name: "Boeing 767-400ER", icao: "B764", family: "767", manufacturer: "Boeing", category: "widebody",
+      seatCount: 242, configLabel: "four-class reference · 8 First / 24 Business / 35 Premium Economy / 175 Economy (2-3-2)",
+      wingStartRow: 14, wingEndRow: 23,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 62, 21, ["LIE-FLAT", "POWER"]),
+        cab("business", "Business", 3, 8, g(1, 2, 1), [], 42, 20, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 9, 13, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 14, 38, g(2, 3, 2), [19, 20], 32, 18, ["STANDARD LEGROOM"])
+      ]
+    }),
+    "772": lay({
+      name: "Boeing 777-200ER", icao: "B772", family: "777", manufacturer: "Boeing", category: "widebody",
+      seatCount: 305, configLabel: "four-class reference · 8 First / 32 Business / 40 Premium Economy / 225 Economy (3-3-3)",
+      wingStartRow: 17, wingEndRow: 27,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 23, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 10, g(1, 2, 1), [], 44, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 11, 15, g(2, 4, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 16, 40, g(3, 3, 3), [19, 20], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "773": lay({
+      name: "Boeing 777-300", icao: "B773", family: "777", manufacturer: "Boeing", category: "widebody",
+      seatCount: 368, configLabel: "four-class reference · 8 First / 42 Business / 48 Premium Economy / 270 Economy (3-3-3)",
+      wingStartRow: 20, wingEndRow: 31,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 23, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 8, g(2, 3, 2), [], 44, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 9, 14, g(2, 4, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 15, 44, g(3, 3, 3), [21, 22], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "77W": lay({
+      name: "Boeing 777-300ER", icao: "B77W", family: "777", manufacturer: "Boeing", category: "widebody",
+      seatCount: 344, configLabel: "four-class reference · 8 First / 36 Business / 40 Premium Economy / 260 Economy (3-4-3)",
+      wingStartRow: 22, wingEndRow: 34,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 23, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 11, g(1, 2, 1), [], 44, 22, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 12, 16, g(2, 4, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 17, 42, g(3, 4, 3), [24, 25], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "77L": lay({
+      name: "Boeing 777-200LR", icao: "B77L", family: "777", manufacturer: "Boeing", category: "widebody",
+      seatCount: 310, configLabel: "four-class reference · 8 First / 32 Business / 40 Premium Economy / 230 Economy (3-4-3)",
+      wingStartRow: 17, wingEndRow: 27,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 23, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 10, g(1, 2, 1), [], 44, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 11, 15, g(2, 4, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 16, 38, g(3, 4, 3), [20, 21], 32, 17, ["STANDARD LEGROOM"])
+      ]
+    }),
+    "788": lay({
+      name: "Boeing 787-8", icao: "B788", family: "787", manufacturer: "Boeing", category: "widebody",
+      seatCount: 229, configLabel: "four-class reference · 8 First / 24 Business / 35 Premium Economy / 162 Economy (3-3-3)",
+      wingStartRow: 14, wingEndRow: 23,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 76, 22, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 8, g(1, 2, 1), [], 46, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 9, 13, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 14, 31, g(3, 3, 3), [17, 18], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "789": lay({
+      name: "Boeing 787-9", icao: "B789", family: "787", manufacturer: "Boeing", category: "widebody",
+      seatCount: 280, configLabel: "four-class reference · 8 First / 32 Business / 42 Premium Economy / 198 Economy (3-3-3)",
+      wingStartRow: 16, wingEndRow: 26,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 76, 22, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 10, g(1, 2, 1), [], 46, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 11, 16, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 17, 38, g(3, 3, 3), [20, 21], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "781": lay({
+      name: "Boeing 787-10", icao: "B78X", family: "787", manufacturer: "Boeing", category: "widebody",
+      seatCount: 316, configLabel: "four-class reference · 8 First / 32 Business / 42 Premium Economy / 234 Economy (3-3-3)",
+      wingStartRow: 17, wingEndRow: 27,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 76, 22, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 10, g(1, 2, 1), [], 46, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 11, 16, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 17, 42, g(3, 3, 3), [22, 23], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "332": lay({
+      name: "Airbus A330-200", icao: "A332", family: "A330", manufacturer: "Airbus", category: "widebody",
+      seatCount: 233, configLabel: "four-class reference · 8 First / 28 Business / 35 Premium Economy / 162 Economy (2-4-2 / 3-3-3)",
+      wingStartRow: 14, wingEndRow: 22,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 76, 22, ["LIE-FLAT", "POWER"]),
+        cab("business", "Business", 3, 9, g(1, 2, 1), [], 44, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 10, 14, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 15, 32, g(3, 3, 3), [16, 17], 32, 18, ["STANDARD LEGROOM"])
+      ]
+    }),
+    "333": lay({
+      name: "Airbus A330-300", icao: "A333", family: "A330", manufacturer: "Airbus", category: "widebody",
+      seatCount: 262, configLabel: "four-class reference · 8 First / 32 Business / 42 Premium Economy / 180 Economy (2-3-2 / 3-3-3)",
+      wingStartRow: 15, wingEndRow: 23,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 76, 22, ["LIE-FLAT", "POWER"]),
+        cab("business", "Business", 3, 10, g(1, 2, 1), [], 44, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 11, 16, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 17, 36, g(3, 3, 3), [18, 19], 32, 18, ["STANDARD LEGROOM"])
+      ]
+    }),
+    "339": lay({
+      name: "Airbus A330-900neo", icao: "A339", family: "A330neo", manufacturer: "Airbus", category: "widebody",
+      seatCount: 280, configLabel: "four-class reference · 8 First / 32 Business / 42 Premium Economy / 198 Economy (2-3-2 / 3-3-3)",
+      wingStartRow: 16, wingEndRow: 24,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 76, 22, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 10, g(1, 2, 1), [], 44, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 11, 16, g(2, 3, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 17, 38, g(3, 3, 3), [19, 20], 32, 18, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "359": lay({
+      name: "Airbus A350-900", icao: "A359", family: "A350", manufacturer: "Airbus", category: "widebody",
+      seatCount: 312, configLabel: "four-class reference · 8 First / 40 Business / 48 Premium Economy / 216 Economy (3-3-3)",
+      wingStartRow: 17, wingEndRow: 27,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 23, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 12, g(1, 2, 1), [], 46, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 13, 18, g(2, 4, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 19, 42, g(3, 3, 3), [23, 24], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    }),
+    "351": lay({
+      name: "Airbus A350-1000", icao: "A35K", family: "A350", manufacturer: "Airbus", category: "widebody",
+      seatCount: 334, configLabel: "four-class reference · 8 First / 44 Business / 48 Premium Economy / 234 Economy (3-3-3)",
+      wingStartRow: 18, wingEndRow: 28,
+      cabins: [
+        cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 23, ["LIE-FLAT", "SUITE", "POWER"]),
+        cab("business", "Business", 3, 13, g(1, 2, 1), [], 46, 21, ["LIE-FLAT", "POWER"]),
+        cab("premium_economy", "Premium Economy", 14, 19, g(2, 4, 2), [], 38, 19, ["EXTRA LEGROOM"]),
+        cab("economy", "Economy", 20, 45, g(3, 3, 3), [25, 26], 32, 17, ["STANDARD LEGROOM", "POWER"])
+      ]
+    })
+  };
+
+  var CABIN_NAMES = { first: "First", business: "Business", premium_economy: "Premium Economy", economy: "Economy" };
+
   /* Fallback shapes for types this file has no reference for. These describe
    * only the fuselage cross-section the type category really has — nothing
    * about rows, pitch or cabins, which are the airline's choice. */
@@ -526,6 +700,18 @@
 
   function normalizeType(code) {
     return String(code == null ? "" : code).trim().toUpperCase();
+  }
+
+  /** Does this layout contain the cabin code? */
+  function hasCabin(layout, code) {
+    return (layout && layout.cabins || []).some(function (cabin) { return cabin.code === code; });
+  }
+
+  /** The four-class variant of a type, when it offers a cabin the type's
+   *  default reference layout does not have. */
+  function pickVariant(typeCode, code) {
+    var variant = TYPE_LAYOUT_VARIANTS[normalizeType(typeCode)];
+    return variant && hasCabin(variant, code) ? variant : null;
   }
 
   function normalizeAirline(code) {
@@ -566,9 +752,12 @@
    * @param {string} airline   two-letter marketing carrier (may be "")
    * @param {string} typeCode  IATA aircraft type code from the itinerary
    * @param {object} [types]   aircraftTypes table (defaults to SPICY_DATA)
-   * @returns {{tier:string,label:string,layout:?object,meta:?object,sourceName:?string,sourceUrl:?string,verifiedOn:?string,reason:?string}}
+   * @param {object} [options] { cabin:"first" } asks for the configuration of
+   *                           this type that carries that cabin, when the
+   *                           default reference layout does not
+   * @returns {{tier:string,label:string,layout:?object,meta:?object,sourceName:?string,sourceUrl:?string,verifiedOn:?string,reason:?string,variantFor:?string,variantNote:?string}}
    */
-  function resolveLayout(airline, typeCode, types) {
+  function resolveLayout(airline, typeCode, types, options) {
     var carrier = normalizeAirline(airline);
     var key = normalizeType(typeCode);
     var meta = typeMeta(key, types);
@@ -589,10 +778,31 @@
     }
 
     if (TYPE_LAYOUTS[key]) {
+      var layout = TYPE_LAYOUTS[key];
+      var wanted = options && options.cabin ? String(options.cabin) : null;
+      /* A cabin the default reference does not have is not the same as a cabin
+         the aircraft does not have: the same type flies four cabins at another
+         operator, so the variant that has it is shown instead — same tier, and
+         the switch is reported instead of being hidden. */
+      if (wanted && !hasCabin(layout, wanted)) {
+        var variant = pickVariant(key, wanted);
+        if (variant) {
+          return {
+            tier: TIERS.TYPE_REFERENCE,
+            label: TIER_LABELS.type_reference,
+            layout: variant,
+            meta: meta,
+            variantFor: wanted,
+            variantNote: "This type also flies a " + (CABIN_NAMES[wanted] || wanted)
+              + " cabin, so the four-class configuration of this aircraft is shown."
+              + " Reference layout — not verified for this airline."
+          };
+        }
+      }
       return {
         tier: TIERS.TYPE_REFERENCE,
         label: TIER_LABELS.type_reference,
-        layout: TYPE_LAYOUTS[key],
+        layout: layout,
         meta: meta,
         reason: meta ? null : "type not in the local aircraft table"
       };
@@ -675,6 +885,10 @@
     TIER_LABELS: TIER_LABELS,
     AIRLINE_LAYOUTS: AIRLINE_LAYOUTS,
     TYPE_LAYOUTS: TYPE_LAYOUTS,
+    TYPE_LAYOUT_VARIANTS: TYPE_LAYOUT_VARIANTS,
+    CABIN_NAMES: CABIN_NAMES,
+    hasCabin: hasCabin,
+    pickVariant: pickVariant,
     CATEGORY_FAMILIES: CATEGORY_FAMILIES,
     groupSpec: g,
     resolveLayout: resolveLayout,
