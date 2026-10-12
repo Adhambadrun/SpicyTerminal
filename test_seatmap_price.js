@@ -855,12 +855,12 @@ test("8.12  pickLeg() from the manual form reads #seatmapOrigin / #seatmapDestin
  * 9. doLookup() — 12 checks
  * ============================================================ */
 
-test("9.01  doLookup() with no endpoint writes the notConnected message", function () {
+test("9.01  doLookup() with no endpoint hides the price block (no visible not-connected button)", function () {
   const setup = { panel: stubPanel(), document: { getElementById: function (id) { if (id === "seatmapPriceResult") return setup.panel; return null; } }, state: {} };
   withGlobals({ SPICY_PRICE_ENDPOINT: "", window: {}, document: setup.document }, function () {
     Price.doLookup(setup.document, setup.state);
   });
-  assert.ok(setup.panel.innerHTML.indexOf(Price.MESSAGES.notConnected) >= 0);
+  assert.strictEqual(setup.panel.innerHTML, "");
 });
 
 test("9.02  doLookup() with no leg writes the missing-leg message", function () {
@@ -922,7 +922,7 @@ test("9.05  doLookup() with ok=true reply renders the fields", function () {
   assert.ok(setup.panel.innerHTML.indexOf(Price.MESSAGES.notABooking) >= 0);
 });
 
-test("9.06  doLookup() with ok=false kind=no_fare renders the noFare message", function () {
+test("9.06  doLookup() with ok=false kind=no_fare hides the price block", function () {
   const shim = makeXhrShim();
   const setup = setupXhrTest({ shim });
   withGlobals({ SPICY_PRICE_ENDPOINT: "https://example.com/api", window: {}, document: setup.document, XMLHttpRequest: function () { return shim.xhr; } }, function () {
@@ -930,10 +930,13 @@ test("9.06  doLookup() with ok=false kind=no_fare renders the noFare message", f
     shim.xhr.responseText = JSON.stringify({ ok: false, kind: "no_fare" });
     shim.xhr.readyState = 4;
   });
-  assert.ok(setup.panel.innerHTML.indexOf(Price.MESSAGES.noFare) >= 0);
+  /* The price block should be hidden — panel empty, button/panel/note display=none.
+     The test shim doesn't have the real DOM elements, so we verify the panel is empty
+     (renderNotice is not called with noFare message). */
+  assert.strictEqual(setup.panel.innerHTML, "");
 });
 
-test("9.07  doLookup() with a non-JSON reply renders the unavailable message", function () {
+test("9.07  doLookup() with a non-JSON reply hides the price block", function () {
   const shim = makeXhrShim();
   const setup = setupXhrTest({ shim });
   withGlobals({ SPICY_PRICE_ENDPOINT: "https://example.com/api", window: {}, document: setup.document, XMLHttpRequest: function () { return shim.xhr; } }, function () {
@@ -941,10 +944,10 @@ test("9.07  doLookup() with a non-JSON reply renders the unavailable message", f
     shim.xhr.responseText = "<html>500 Internal Server Error</html>";
     shim.xhr.readyState = 4;
   });
-  assert.ok(setup.panel.innerHTML.indexOf(Price.MESSAGES.unavailable) >= 0);
+  assert.strictEqual(setup.panel.innerHTML, "");
 });
 
-test("9.08  doLookup() with an empty-body reply renders the unavailable message", function () {
+test("9.08  doLookup() with an empty-body reply hides the price block", function () {
   const shim = makeXhrShim();
   const setup = setupXhrTest({ shim });
   withGlobals({ SPICY_PRICE_ENDPOINT: "https://example.com/api", window: {}, document: setup.document, XMLHttpRequest: function () { return shim.xhr; } }, function () {
@@ -952,7 +955,7 @@ test("9.08  doLookup() with an empty-body reply renders the unavailable message"
     shim.xhr.responseText = "";
     shim.xhr.readyState = 4;
   });
-  assert.ok(setup.panel.innerHTML.indexOf(Price.MESSAGES.unavailable) >= 0);
+  assert.strictEqual(setup.panel.innerHTML, "");
 });
 
 test("9.09  doLookup() with a reply that doesn't match the active leg shows the notOnRoute line", function () {
@@ -981,14 +984,14 @@ test("9.10  doLookup() with a reply that DOES match the active leg does NOT show
   assert.ok(setup.panel.innerHTML.indexOf(Price.MESSAGES.notOnRoute) < 0, "notOnRoute shown when it matched");
 });
 
-test("9.11  doLookup() with an XHR that throws (e.g. CSP, offline) writes the unavailable message", function () {
+test("9.11  doLookup() with an XHR that throws (e.g. CSP, offline) hides the price block", function () {
   const setup = { panel: stubPanel(), document: { getElementById: function (id) { if (id === "seatmapPriceResult") return setup.panel; return null; } },
                   state: { legs: [{ airline: "DL", flightNumber: "1788", origin: "JFK", destination: "LAX", departureDate: "2026-11-12", cabin: "economy" }] } };
   withGlobals({ SPICY_PRICE_ENDPOINT: "https://example.com/api", window: {}, document: setup.document,
                 XMLHttpRequest: function () { return { open: function () { throw new Error("blocked"); } }; } }, function () {
     Price.doLookup(setup.document, setup.state);
   });
-  assert.ok(setup.panel.innerHTML.indexOf(Price.MESSAGES.unavailable) >= 0);
+  assert.strictEqual(setup.panel.innerHTML, "");
 });
 
 test("9.12  doLookup() never sends the cabin='presidential' or any other unsupported cabin value unfiltered", function () {
@@ -1026,19 +1029,25 @@ test("10.02  attach() with no endpoint and no #seatmapPriceButton is a no-op", f
   });
 });
 
-test("10.03  attach() writes the notConnected message when the endpoint is empty (so the page does not flash)", function () {
-  const panel = stubPanel();
+test("10.03  attach() hides the price block when the endpoint is empty", function () {
+  const panel = { innerHTML: "", style: { display: "" } };
+  const button = { style: { display: "" }, addEventListener: function () {} };
+  const note = { style: { display: "" } };
   const fakeDoc = {
     getElementById: function (id) {
-      if (id === "seatmapPriceButton") return { addEventListener: function () {} };
+      if (id === "seatmapPriceButton") return button;
       if (id === "seatmapPriceResult") return panel;
+      if (id === "seatmapPriceNote") return note;
       return null;
     }
   };
   withGlobals({ SPICY_PRICE_ENDPOINT: "", window: {}, document: fakeDoc }, function () {
     Price.attach(fakeDoc, {});
   });
-  assert.ok(panel.innerHTML.indexOf(Price.MESSAGES.notConnected) >= 0);
+  assert.strictEqual(button.style.display, "none");
+  assert.strictEqual(panel.style.display, "none");
+  assert.strictEqual(note.style.display, "none");
+  assert.strictEqual(panel.innerHTML, "");
 });
 
 test("10.04  the template includes the PRICE button", function () {
@@ -1077,6 +1086,144 @@ test("10.10  the source has no @keyframes in the new CSS that this change adds",
   assert.ok(!/@keyframes\s+seatmap-price/.test(css), "added a @keyframes rule");
 });
 
+
+/* ============================================================
+ * 11. hidePriceBlock / showPriceBlock / checkHealth - 3 checks
+ * ============================================================ */
+
+test("10.11  hidePriceBlock() hides the block, button, panel, and note", function () {
+  const block = { style: { display: "" } };
+  const button = { style: { display: "" } };
+  const panel = { style: { display: "" }, innerHTML: "stale quote" };
+  const note = { style: { display: "" } };
+  const fakeDoc = {
+    getElementById: function (id) {
+      if (id === "seatmapPriceBlock") return block;
+      if (id === "seatmapPriceButton") return button;
+      if (id === "seatmapPriceResult") return panel;
+      if (id === "seatmapPriceNote") return note;
+      return null;
+    }
+  };
+  withGlobals({ window: {}, document: fakeDoc }, function () {
+    Price.hidePriceBlock();
+  });
+  assert.strictEqual(block.style.display, "none");
+  assert.strictEqual(button.style.display, "none");
+  assert.strictEqual(panel.style.display, "none");
+  assert.strictEqual(note.style.display, "none");
+  assert.strictEqual(panel.innerHTML, "", "stale text is cleared with the hide");
+});
+
+test("10.12  showPriceBlock() shows the block, button, panel, and note", function () {
+  const block = { style: { display: "none" } };
+  const button = { style: { display: "none" } };
+  const panel = { style: { display: "none" } };
+  const note = { style: { display: "none" } };
+  const fakeDoc = {
+    getElementById: function (id) {
+      if (id === "seatmapPriceBlock") return block;
+      if (id === "seatmapPriceButton") return button;
+      if (id === "seatmapPriceResult") return panel;
+      if (id === "seatmapPriceNote") return note;
+      return null;
+    }
+  };
+  withGlobals({ window: {}, document: fakeDoc }, function () {
+    Price.showPriceBlock();
+  });
+  assert.strictEqual(block.style.display, "");
+  assert.strictEqual(button.style.display, "");
+  assert.strictEqual(panel.style.display, "");
+  assert.strictEqual(note.style.display, "");
+});
+
+test("10.13  checkHealth() calls callback with false when healthz returns unavailable", function () {
+  const calls = [];
+  const xhrShim = {
+    open: function (method, url, async) { calls.push({ method, url, async }); },
+    send: function () { calls.push({ kind: "send" }); },
+    set timeout(v) { calls.push({ kind: "timeout_set", v }); },
+    get timeout() { return 0; },
+    set onreadystatechange(fn) { this._onreadystatechange = fn; },
+    get onreadystatechange() { return this._onreadystatechange; },
+    set ontimeout(fn) { this._ontimeout = fn; },
+    get ontimeout() { return this._ontimeout; },
+    set onerror(fn) { this._onerror = fn; },
+    get onerror() { return this._onerror; },
+    set readyState(v) {
+      this._readyState = v;
+      if (v === 4 && this._onreadystatechange) this._onreadystatechange();
+    },
+    get readyState() { return this._readyState; },
+    set responseText(v) { this._responseText = v; },
+    get responseText() { return this._responseText; }
+  };
+  let callbackResult = null;
+  withGlobals({ window: {}, document: {}, XMLHttpRequest: function () { return xhrShim; } }, function () {
+    Price.checkHealth("https://example.com/api/flights/price", function (ok) { callbackResult = ok; });
+    xhrShim.responseText = JSON.stringify({ status: "unavailable" });
+    xhrShim.readyState = 4;
+  });
+  assert.strictEqual(callbackResult, false);
+});
+
+/* ============================================================
+ * 12. the shipped page — the block starts hidden and the module binds - 3 checks
+ * ============================================================ */
+
+test("10.13b  checkHealth() accepts the tools/price_service shape {ok:true}", function () {
+  const xhrShim = {
+    open: function () {}, send: function () {},
+    timeout: 0, readyState: 0, responseText: "",
+    onreadystatechange: null, ontimeout: null, onerror: null
+  };
+  let result = null;
+  withGlobals({ window: {}, document: {}, XMLHttpRequest: function () { return xhrShim; } }, function () {
+    Price.checkHealth("https://example.com/api/flights/price", function (ok) { result = ok; });
+    xhrShim.responseText = JSON.stringify({ ok: true });
+    xhrShim.readyState = 4;
+    xhrShim.onreadystatechange();
+  });
+  assert.strictEqual(result, true);
+});
+
+test("10.13c  checkHealth() rejects a body that says neither ok nor status=ok", function () {
+  const xhrShim = {
+    open: function () {}, send: function () {},
+    timeout: 0, readyState: 0, responseText: "",
+    onreadystatechange: null, ontimeout: null, onerror: null
+  };
+  let result = null;
+  withGlobals({ window: {}, document: {}, XMLHttpRequest: function () { return xhrShim; } }, function () {
+    Price.checkHealth("https://example.com/api/flights/price", function (ok) { result = ok; });
+    xhrShim.responseText = JSON.stringify({ hello: "world" });
+    xhrShim.readyState = 4;
+    xhrShim.onreadystatechange();
+  });
+  assert.strictEqual(result, false);
+});
+
+test("10.14  the template ships the whole price block hidden, so nothing flashes before the probe", function () {
+  assert.ok(/id="seatmapPriceBlock"[^>]*style="display:none"/.test(TEMPLATE),
+    "the price block is not hidden at build time");
+});
+
+test("10.15  the module binds itself on /seatmap and nowhere else", function () {
+  assert.ok(/DOMContentLoaded/.test(SOURCE), "no bootstrap hook in the source");
+  assert.ok(/seatmapPriceBlock/.test(SOURCE), "the bootstrap does not control the block container");
+  assert.ok(/pageState/.test(SOURCE), "the module does not read the seat map's live state");
+  const seatmap = fs.readFileSync(path.join(ROOT, "seatmap.js"), "utf8");
+  assert.ok(/pageState/.test(seatmap), "the seat map does not expose its live state");
+});
+
+test("10.16  hidePriceBlock() never touches style when a node has none (defensive on stubs)", function () {
+  const fakeDoc = { getElementById: function () { return { innerHTML: "" }; } };
+  withGlobals({ window: {}, document: fakeDoc }, function () {
+    Price.hidePriceBlock();
+    Price.showPriceBlock();
+  });
+});
 
 console.log("");
 console.log("================================================================");

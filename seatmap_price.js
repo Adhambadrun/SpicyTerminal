@@ -13,10 +13,14 @@
  *     upstream body, the JSON key, or a traceback. If the page can't
  *     tell the user what is wrong in one human sentence, it says
  *     something general and stops.
+ *   - the price block (button + panel) is fully hidden whenever a real
+ *     fare isn't possible: no endpoint configured, health check fails,
+ *     or the service returns no_fare. Never a visible "not connected"
+ *     button.
  *
  * window.SPICY_PRICE_ENDPOINT is set at build time by build_web.py. The
- * empty string means "not connected on this site" — the button is still
- * rendered, but it never tries to fetch and the panel just says so.
+ * empty string means "not connected on this site" — the price block is
+ * hidden entirely.
  *
  * Exports as window.SpicySeatMapPrice (browser) and module.exports
  * (Node, for tests).
@@ -75,7 +79,7 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
+      .replace(/\"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
 
@@ -236,6 +240,90 @@
   }
 
   /* ---------------------------------------------------------------- *
+   * Price block visibility
+   * ---------------------------------------------------------------- */
+
+  function setDisplay(element, value) {
+    /* The panel stub in the test harness has no style object, so this
+       stays defensive: a node without .style is simply left alone. */
+    if (element && element.style) element.style.display = value;
+  }
+
+  /* The whole price block — the wrapping card, the button, the panel and the
+     one-line note — is hidden together whenever a real fare isn't possible.
+     Never a visible "not connected" button. The panel text is cleared with it
+     so a later re-show can never flash a stale quote. */
+  function hidePriceBlock() {
+    setDisplay($("seatmapPriceBlock"), "none");
+    setDisplay($("seatmapPriceButton"), "none");
+    setDisplay($("seatmapPriceResult"), "none");
+    setDisplay($("seatmapPriceNote"), "none");
+    var panel = $("seatmapPriceResult");
+    if (panel && typeof panel.innerHTML === "string") panel.innerHTML = "";
+  }
+
+  function showPriceBlock() {
+    setDisplay($("seatmapPriceBlock"), "");
+    setDisplay($("seatmapPriceButton"), "");
+    setDisplay($("seatmapPriceResult"), "");
+    setDisplay($("seatmapPriceNote"), "");
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Health check
+   * ---------------------------------------------------------------- */
+
+  function checkHealth(url, callback) {
+    /* Probe the /healthz endpoint to see if the fare service is live.
+       Callback receives true (healthy) or false (unavailable).
+
+       The probe is a plain GET on the service's own health route; the two
+       shapes the account-backed backend answers with are both accepted:
+       {"status":"ok"} (Vercel/Netlify function) and {"ok":true} (the
+       tools/price_service host). Anything else means "no fare is possible
+       here right now" and the block stays hidden. */
+    var healthUrl = url.replace(/\/api\/flights\/price$/, "/healthz");
+    var xhr = new XMLHttpRequest();
+    var settled = false;
+    try {
+      xhr.open("GET", healthUrl, true);
+    } catch (e) {
+      callback(false);
+      return;
+    }
+    xhr.timeout = 5000;
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4 || settled) return;
+      settled = true;
+      var ok = false;
+      try {
+        var body = JSON.parse(xhr.responseText);
+        ok = !!(body && (body.status === "ok" || body.ok === true));
+      } catch (e) {
+        ok = false;
+      }
+      callback(ok);
+    };
+    xhr.ontimeout = function () {
+      if (settled) return;
+      settled = true;
+      callback(false);
+    };
+    xhr.onerror = function () {
+      if (settled) return;
+      settled = true;
+      callback(false);
+    };
+    try {
+      xhr.send();
+    } catch (e) {
+      if (settled) return;
+      settled = true;
+      callback(false);
+    }
+  }
+
+  /* ---------------------------------------------------------------- *
    * The button
    * ---------------------------------------------------------------- */
 
@@ -255,7 +343,7 @@
     var button = $("seatmapPriceButton");
     var url = endpoint();
     if (!url) {
-      renderNotice(panel, [MESSAGES.notConnected]);
+      hidePriceBlock();
       return;
     }
     var leg = pickLeg(state);
@@ -282,8 +370,10 @@
     try {
       xhr.open("GET", fullUrl, true);
     } catch (e) {
+      /* The request could not even be opened (CSP, offline, blocked):
+         a real fare is impossible, so the whole block goes away. */
       if (button) button.disabled = false;
-      renderNotice(panel, [MESSAGES.unavailable]);
+      hidePriceBlock();
       return;
     }
     xhr.timeout = 35000;
@@ -314,27 +404,28 @@
           render(panel, fields, extras);
           ok = true;
         } else if (body.ok === false && body.kind === "no_fare") {
-          renderNotice(panel, [MESSAGES.noFare]);
+          /* No fare available — hide the price block entirely. */
+          hidePriceBlock();
           ok = true;
         }
       }
       if (!ok) {
         /* Network error, non-JSON reply, or anything we don't recognise:
-           the service is unavailable. One sentence, nothing else. */
-        renderNotice(panel, [MESSAGES.unavailable]);
+           the service is unavailable. Hide the price block. */
+        hidePriceBlock();
       }
     };
     xhr.ontimeout = function () {
       if (settled) return;
       settled = true;
       if (button) button.disabled = false;
-      renderNotice(panel, [MESSAGES.unavailable]);
+      hidePriceBlock();
     };
     xhr.onerror = function () {
       if (settled) return;
       settled = true;
       if (button) button.disabled = false;
-      renderNotice(panel, [MESSAGES.unavailable]);
+      hidePriceBlock();
     };
     try {
       xhr.send();
@@ -342,19 +433,33 @@
       if (settled) return;
       settled = true;
       if (button) button.disabled = false;
-      renderNotice(panel, [MESSAGES.unavailable]);
+      hidePriceBlock();
     }
   }
 
   function attach(doc, state) {
     var button = $("seatmapPriceButton");
-    if (!button) return;
-    button.addEventListener("click", function () { doLookup(doc, state); });
-    /* Render the initial "not connected" state so the page does not flash. */
-    if (!endpoint()) {
-      var panel = $("seatmapPriceResult");
-      renderNotice(panel, [MESSAGES.notConnected]);
-    }
+    var panel = $("seatmapPriceResult");
+    if (!button || !panel) return;
+
+    /* Start hidden and prove the service is there before the block is
+       allowed on screen: no flash of a button that then disappears. */
+    hidePriceBlock();
+
+    /* If no endpoint is configured, the block stays hidden. */
+    var url = endpoint();
+    if (!url) return;
+
+    /* Probe the health endpoint to verify the fare service is live.
+       The block appears only while the service answers the probe. */
+    checkHealth(url, function (healthy) {
+      if (healthy) {
+        showPriceBlock();
+        button.addEventListener("click", function () { doLookup(doc, state); });
+      } else {
+        hidePriceBlock();
+      }
+    });
   }
 
   /* ---------------------------------------------------------------- *
@@ -377,12 +482,36 @@
     renderNotice: renderNotice,
     escapeText: escapeText,
     doLookup: doLookup,
-    attach: attach
+    attach: attach,
+    hidePriceBlock: hidePriceBlock,
+    showPriceBlock: showPriceBlock,
+    checkHealth: checkHealth
   };
+
+  /* ---------------------------------------------------------------- *
+   * Page bootstrap — the /seatmap route only
+   * ---------------------------------------------------------------- */
+
+  function bootstrap(doc) {
+    /* Only the Seat Map page carries the PRICE block. Every other route
+       leaves the module loaded but idle. */
+    var location = root.location;
+    if (!location || String(location.pathname).replace(/\/+$/, "") !== "/seatmap") return;
+    var seatmap = root.SpicySeatMap;
+    var state = (seatmap && seatmap.pageState) || {};
+    attach(doc, state);
+  }
 
   if (typeof module === "object" && module && module.exports) {
     module.exports = api;
   } else {
     root.SpicySeatMapPrice = api;
+    if (root.document) {
+      if (root.document.readyState === "loading") {
+        root.document.addEventListener("DOMContentLoaded", function () { bootstrap(root.document); }, { once: true });
+      } else {
+        bootstrap(root.document);
+      }
+    }
   }
 }(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : this)));
