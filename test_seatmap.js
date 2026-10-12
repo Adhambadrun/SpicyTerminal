@@ -144,7 +144,7 @@ test("navbar places the .linkbtn Seat Map route between Generate Api and Report 
 
 test("route notice states real flight data and the layout tier, with no disclaimer copy", () => {
   assert(/real flight, labelled layout/i.test(template));
-  assert(/airline-verified configuration when one has been checked/i.test(template));
+  assert(/cabin configuration is labelled by tier/i.test(template), "the first-run notice still explains the layout tiers");
   assert(!/seat availability is simulated in this browser/i.test(template),
     "the simulated-availability banner line is retired");
   assert(!/selecting a seat reserves nothing/i.test(template),
@@ -166,6 +166,7 @@ test("static build emits the same self-contained page at /seatmap", () => {
   assert(built.includes('id="seatmapFlightStrip"') && built.includes('id="seatmapLegs"'),
     "the real-flight strip and the leg switcher ship in the built page");
   assert(built.includes("SpicySeatMapLayouts"), "the layout registry is inlined ahead of the viewer");
+  assert(built.includes("SpicySeatMapCalendar") && !built.includes("__SEATMAP_CALENDAR__"), "the offline calendar ships in every built entry point");
 });
 
 test("Vercel and Netlify map the /seatmap URL to the generated route", () => {
@@ -302,6 +303,76 @@ test("exports still identify simulated status, real flight, and the layout tier"
   assert(summary.includes("SIMULATED SAMPLE DATA — not live airline inventory"));
   assert(summary.includes("No seat was reserved or booked."));
   assert(summary.includes("QR 704") && /reference/i.test(summary), "the export names the real flight and the layout tier");
+});
+
+test("the removed examples and explanatory banner stay out of the source and built pages", () => {
+  for (const page of [template, built, publicIndex, publicRoute]) {
+    for (const removed of ["QUICK EXAMPLES", "data-seatmap-example", "AS100 · 738", "BA117 · 77W", "MS777 · 77W", "WHAT IS REAL HERE", "No conversion to read, or after something else?", "so the two cannot disagree", "When the seat itself matters, the airline link on the map takes you to the airline."]) {
+      assert(!page.includes(removed), removed + " must be removed");
+    }
+    assert(page.includes("Your converted itinerary loads straight in here."));
+    assert(page.includes('id="seatmapFindForm"') && page.includes('id="seatmapForm"'), "both entry paths are kept");
+  }
+  assert(!source.includes("data-seatmap-example"), "the dead example-button wiring is removed too");
+});
+
+test("every drawable type preserves its cabin/row/seat deck and stable seat identities", () => {
+  const layouts = require("./seatmap_layouts.js").TYPE_LAYOUTS;
+  for (const code of Object.keys(layouts)) {
+    const result = SeatMap.createDemoSeatMap({ ...input, aircraftCode: code });
+    const decks = SeatMap.getDecks(result);
+    assert.strictEqual(decks.length, ["388", "744", "748"].includes(code) ? 2 : 1, code);
+    assert.strictEqual(decks.reduce((sum, deck) => sum + deck.seatCount, 0), result.totalSeats);
+    const seats = SeatMap.flattenSeats(result);
+    assert.strictEqual(new Set(seats.map(seat => seat.key)).size, seats.length);
+    result.cabins.forEach(cabin => cabin.rows.forEach(row => {
+      assert.strictEqual(row.deck, cabin.deck);
+      row.seats.forEach(seat => assert.strictEqual(seat.deck, cabin.deck));
+    }));
+  }
+});
+
+test("A380 and passenger 747 layouts render and count each deck independently", () => {
+  for (const [code, expected] of Object.entries({ "388": [428, 60], "744": [334, 20], "748": [350, 20] })) {
+    const result = SeatMap.createDemoSeatMap({ ...input, aircraftCode: code });
+    const before = JSON.stringify(result);
+    expected.forEach((count, deck) => {
+      assert.strictEqual(SeatMap.countStatuses(result, deck).total, count);
+      assert.strictEqual(SeatMap.calculateLayout(result, deck).seats.length, count);
+      assert(SeatMap.calculateLayout(result, deck).seats.every(placed => placed.seat.deck === deck));
+      assert(SeatMap.filterSeats(result, { deck, availableOnly: true, windowOnly: true }).every(seat => seat.deck === deck && seat.position === "window" && SeatMap.isSelectableStatus(seat.status)));
+    });
+    assert.strictEqual(JSON.stringify(result), before, "viewing a deck must not trim the full map");
+    assert.strictEqual(SeatMap.initialDeck(result), 0);
+  }
+  const a380 = SeatMap.createDemoSeatMap({ ...input, aircraftCode: "388" });
+  assert.strictEqual(SeatMap.initialDeck(a380, "business"), 1, "open the deck containing the requested cabin");
+  assert.strictEqual(SeatMap.initialDeck(a380, "economy"), 0);
+});
+
+test("repeated seat labels on different decks never collide in the model or exports", () => {
+  const layouts = require("./seatmap_layouts.js").TYPE_LAYOUTS;
+  const original = layouts["388"];
+  try {
+    layouts["388"] = { ...original, seatCount: 2, cabins: [
+      { ...original.cabins[0], from: 1, to: 1, groups: [["A"]], deck: 0 },
+      { ...original.cabins[1], from: 1, to: 1, groups: [["A"]], deck: 1 }
+    ] };
+    const result = SeatMap.createDemoSeatMap({ ...input, aircraftCode: "388" });
+    const seats = SeatMap.flattenSeats(result);
+    assert.deepStrictEqual(seats.map(seat => seat.id), ["1A", "1A"]);
+    assert.deepStrictEqual(seats.map(seat => seat.key), ["0:1A", "1:1A"]);
+    const csv = SeatMap.exportCsv(result);
+    assert(csv.includes('"Main deck","0:1A"') && csv.includes('"Upper deck","1:1A"'));
+    const ascii = SeatMap.exportAscii(result);
+    assert(ascii.includes("=== MAIN DECK ===") && ascii.includes("=== UPPER DECK ==="));
+    assert(SeatMap.exportSummary(result).includes("Main deck: 1 seats · Upper deck: 1 seats"));
+    const restored = JSON.parse(JSON.stringify(result));
+    assert.strictEqual(restored.decks.length, 2);
+    assert.strictEqual(restored.cabins[1].rows[0].seats[0].key, "1:1A");
+  } finally {
+    layouts["388"] = original;
+  }
 });
 
 console.log("\nSeat Map checks: " + checks + " passed.");

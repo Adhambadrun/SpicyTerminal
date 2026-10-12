@@ -419,7 +419,7 @@
     }),
     "744": lay({
       name: "Boeing 747-400", icao: "B744", family: "747", manufacturer: "Boeing", category: "widebody",
-      seatCount: 354, configLabel: "three-class reference · 8 First / 36 Business / 20 Premium Economy / 290 Economy (two decks, shown nose to tail)",
+      seatCount: 354, configLabel: "four-class reference · 8 First / 36 Business / 20 Premium Economy / 290 Economy (main and upper decks)",
       wingStartRow: 21, wingEndRow: 33,
       cabins: [
         cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 22, ["LIE-FLAT", "POWER"]),
@@ -430,7 +430,7 @@
     }),
     "748": lay({
       name: "Boeing 747-8I", icao: "B748", family: "747", manufacturer: "Boeing", category: "widebody",
-      seatCount: 370, configLabel: "three-class reference · 8 First / 42 Business / 20 Premium Economy / 300 Economy (two decks, shown nose to tail)",
+      seatCount: 370, configLabel: "four-class reference · 8 First / 42 Business / 20 Premium Economy / 300 Economy (main and upper decks)",
       wingStartRow: 22, wingEndRow: 34,
       cabins: [
         cab("first", "First", 1, 2, g(1, 2, 1), [], 79, 22, ["LIE-FLAT", "POWER"]),
@@ -441,7 +441,7 @@
     }),
     "388": lay({
       name: "Airbus A380-800", icao: "A388", family: "A380", manufacturer: "Airbus", category: "superjumbo",
-      seatCount: 488, configLabel: "three-class reference · 16 First / 60 Business / 42 Premium Economy / 370 Economy (two decks, shown nose to tail)",
+      seatCount: 488, configLabel: "four-class reference · 16 First / 60 Business / 42 Premium Economy / 370 Economy (main and upper decks)",
       wingStartRow: 26, wingEndRow: 44,
       cabins: [
         cab("first", "First · Main Deck", 1, 4, g(1, 2, 1), [], 81, 23, ["LIE-FLAT", "SUITE", "POWER"]),

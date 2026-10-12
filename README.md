@@ -106,6 +106,15 @@ hallucinations, no re-rolling the dice.
   account-backed offer (Amadeus Self-Service or Duffel) fetched at click time, and the whole block —
   button, panel and note — stays hidden whenever a real fare is not possible, so there is never a
   visible "not connected" button.
+- **Seat Map date and deck controls** — both date fields have an offline calendar dropdown with
+  month/year selectors and keyboard navigation (Alt+Down to open, arrows to move, Enter to select,
+  Escape to close). Dates use the visitor's local calendar; a clicked flight-search result uses
+  the search date, not the manual form's date. Layouts with both passenger decks (A380-800,
+  747-400 and 747-8I references) show Main deck / Upper deck controls; single-deck and missing
+  layouts do not. A requested/ticketed cabin opens its deck, counts and filters follow the deck
+  being viewed, and refreshes preserve that view. Exports still include **all** decks, with deck
+  labels and deck-qualified seat keys so repeated seat numbers cannot collide. The header is
+  simplified and the quick-example buttons are removed; layout/source labels remain on the map.
 - **No animations**: the interface is completely still (the Seat Map's flight strip, leg switcher and tier badges are plain instant updates too). There are no pane entrance effects,
   change sweeps, per-line glow bars, spinning edge glow, result-print effects, pulsing status
   dot, blinking cursor or hover transitions — a change simply updates the text. Nothing is
@@ -159,6 +168,7 @@ files and archives are never shipped.
 | `ocrad.js` | pure offline OCR engine bundled locally |
 | `app.js` | UI logic (offline image parser, auto-convert, AI mistake detector & self-learning) |
 | `seatmap_layouts.js` | aircraft cabin layouts for the Seat Map: tiered (airline-verified / type reference / generic), versioned, with an integrity + provenance suite; inlined by the build |
+| `seatmap_calendar.js` | dependency-free Seat Map calendar dropdowns, local-date defaults and accessible keyboard navigation; inlined by the build |
 | `seatmap.js` / `seatmap.css` | the Seat Map page: reads the converted itinerary, resolves the layout tier, marks the ticketed cabin, and keeps seat statuses visibly simulated; inlined by the build |
 | `seatmap_gate.js` | retired: the Seat Map is unlocked for everyone (no click counter, no dimmed link, `/seatmap` draws immediately). The module stays in the repo, unenforced, and nothing in the app imports it |
 | `seatmap_price.js` | the Seat Map's `PRICE` block: builds the request from the active leg (route / date / cabin / adults only), allowlists the reply to the seven rendered fields, hides the whole block whenever a real fare is not possible, and maps every failure to one flat sentence — inlined by the build |
@@ -194,10 +204,11 @@ files and archives are never shipped.
 | `test_booking_link.js` | per-airline checkout handoffs (AA / DL / AS / UA / BA), selected 1–9 adult counts, multi-leg and mixed-airline gating, unsupported-carrier refusals, stale-input/warning protections, and one-tab/one-copy behavior — `node test_booking_link.js` |
 | `test_seatmap_flights.js` | the flight lookup: query parsing the way people type it, the local table, the converter's own table, route/airline inference, no invented flight or aircraft, and every entry checked against the airports, airlines and drawable types the app actually has — `node test_seatmap_flights.js` |
 | `test_seatmap_layouts.js` | the layout registry (including the four-class variants: a First or Premium Economy ticket always finds the cabin that type flies, and no variant is dressed up as verified): structural integrity of every reference layout, `I` never used as a seat letter, `seatCount` proven against the rows, provenance required on verified entries, tier resolution (verified → reference → generic → refusal), and coverage of every type the engine's equipment tables can emit — `node test_seatmap_layouts.js` |
-| `test_seatmap.js` | layout counts, deterministic simulated availability, disclosure copy, `/seatmap` route, local exports, and the real-flight path: converted itinerary → legs → aircraft provenance → cabin gating → honest refusal for unknown/freighter types — `node test_seatmap.js` |
+| `test_seatmap_calendar.js` | leap years, month/year boundaries, local time zones, keyboard navigation, date selection and focus/dismissal behavior — `node test_seatmap_calendar.js` |
+| `test_seatmap.js` | per-deck layout counts, collision-safe seat identities and exports, deterministic simulated availability, disclosure copy, `/seatmap` route, local exports, and the real-flight path: converted itinerary → legs → aircraft provenance → cabin gating → honest refusal for unknown/freighter types — `node test_seatmap.js` |
 | `test_seatmap_gate.js` | the ten-click gate itself, executed: a fresh tab is sealed, nine clicks do not open it, the tenth does, the unlock survives a reload but not a new tab, blocked/absent storage degrades to memory, a damaged flag locks, and the stored payload carries a count and nothing else — `node test_seatmap_gate.js` |
 | `test_seatmap_access.js` | the gate's wiring (dimmed link, sealed tooltip, lock card, fails closed when the gate module is missing) plus the itinerary handoff to `sessionStorage`, executed and asserted (store / clear / blocked storage / no storage / no passenger data), and the built pages ship the same gate and handoff — `node test_seatmap_access.js` |
-| `test_seatmap_page.js` | the page itself, executed against a stub DOM: the converted flight renders (identity, equipment provenance, cabin, tier badge, airline link), `?leg=N` and the switcher move between legs, a seat outside the ticketed cabin is refused with a reason, the flight lookup draws what it finds (and says where it found it), asking for First switches to the four-class variant, an unknown flight is refused instead of invented, and nothing is ever fetched — `node test_seatmap_page.js` |
+| `test_seatmap_page.js` | the page itself, executed against a stub DOM: calendar date handoff, deck eligibility/switching/refresh/selection, and the converted flight renders (identity, equipment provenance, cabin, tier badge, airline link), `?leg=N` and the switcher move between legs, a seat outside the ticketed cabin is refused with a reason, the flight lookup draws what it finds (and says where it found it), asking for First switches to the four-class variant, an unknown flight is refused instead of invented, and nothing is ever fetched — `node test_seatmap_page.js` |
 | `test_ai_fix_label.js` | the AI FIX label is on the button and in every user-facing hint, with no legacy name left in the chrome, and the id stays `btnAi` — `node test_ai_fix_label.js` |
 | `test_jro_kilimanjaro.js` | TK AMS–IST–JRO–IST–AMS GDS re-paste regression (2026-09-10 report): Kilimanjaro `JRO` overlay, glued `¥1` marker, `7M8` equipment, and unknown-code numbered table rows surviving instead of being mangled — `node test_jro_kilimanjaro.js` |
 | `test_weekly_report.js` | weekly-report counters: week rollover, what counts as a conversion, blocked pop-up — `node test_weekly_report.js` |
