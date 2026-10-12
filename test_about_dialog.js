@@ -92,7 +92,7 @@ assert(/aria-labelledby="aboutTitle"/.test(DLG) && /aria-describedby="aboutTagli
        "dialog is labelled and described for screen readers");
 assert(DLG.includes("to paste into Backoffice"), "dialog opens with a one-line summary of what the app does");
 assert(!/offline/i.test(DLG), "the About dialog never says 'offline'");
-assert(/Choose 1–9 adult travelers in the small selector beside BOOKING LINK/i.test(DLG) &&
+assert(/Choose 1–9 passengers in the small selector beside BOOKING LINK/i.test(DLG) &&
        /seat assignment is not included/i.test(DLG) && /never books or purchases automatically/i.test(DLG),
        "the privacy copy discloses shared itinerary details and confirms no automatic booking");
 assert(!/about-live/.test(TPL), "the OFFLINE ENGINE pill — and its CSS — is gone from the template");

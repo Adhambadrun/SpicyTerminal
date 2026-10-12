@@ -22,7 +22,7 @@
    from (SpicyLinkGenerator-main.zip, app.html):
      * ES5 throughout (no const/let/arrow/Set/BigInt/TextEncoder), matching
        spicy_engine.js, so the single-file page runs on the same browsers.
-     * Passenger links use the compact adult-count selector in SpicyTerminal;
+     * Passenger links use the compact passenger-count selector in SpicyTerminal;
        child/infant categories remain outside this lightweight handoff.
      * DDMMM years roll to the next year only when the DATE (not the time) is
        past; the source rolled same-day trips a year forward by accident.
@@ -394,7 +394,7 @@ function qualify(engineSegs) {
   return { eligible: true, reason: "", carrier: c, kind: KIND_OF[c] };
 }
 
-/* ---------------- link builders (ported; adults selected in the UI) ---------------- */
+/* ---------------- link builders (ported; passenger count selected in the UI) ---------------- */
 function enc(v) { return encodeURIComponent(v); }
 function trunc(n) { return n >= 0 ? Math.floor(n) : Math.ceil(n); }
 function normalizeAdultCount(value) {

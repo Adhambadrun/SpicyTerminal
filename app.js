@@ -89,7 +89,7 @@ function bookingLinkAdultCount(value) {
 }
 function bookingLinkAdultLabel(count) {
   var adults = bookingLinkAdultCount(count);
-  return adults + " adult" + (adults === 1 ? "" : "s");
+  return adults + " passenger" + (adults === 1 ? "" : "s");
 }
 function bookingClockValid(value) {
   var m = /^(\d{1,2})(\d{2})([APNM])$/.exec(String(value || "").trim().toUpperCase());

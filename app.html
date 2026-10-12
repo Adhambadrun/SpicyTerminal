@@ -374,13 +374,13 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
 <div class="status">
   <span id="st">READY</span>
   <button id="btnAbout" class="linkbtn" type="button" aria-haspopup="dialog" aria-controls="aboutModal" title="What SpicyTerminal does, what it refuses to do, and who built it">About</button>
-  <label class="booking-pax" title="Adult travelers for the booking link; this does not assign seats">
-    <span aria-hidden="true">ADULTS</span>
-    <select id="bookingAdults" aria-label="Number of adult travelers for the booking link" title="Choose 1 to 9 adult travelers">
+  <label class="booking-pax" title="Passengers for the booking link; this does not assign seats">
+    <span aria-hidden="true">PASSENGERS</span>
+    <select id="bookingAdults" aria-label="Number of passengers for the booking link" title="Choose 1 to 9 passengers">
       <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
     </select>
   </label>
-  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert a complete American, Delta, Alaska, United or British Airways itinerary to enable its checkout link. Mixed-airline trips (more than one bookable airline), unsupported airlines and uncertain conversions keep it off. Select the number of adult travelers (1–9) beside the link; seat assignment is not included. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made.">BOOKING LINK</button>
+  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert a complete American, Delta, Alaska, United or British Airways itinerary to enable its checkout link. Mixed-airline trips (more than one bookable airline), unsupported airlines and uncertain conversions keep it off. Select the number of passengers (1–9) beside the link; seat assignment is not included. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made.">BOOKING LINK</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
   <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
   <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Seat Map preview">Seat Map</a>
@@ -446,7 +446,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
     </div>
 
     <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS ready to copy format to paste into Backoffice.</b>
-      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK lights up for a complete, certain itinerary on one bookable airline — American, Delta, Alaska, United or British Airways, one or several legs — using the same link engine as the production Spicy Link Generator. American links pin every flight via aa.com metasearch; Delta and Alaska links carry every leg (with an estimated price); United and British Airways links carry the route(s) and dates without pinning exact flights. A mixed-airline itinerary links only when exactly one of its airlines is bookable, and then covers that airline's legs. The compact Adults selector beside BOOKING LINK sets 1–9 adult travelers (not assigned seats). Clicking opens an external search or prefilled summary for that party and shares the itinerary details with that site; unsupported airlines and uncertain conversions stay disabled. Check availability and price on the airline site — it never books or purchases a ticket automatically.</p>
+      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK lights up for a complete, certain itinerary on one bookable airline — American, Delta, Alaska, United or British Airways, one or several legs — using the same link engine as the production Spicy Link Generator. American links pin every flight via aa.com metasearch; Delta and Alaska links carry every leg (with an estimated price); United and British Airways links carry the route(s) and dates without pinning exact flights. A mixed-airline itinerary links only when exactly one of its airlines is bookable, and then covers that airline's legs. The compact Passengers selector beside BOOKING LINK sets 1–9 passengers (not assigned seats). Clicking opens an external search or prefilled summary for that party and shares the itinerary details with that site; unsupported airlines and uncertain conversions stay disabled. Check availability and price on the airline site — it never books or purchases a ticket automatically.</p>
 
     <ul class="about-stats">
       <li><b>0</b> accounts · cookies · trackers</li>
@@ -464,7 +464,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3.2l1.7 4.7 4.7 1.7-4.7 1.7L11 16l-1.7-4.7L4.6 9.6l4.7-1.7z"/><path d="M18.4 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></svg></span>
             <span><b><code>AI FIX</code>.</b> When a first read cannot see the flights, it re-reads and repairs the output. Your key, your call.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
-            <span><b>Private.</b> Conversion stays in this tab. Choose 1–9 adult travelers in the small selector beside BOOKING LINK; seat assignment is not included. Clicking opens an external airline search or prefilled summary and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically; you always finish on the airline site.</span></li>
+            <span><b>Private.</b> Conversion stays in this tab. Choose 1–9 passengers in the small selector beside BOOKING LINK; seat assignment is not included. Clicking opens an external airline search or prefilled summary and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically; you always finish on the airline site.</span></li>
         </ul>
       </section>
 
@@ -10585,7 +10585,7 @@ if(typeof window!=="undefined") window.SpicyEngine=SpicyEngine;
    from (SpicyLinkGenerator-main.zip, app.html):
      * ES5 throughout (no const/let/arrow/Set/BigInt/TextEncoder), matching
        spicy_engine.js, so the single-file page runs on the same browsers.
-     * Passenger links use the compact adult-count selector in SpicyTerminal;
+     * Passenger links use the compact passenger-count selector in SpicyTerminal;
        child/infant categories remain outside this lightweight handoff.
      * DDMMM years roll to the next year only when the DATE (not the time) is
        past; the source rolled same-day trips a year forward by accident.
@@ -10957,7 +10957,7 @@ function qualify(engineSegs) {
   return { eligible: true, reason: "", carrier: c, kind: KIND_OF[c] };
 }
 
-/* ---------------- link builders (ported; adults selected in the UI) ---------------- */
+/* ---------------- link builders (ported; passenger count selected in the UI) ---------------- */
 function enc(v) { return encodeURIComponent(v); }
 function trunc(n) { return n >= 0 ? Math.floor(n) : Math.ceil(n); }
 function normalizeAdultCount(value) {
@@ -11263,7 +11263,7 @@ function bookingLinkAdultCount(value) {
 }
 function bookingLinkAdultLabel(count) {
   var adults = bookingLinkAdultCount(count);
-  return adults + " adult" + (adults === 1 ? "" : "s");
+  return adults + " passenger" + (adults === 1 ? "" : "s");
 }
 function bookingClockValid(value) {
   var m = /^(\d{1,2})(\d{2})([APNM])$/.exec(String(value || "").trim().toUpperCase());
