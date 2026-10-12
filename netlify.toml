@@ -12,3 +12,21 @@
   from = "/seatmap"
   to = "/seatmap.html"
   status = 200
+
+# The fare backend behind the Seat Map PRICE button:
+#   /api/flights/price  -> api/flights/price.js   (a live fare, or no_fare)
+#   /healthz            -> api/healthz.js         (the probe that gates the
+#                                                   PRICE block on the page)
+[functions]
+  directory = "api"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/flights/price"
+  to = "/.netlify/functions/flights/price"
+  status = 200
+
+[[redirects]]
+  from = "/healthz"
+  to = "/.netlify/functions/healthz"
+  status = 200

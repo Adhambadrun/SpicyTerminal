@@ -450,7 +450,11 @@ __SEATMAP_CSS__</style>
         <div class="seatmap-strip-note" id="seatmapStripNote"></div>
         <a class="seatmap-strip-link hidden" id="seatmapStripLink" href="https://www.aa.com/" target="_blank" rel="noopener noreferrer"></a>
       </div>
-      <div class="seatmap-price" role="group" aria-labelledby="seatmapPriceTitle">
+      <!-- The price block ships hidden. seatmap_price.js proves the fare
+           service is answering before it reveals anything, and hides the whole
+           block again the moment a real fare is not possible — there is never
+           a visible "not connected" button. -->
+      <div class="seatmap-price" id="seatmapPriceBlock" role="group" aria-labelledby="seatmapPriceTitle" style="display:none">
         <button class="seatmap-btn" id="seatmapPriceButton" type="button">PRICE</button>
         <div class="seatmap-price-panel" id="seatmapPriceResult" role="status" aria-live="polite"></div>
         <p class="seatmap-price-note" id="seatmapPriceNote">The price is a published fare, not a hold — nothing is reserved, and no money changes hands here.</p>

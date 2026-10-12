@@ -795,7 +795,11 @@
     runFlightSearch: runFlightSearch,
     renderSearchResults: renderSearchResults,
     loadSearchedFlight: loadSearchedFlight,
-    loadConvertedRoute: loadConvertedRoute
+    loadConvertedRoute: loadConvertedRoute,
+    /* The live page state (legs, active leg, current lookup) that the PRICE
+       module reads so it prices exactly the flight on screen. Set when the
+       /seatmap page initialises; null on every other page. */
+    pageState: null
   };
 
   if (typeof module === "object" && module && module.exports) module.exports = API;
@@ -1515,6 +1519,9 @@
       pointers: new Map(),
       drag: null
     };
+    /* Hand the live state to whoever needs to know which flight is on
+       screen — the PRICE module prices exactly this one. */
+    API.pageState = state;
 
     function closeNotice() {
       if (!notice) return;

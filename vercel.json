@@ -3,6 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/seatmap", "destination": "/seatmap.html" }
+    { "source": "/seatmap", "destination": "/seatmap.html" },
+    { "source": "/healthz", "destination": "/api/healthz" }
   ]
 }

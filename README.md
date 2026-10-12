@@ -101,7 +101,11 @@ hallucinations, no re-rolling the dice.
   converted (`app.js` mirrors the OUTPUT pane into `sessionStorage`, and the seat map re-parses it with
   the real engine, so the two can never disagree) and shows the airline, flight number, route, date,
   departure clock, cabin, booking class and aircraft type; the badge on the map says how well the cabin
-  layout is verified. Multi-leg itineraries get a leg switcher (`?leg=N` opens a leg directly).
+  layout is verified. Multi-leg itineraries get a leg switcher (`?leg=N` opens a leg directly). The
+  `PRICE` block appears only while a live fare service answers its health probe: the fare is a real,
+  account-backed offer (Amadeus Self-Service or Duffel) fetched at click time, and the whole block —
+  button, panel and note — stays hidden whenever a real fare is not possible, so there is never a
+  visible "not connected" button.
 - **No animations**: the interface is completely still (the Seat Map's flight strip, leg switcher and tier badges are plain instant updates too). There are no pane entrance effects,
   change sweeps, per-line glow bars, spinning edge glow, result-print effects, pulsing status
   dot, blinking cursor or hover transitions — a change simply updates the text. Nothing is
@@ -123,6 +127,17 @@ hallucinations, no re-rolling the dice.
 The app remains static and is built by `npm run build` into self-contained
 `public/index.html` and `public/seatmap.html` pages (`index.html` and `app.html`
 are also written to the repo root). The `/seatmap` rewrite is configured for Vercel and Netlify. For a local preview, run `npm run build && npm run dev`; the lightweight Python server mirrors the same route.
+
+The `PRICE` block is wired by one build-time value:
+
+```bash
+SPICY_PRICE_ENDPOINT=/api/flights/price python3 build_web.py
+```
+
+- On Vercel or Netlify, set `SPICY_PRICE_ENDPOINT` in the project environment and deploy: `api/flights/price.js` serves the fare and `api/healthz.js` serves the probe (Vercel rewrites `/healthz`; Netlify redirects both paths).
+- The fare provider credentials live in the project environment too: `AMADEUS_CLIENT_ID` + `AMADEUS_CLIENT_SECRET`, or `DUFFEL_TOKEN`. Until one of those pairs is set, `/healthz` answers `unavailable` and the `PRICE` block never appears — there is no visible "not connected" button and no placeholder fare.
+- For a Netlify Drop, run the build with `SPICY_PRICE_ENDPOINT` pointing at a deployed fare service (for example the `tools/price_service` host, whose `/healthz` answers `{"ok":true}`) and re-drop `public/`.
+- To check the gate locally against a running service: `node verify_price_gate.js http://127.0.0.1:8787/api/flights/price`.
 
 - **Vercel**: import this repo — `vercel.json` already sets the build command
   and output directory, so every `git push` to `main` deploys automatically.
@@ -146,6 +161,13 @@ files and archives are never shipped.
 | `seatmap_layouts.js` | aircraft cabin layouts for the Seat Map: tiered (airline-verified / type reference / generic), versioned, with an integrity + provenance suite; inlined by the build |
 | `seatmap.js` / `seatmap.css` | the Seat Map page: reads the converted itinerary, resolves the layout tier, marks the ticketed cabin, and keeps seat statuses visibly simulated; inlined by the build |
 | `seatmap_gate.js` | retired: the Seat Map is unlocked for everyone (no click counter, no dimmed link, `/seatmap` draws immediately). The module stays in the repo, unenforced, and nothing in the app imports it |
+| `seatmap_price.js` | the Seat Map's `PRICE` block: builds the request from the active leg (route / date / cabin / adults only), allowlists the reply to the seven rendered fields, hides the whole block whenever a real fare is not possible, and maps every failure to one flat sentence — inlined by the build |
+| `api/flights/price.js` | the fare backend behind `PRICE`: `GET /api/flights/price` returns a live account-backed offer (Amadeus Self-Service or Duffel), or `{"ok":false,"kind":"no_fare"}` — never a cached or estimated number |
+| `api/_fare.js` | the fare logic shared by both endpoints: request validation, the live provider calls, the trimmed wire contract |
+| `api/healthz.js` | the probe that gates the `PRICE` block: `{"status":"ok"}` only while a provider is configured and answering, `{"status":"unavailable"}` otherwise |
+| `test_seatmap_price.js` | the PRICE contract, 140 checks: field allowlists, request building, the message map, escaping, the hidden-block rule, the health probe (both `{"status":"ok"}` and `{"ok":true}` shapes) — `node test_seatmap_price.js` |
+| `test_fare_backend.js` | the fare backend contract: validation, the exact reply shapes, no-provider/dead-provider/empty-offer all answering `no_fare`, a live offer landing as the seven rendered fields, and nothing internal (tokens, urls, emissions, baggage) ever on the wire — `node test_fare_backend.js` |
+| `fare_backend_test.py` | a tiny local stand-in for the fare backend so `npm run dev` can be exercised end to end (set `FARE_TEST_HEALTHY=1` to simulate a configured provider) |
 | `seatmap_flights.js` | the Seat Map's flight lookup: a local table of published flight numbers + the layered fallbacks (converter's own table → route → airline) behind the `BA117` search box; inlined by the build |
 | `spicy_engine.js` | the conversion engine |
 | `spicy_links.js` | booking checkout link engine (AA / DL / AS / UA / BA), ported from the Spicy Link Generator; feeds the BOOKING LINK button |
@@ -229,4 +251,4 @@ Alaska links; Delta and Alaska also carry an estimated price), or routes and dat
 British Airways). The passenger selector does not assign seats; links never book or purchase
 automatically. The AI fallback sends the user-selected content only when the user explicitly
 provides and uses their own Gemini key. Weekly reports and bug reports open
-in the user's email client to `adhambadraan@gmail.com`. The Seat Map is a local viewer: flight identity comes from the itinerary you converted (kept in that tab's `sessionStorage`), cabin layouts ship with the page, and it calls no airline or inventory API. Seat statuses, counts and the 30-second refresh are simulated locally, seat prices are never shown, and selecting a seat never reserves or books anything. A "check the airline" link opens that airline's own site so live seats can be seen in the real booking.
+in the user's email client to `adhambadraan@gmail.com`. The Seat Map is a local viewer: flight identity comes from the itinerary you converted (kept in that tab's `sessionStorage`), cabin layouts ship with the page, and seat statuses, counts and the 30-second refresh are simulated locally. Seat prices are not simulated: the `PRICE` block only appears when a live fare service answers its health probe, and the fare it shows is a live account-backed offer (Amadeus Self-Service or Duffel) fetched at click time for the route, date, cabin and party size — nothing else from the itinerary is sent, and the block hides itself the moment a real fare is not possible. Selecting a seat never reserves or books anything, and a "check the airline" link opens that airline's own site so live seats can be seen in the real booking.
