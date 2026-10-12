@@ -474,6 +474,11 @@ __SEATMAP_CSS__
         <div class="seatmap-strip-note" id="seatmapStripNote"></div>
         <a class="seatmap-strip-link hidden" id="seatmapStripLink" href="https://www.aa.com/" target="_blank" rel="noopener noreferrer"></a>
       </div>
+      <div class="seatmap-price" role="group" aria-labelledby="seatmapPriceTitle">
+        <button class="seatmap-btn" id="seatmapPriceButton" type="button">PRICE</button>
+        <div class="seatmap-price-panel" id="seatmapPriceResult" role="status" aria-live="polite"></div>
+        <p class="seatmap-price-note" id="seatmapPriceNote">The price is a published fare, not a hold — nothing is reserved, and no money changes hands here.</p>
+      </div>
       <div class="seatmap-legs hidden" id="seatmapLegs" role="group" aria-label="Legs in your converted itinerary"></div>
       <div class="seatmap-toolbar">
         <div class="seatmap-toolbar-group" aria-label="Map zoom controls">
@@ -629,5 +634,7 @@ __SEATMAP_CSS__
 <script>__SEATMAP_FLIGHTS__</script>
 <script>__SEATMAP_LAYOUTS__</script>
 <script>__SEATMAP_JS__</script>
+<script>window.SPICY_PRICE_ENDPOINT="__SPICY_PRICE_ENDPOINT__";</script>
+<script>__SEATMAP_PRICE__</script>
 </body>
 </html>

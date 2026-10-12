@@ -19,7 +19,7 @@ Seat Map by accident.
 
 Run from anywhere:  python3 build_web.py
 """
-import base64, pathlib, io, subprocess, tempfile
+import base64, os, pathlib, io, subprocess, tempfile
 
 # Always build and deploy the working single-file application.
 SRC = pathlib.Path(__file__).resolve().parent
@@ -76,6 +76,8 @@ seatmap_css = (SRC / "seatmap.css").read_text(encoding="utf-8")
 seatmap_layouts_js = (SRC / "seatmap_layouts.js").read_text(encoding="utf-8")
 seatmap_flights_js = (SRC / "seatmap_flights.js").read_text(encoding="utf-8")
 seatmap_js = (SRC / "seatmap.js").read_text(encoding="utf-8")
+seatmap_price_js = (SRC / "seatmap_price.js").read_text(encoding="utf-8") if (SRC / "seatmap_price.js").exists() else ""
+spicy_price_endpoint = os.environ.get("SPICY_PRICE_ENDPOINT", "")
 html = (tpl.replace("__LOGO_MARK_B64__", mark)
            .replace("__LOGO_FULL_B64__", full)
            .replace("__OCRAD_JS__", ocrad)
@@ -87,7 +89,9 @@ html = (tpl.replace("__LOGO_MARK_B64__", mark)
            .replace("__SEATMAP_CSS__", seatmap_css)
            .replace("__SEATMAP_FLIGHTS__", seatmap_flights_js)
            .replace("__SEATMAP_LAYOUTS__", seatmap_layouts_js)
-           .replace("__SEATMAP_JS__", seatmap_js))
+           .replace("__SEATMAP_JS__", seatmap_js)
+           .replace("__SEATMAP_PRICE__", seatmap_price_js)
+           .replace("__SPICY_PRICE_ENDPOINT__", spicy_price_endpoint))
 
 # Keep both historical entry points in sync: index.html is the deploy root;
 # app.html remains a friendly direct URL for existing bookmarks.
