@@ -111,10 +111,10 @@ const aboutAt = status.indexOf('id="btnAbout"');
 const adultsAt = status.indexOf('id="bookingAdults"');
 const bookingAt = status.indexOf('id="btnBookingLink"');
 assert(aboutAt >= 0 && adultsAt > aboutAt && bookingAt > adultsAt && status.indexOf('id="genKey"') > bookingAt,
-       "the compact adult selector sits beside BOOKING LINK, before the existing status actions");
-assert(/<label class="booking-pax"[^>]*>[\s\S]*?<select id="bookingAdults" aria-label="Number of adult travelers for the booking link"[\s\S]*?<\/select>[\s\S]*?<\/label>\s*<button id="btnBookingLink"/.test(status) &&
+       "the compact passenger selector sits beside BOOKING LINK, before the existing status actions");
+assert(/<label class="booking-pax"[^>]*>[\s\S]*?<select id="bookingAdults" aria-label="Number of passengers for the booking link"[\s\S]*?<\/select>[\s\S]*?<\/label>\s*<button id="btnBookingLink"/.test(status) &&
        (status.match(/<option value="[1-9]"/g) || []).length === 9,
-       "the adjacent accessible dropdown offers 1–9 adult travelers in a compact control");
+       "the adjacent accessible dropdown offers 1–9 passengers in a compact control");
 assert(/does not assign seats/.test(status),
        "the control clearly says that traveler count is not seat assignment");
 assert(/id="btnBookingLink" class="linkbtn" type="button" disabled/.test(status),
@@ -346,7 +346,7 @@ assert(/route, date and flight number/.test(ui.button._attrs["aria-description"]
        "the itinerary-sharing disclosure is also available to assistive technology");
 ui.adultControl.value = "3";
 ui.sandbox.refreshBookingLinkButton(sample.text);
-assert(/3 adults/.test(ui.button.title) && /3 adults/.test(ui.button._attrs["aria-label"]) &&
+assert(/3 passengers/.test(ui.button.title) && /3 passengers/.test(ui.button._attrs["aria-label"]) &&
        /seat assignment is separate/i.test(ui.button.title),
        "the compact selector updates the button's visible and accessible party-size disclosure");
 ui.sandbox.invalidateBookingLinkButton();
