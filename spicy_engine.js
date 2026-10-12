@@ -775,10 +775,14 @@ function fullRe(reStr,tok){
    `DEP-???` rows for whatever token *happened* to look airline-shaped (a
    sell-status `TK2` in the next row became a phantom Turkish leg).  Inside a
    GDS *table* a leading segment number guarantees the columns, so an unknown
-   two-letter code there is the carrier.  Accepted only in that shape, never
+   two-character code there is the carrier. Accepted only in that shape, never
    for a word-shaped or airport-shaped token. */
 function _isTableCarrier(tok){
-  return /^[A-Z]{2}$/.test(tok) && !AIRLINES[tok] && !AIRPORTS[tok] &&
+  // IATA designators can contain a digit (H4, 7C, 9W), not only two letters.
+  // Numbered GDS rows still provide the table context needed to accept a
+  // carrier absent from our offline airline dictionary without mistaking a
+  // prose word or airport code for one.
+  return /^(?:[A-Z][A-Z0-9]|[0-9][A-Z])$/.test(tok) && !AIRLINES[tok] && !AIRPORTS[tok] &&
          !/^(AM|PM|OK|NO|ON|AT|TO|BY|OF|IN|IT|IS|US|AS|BE|ME|DE|LA|HA|WE|SO|DO|IF)$/.test(tok);
 }
 function _gluedAirportPair(tok){
@@ -910,18 +914,26 @@ function tryGdsLines(text, used){
     var acft="",dur="",dist="";
     while(i<toks.length){
       var t=toks[i], up=t.toUpperCase();
-      if(!acft && IATA_ACFT_CODES[up] && /\d/.test(up)) acft=up;
-      else if(!acft && up.length>=3 && up.length<=4){
+      if(!dur && /^\d{1,2}\.\d{2}$/.test(t)) dur=t;
+      else if(!dur && /^[0-9zZ][.][0-9oOsS]{1,2}$/.test(t)){
+        var _dt=up.replace(/Z/g,"2").replace(/O/g,"0").replace(/S/g,"5");
+        if(_dt.length<4) _dt=_dt+"0";    // "z.o" = 2.00
+        dur=_dt;
+      }
+      else if(!acft && IATA_ACFT_CODES[up] && /\d/.test(up)) acft=up;
+      else if(!acft && up.length>=3 && up.length<=4 && /[A-Z]/.test(up)){
         // OCR glyph repair for IATA aircraft codes (E7S->E75, 3ZN->32N)
         var up2=up.replace(/[OQ]/g,"0").replace(/[IL]/g,"1").replace(/S/g,"5")
           .replace(/Z/g,"2").replace(/B/g,"8").replace(/G/g,"9").replace(/T/g,"7");
         if(up2!==up && IATA_ACFT_CODES[up2] && /\d/.test(up2)) acft=up2;
       }
-      else if(!dur && /^\d{1,2}\.\d{2}$/.test(t)) dur=t;
-      else if(!dur && /^[0-9zZ][.][0-9oOsS]{1,2}$/.test(t)){
-        var _dt=up.replace(/Z/g,"2").replace(/O/g,"0").replace(/S/g,"5");
-        if(_dt.length<4) _dt=_dt+"0";    // "z.o" = 2.00
-        dur=_dt;
+      else if(!acft && !dur && /^[A-Z0-9]{3}$/.test(up) && /\d/.test(up) &&
+              i+1<toks.length && /^\d{1,2}\.\d{2}$/.test(toks[i+1])){
+        // Keep an explicit three-character IATA equipment token even when
+        // this offline data snapshot does not know it (e.g. a generic 330).
+        // Requiring the following GDS duration disambiguates it from a bare
+        // three-digit mileage when the equipment column is blank.
+        acft=up;
       }
       else if(!dist && /^\d{3,5}$/.test(t)) dist=t;
       i++;

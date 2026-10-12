@@ -79,6 +79,9 @@ button:focus-visible{outline:2px solid var(--green);outline-offset:3px}
 #st.warn::before{box-shadow:0 0 0 0 rgba(240,163,92,.42)}
 #report:hover,#genKey:hover,#btnWeeklyReport:hover,#btnSeatMap:hover,#btnAbout:hover{color:#8fa6b2}
 .linkbtn{color:#3e4f59;font-size:11px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0;font-family:var(--mono);font-weight:400;flex:none;white-space:nowrap;min-height:auto}
+.booking-pax{display:inline-flex;align-items:center;gap:4px;color:#60747e;font-size:9px;letter-spacing:.35px;white-space:nowrap;flex:none;cursor:pointer}
+.booking-pax select{width:40px;height:22px;padding:1px 4px;background:#0a0f14;border:1px solid #24353d;border-radius:4px;color:#b9c9d0;font:10px var(--mono);cursor:pointer}
+.booking-pax select:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 #btnWeeklyReport{margin-right:12px}
 /* welcome — small card, app visible behind (translucent backdrop) */
 .welcome{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
@@ -208,7 +211,13 @@ __SEATMAP_CSS__
 <div class="status">
   <span id="st">READY</span>
   <button id="btnAbout" class="linkbtn" type="button" aria-haspopup="dialog" aria-controls="aboutModal" title="What SpicyTerminal does, what it refuses to do, and who built it">About</button>
-  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert a complete American, Delta, Alaska, United or British Airways itinerary to enable its checkout link. Mixed-airline trips (more than one bookable airline), unsupported airlines and uncertain conversions keep it off. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made.">BOOKING LINK</button>
+  <label class="booking-pax" title="Adult travelers for the booking link; this does not assign seats">
+    <span aria-hidden="true">ADULTS</span>
+    <select id="bookingAdults" aria-label="Number of adult travelers for the booking link" title="Choose 1 to 9 adult travelers">
+      <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
+    </select>
+  </label>
+  <button id="btnBookingLink" class="linkbtn" type="button" disabled aria-disabled="true" title="Convert a complete American, Delta, Alaska, United or British Airways itinerary to enable its checkout link. Mixed-airline trips (more than one bookable airline), unsupported airlines and uncertain conversions keep it off. Select the number of adult travelers (1–9) beside the link; seat assignment is not included. Clicking opens an external search or prefilled summary and shares the itinerary details; no booking or purchase is made.">BOOKING LINK</button>
   <button id="genKey" class="linkbtn">Generate Api</button>
   <button id="btnWeeklyReport" class="linkbtn">Weekly Report</button>
   <a id="btnSeatMap" class="linkbtn" href="/seatmap" title="Seat Map preview">Seat Map</a>
@@ -274,7 +283,7 @@ __SEATMAP_CSS__
     </div>
 
     <p class="about-tag" id="aboutTagline"><b>SpicyTerminal turns any flight text or screenshot into a perfect GDS ready to copy format to paste into Backoffice.</b>
-      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK lights up for a complete, certain itinerary on one bookable airline — American, Delta, Alaska, United or British Airways, one or several legs — using the same link engine as the production Spicy Link Generator. American links pin every flight via aa.com metasearch; Delta and Alaska links carry every leg (with an estimated price); United and British Airways links carry the route(s) and dates without pinning exact flights. A mixed-airline itinerary links only when exactly one of its airlines is bookable, and then covers that airline's legs. Clicking opens an external search or prefilled summary for one adult and shares the itinerary details with that site; unsupported airlines and uncertain conversions stay disabled. Check availability and price on the airline site — it never books or purchases a ticket automatically.</p>
+      Paste a Google Flights option, an airline email, or a photo of a flight option and you get GDS format ready to copy in milliseconds, computed by a deterministic engine that runs entirely inside this tab. BOOKING LINK lights up for a complete, certain itinerary on one bookable airline — American, Delta, Alaska, United or British Airways, one or several legs — using the same link engine as the production Spicy Link Generator. American links pin every flight via aa.com metasearch; Delta and Alaska links carry every leg (with an estimated price); United and British Airways links carry the route(s) and dates without pinning exact flights. A mixed-airline itinerary links only when exactly one of its airlines is bookable, and then covers that airline's legs. The compact Adults selector beside BOOKING LINK sets 1–9 adult travelers (not assigned seats). Clicking opens an external search or prefilled summary for that party and shares the itinerary details with that site; unsupported airlines and uncertain conversions stay disabled. Check availability and price on the airline site — it never books or purchases a ticket automatically.</p>
 
     <ul class="about-stats">
       <li><b>0</b> accounts · cookies · trackers</li>
@@ -292,7 +301,7 @@ __SEATMAP_CSS__
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3.2l1.7 4.7 4.7 1.7-4.7 1.7L11 16l-1.7-4.7L4.6 9.6l4.7-1.7z"/><path d="M18.4 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></svg></span>
             <span><b><code>AI FIX</code>.</b> When a first read cannot see the flights, it re-reads and repairs the output. Your key, your call.</span></li>
           <li><span class="about-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 2.9v6.2c0 4.4-3 7.5-7 8.9-4-1.4-7-4.5-7-8.9V5.9z"/><path d="M8.7 12.1l2.4 2.4 4.3-4.7"/></svg></span>
-            <span><b>Private.</b> Conversion stays in this tab. Clicking BOOKING LINK opens an external airline search or prefilled summary for one adult and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically; you always finish on the airline site.</span></li>
+            <span><b>Private.</b> Conversion stays in this tab. Choose 1–9 adult travelers in the small selector beside BOOKING LINK; seat assignment is not included. Clicking opens an external airline search or prefilled summary and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). It never books or purchases automatically; you always finish on the airline site.</span></li>
         </ul>
       </section>
 
