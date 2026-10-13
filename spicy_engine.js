@@ -936,6 +936,17 @@ function tryGdsLines(text, used){
   for(var li=0;li<lines.length;li++){
     var toks=lines[li].split(/\s+/).filter(function(t){return t.length;});
     if(toks.length<7) continue;
+    // Sabre-style glued route + sell status: "BOGMIA*SS1" / "MIABCN*SS1" is the
+    // airport pair, a `*` marker and the sell-status column in one token.  Split
+    // it so the pair and the status are read as separate columns (the status is
+    // then skipped by the usual sell-status rule).  Without this the whole leg
+    // was dropped and the row was printed as a bare "SS 1" with `???` airports.
+    toks=toks.reduce(function(acc,t){
+      var sp=/^([A-Z]{6})\*([A-Z]{2}\d{1,2})?$/.exec(t.toUpperCase());
+      if(sp){ acc.push(sp[1]); if(sp[2]) acc.push(sp[2]); }
+      else acc.push(t);
+      return acc;
+    },[]);
     var i=0;
     // Leading segment number: a clean digit, or a single glyph OCR turned
     // into a letter ("1 UA" read as "l UA"). Only skip it when the next
