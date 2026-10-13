@@ -19938,7 +19938,15 @@ function convertAi(fromAuto, reason, specBatch){
     if(/(DEP|ARR)-\??\?{2,}/.test(t)){
       setStatus("AI REPLY INCOMPLETE — unknown airport(s); crop the screenshot tighter and press AI FIX again", true);
     } else {
-      setStatus("AI CONVERTED"+(reason?" ("+reason+")":""));
+      // The status bar states the outcome, never the machinery. `reason` is an
+      // internal token ("learned pattern", "PDF attachment", "AI correction")
+      // or a raw engine warning ("departure time missing -> ????"), and it was
+      // printed here as "AI CONVERTED (departure time missing -> ????)" — which
+      // told the user their finished itinerary was still missing a time, on
+      // nearly every paste that needed a repair. It stays internal (the learner
+      // and the mistake detector below still read it); the bar says the one
+      // thing that is true about a completed conversion.
+      setStatus("AI CONVERTED");
     }
     if (aiImages.length === 1 && aiDocuments.length === 0 && aiImages[0]._hash && !(text || "").trim()) {
       imgCacheSet(aiImages[0]._hash, t, bookingSourceWarnings);
