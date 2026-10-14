@@ -35,6 +35,21 @@ hallucinations, no re-rolling the dice.
   not know yet (IberoJet `OB`, or alphanumeric `H4`) is still read in a numbered
   row. Explicit three-character equipment such as `330` and published mileage
   are preserved even when the local equipment table does not list the code.
+- **Remarks stay remarks, class letters stay class letters**: OSI/remark lines
+  pasted with an itinerary (`ADV PAX FLT ARRIVES TERMINAL-1`, `TFC SUBJ GOVT
+  APPROVAL`, `BUSINESSFIRST OFFERED THIS FLIGHT`, `CITY TERMINAL CHECK-IN …`)
+  contribute no flights and no airports — `PAX` in a remark is a passenger, not
+  Port-de-Paix — while `OSI to XBE` is still read as a route header (Osijek is
+  a real airport). The sell-status column (`SS1`, `HK2`, `TK2`) after a route
+  never anchors a phantom `SS 1` leg. A GDS flight number with its booking
+  class (`KE 704Z`, `UA 286Z`, `AA 913I`) keeps both on typed *and* OCR'd
+  input: the cleaner no longer folds the class letter into the digits, and no
+  cleaner rule may swallow a newline and join two lines of the paste. The
+  output caches are keyed per engine version, so a conversion made before a
+  fix is re-read instead of being served from the cache forever. And the
+  deterministic result now wins whenever the AI reply is strictly worse
+  (placeholder fields or fewer legs) — a repair button may not replace a
+  complete conversion with a broken one.
 - **`AI FIX` — the repair button, not the default path**: pasting converts on its own, no click needed.
   When that automatic offline pass cannot read an image (handwritten, cropped, garbage-scanned) or only
   half-reads it, `AI FIX` re-reads the same input with Gemini and repairs the result; the deterministic

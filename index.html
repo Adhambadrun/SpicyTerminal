@@ -15324,6 +15324,38 @@ function _inRoutePosition(text, at){
   var before=text.slice(Math.max(0,at-10),at);
   return /(?:^|[\s(>\[])(?:to|into|via|from|-{1,2}>|→|–)\s*$/i.test(before);
 }
+/* "SS1" standing right after the route column of a GDS row is the sell-status
+   column ("JAXORD*SS1", "NRTICN SS1", "MIABOG SS1  1018A"), not a Corsair
+   flight 1.  When the table scanner rejects such a row the prose scanner
+   inherits it, and the status token anchored a phantom leg ("SS 1", "TK 2")
+   that stole the row's clocks and airports — the "direct found 8, AI found 6"
+   mistake-log entries were four of these phantoms compared as if they were
+   flights.  A glued carrier+1-2-digit token sitting exactly where the status
+   column stands is never a flight, so it never anchors one. */
+function _isSellStatusColumn(text, start, end){
+  if(!/^[A-Z]{2}\d{1,2}$/.test(text.slice(start,end).toUpperCase())) return false;
+  var ls=text.lastIndexOf("\n",start)+1;
+  var before=text.slice(ls,start);
+  return /[A-Z]{6}\*?\s*$/.test(before) || /[A-Z]{3}\s+[A-Z]{3}\s*$/.test(before);
+}
+/* GDS remark / OSI lines ride along with pasted itineraries: "ADV PAX FLT
+   ARRIVES TERMINAL-1", "TFC SUBJ GOVT APPROVAL", "BUSINESSFIRST OFFERED THIS
+   FLIGHT", "CITY TERMINAL CHECK-IN SERVICE AVAILABLE IN SEOUL".  They carry no
+   flight data, but the prose scanner read their words as one — "PAX" is also
+   Port-de-Paix, so a phantom leg sprouted airports in Haiti and the city name
+   "SEOUL" published a route.  Blank the remark content (keeping every newline
+   and character offset, so nothing downstream mis-aligns) before the prose
+   scanner sees the text.  The GDS *table* scanner reads the untouched copy —
+   "BUSINESSFIRST OFFERED THIS FLIGHT" is a legitimate cabin hint there.
+   OSI/SSR/RMK are also airport codes (Osijek, Sara, Renmark), so a keyword
+   that opens a route ("OSI to XBE on September 25") is a route header, not a
+   remark — only the non-route shape is blanked. */
+var REMARK_LINE_RE = /^\s*(?:(?:ADV|TFC|OSI|SSR|RMK|CONX)\b(?!\s*(?:to\b|into\b|via\b|->|→|–|-))|CITY TERMINAL\b|BUSINESSFIRST OFFERED\b)/i;
+function _blankRemarkLines(text){
+  return text.split("\n").map(function(line){
+    return REMARK_LINE_RE.test(line) ? line.replace(/[^\n]/g," ") : line;
+  }).join("\n");
+}
 
 function findAnchors(text){
   var text_l=text.toLowerCase(), cands=[], occupied=[], m;
@@ -15354,6 +15386,7 @@ function findAnchors(text){
   while((m=CODE_NUM_RE.exec(text))){
     var code2=m[1],num=m[2];
     if(!AIRLINES[code2]||overlaps(m.index,m.index+m[0].length)) continue;
+    if(_isSellStatusColumn(text,m.index,m.index+m[0].length)) continue;
     var afterU=text.slice(m.index+m[0].length);
     var tu=TIME_UNIT_AFTER.exec(afterU);
     if(tu&&tu.index===0&&!_unitStartsRoute(afterU,tu[0])) continue;
@@ -15498,6 +15531,17 @@ function tryGdsLines(text, used){
   for(var li=0;li<lines.length;li++){
     var toks=lines[li].split(/\s+/).filter(function(t){return t.length;});
     if(toks.length<7) continue;
+    // Sabre-style glued route + sell status: "BOGMIA*SS1" / "MIABCN*SS1" is the
+    // airport pair, a `*` marker and the sell-status column in one token.  Split
+    // it so the pair and the status are read as separate columns (the status is
+    // then skipped by the usual sell-status rule).  Without this the whole leg
+    // was dropped and the row was printed as a bare "SS 1" with `???` airports.
+    toks=toks.reduce(function(acc,t){
+      var sp=/^([A-Z]{6})\*([A-Z]{2}\d{1,2})?$/.exec(t.toUpperCase());
+      if(sp){ acc.push(sp[1]); if(sp[2]) acc.push(sp[2]); }
+      else acc.push(t);
+      return acc;
+    },[]);
     var i=0;
     // Leading segment number: a clean digit, or a single glyph OCR turned
     // into a letter ("1 UA" read as "l UA"). Only skip it when the next
@@ -15887,6 +15931,7 @@ function pickTimes(wTimes,pTimes){
 }
 
 function parseProse(text){
+  text=_blankRemarkLines(text);
   var headers=findSideHeaders(text);
   var anchors=findAnchors(text);
   if(!anchors.length) return [[],true];
@@ -17417,6 +17462,7 @@ var lastOut = "";
 var converting = false;
 var aiRequestId = 0;
 var lastTextFp = "";
+var lastDirectFp = "";   // fingerprint of the text whose deterministic result is in lastOut
 var nextAttachmentId = 0;
 var activeReviewImageId = null;
 
@@ -17864,7 +17910,7 @@ function learnKnows(text) {
   return null;
 }
 
-var TCACHE_KEY = "spicy_text_cache_v2";
+var TCACHE_KEY = "spicy_text_cache_v3";   // v3: engine/cleaner fixes re-read pastes the v2 cache would keep serving wrong
 function tCacheAll(){ try{ return JSON.parse(localStorage.getItem(TCACHE_KEY)||"{}"); }catch(e){return{};} }
 function tCacheGet(h){ var c=tCacheAll(); return c[h]||null; }
 function tCacheSet(h, outText, warnings){
@@ -17877,7 +17923,7 @@ function tCacheSet(h, outText, warnings){
   }catch(e){}
 }
 
-var ICACHE_KEY = "spicy_img_cache_v2";
+var ICACHE_KEY = "spicy_img_cache_v3";   // v3: same re-read as the text cache
 function imgCacheAll(){ try{ return JSON.parse(localStorage.getItem(ICACHE_KEY)||"{}"); }catch(e){return{};} }
 function imgCacheGet(hash){ var c=imgCacheAll(); return c[hash]||null; }
 function imgCacheSet(hash, outText, warnings){
@@ -17943,11 +17989,11 @@ var _cleanMonthRes = [];
   months.forEach(function(m) {
     // `15 SEP` / `15Sep2026` -> `15 SEP`.  A glued `15SEP` is already exactly
     // the form the GDS row parser wants, so only split when digits follow.
-    _cleanMonthRes.push([new RegExp("(\\d{1,2})\\s*([A-Za-z]{3})(\\d*)", "gi"), function(_, d, mon, tail) {
+    _cleanMonthRes.push([new RegExp("(\\d{1,2})[ \\t]*([A-Za-z]{3})(\\d*)", "gi"), function(_, d, mon, tail) {
       if (mon.toUpperCase() !== m) return _;
       return tail ? d + " " + m + " " + tail : d + m;
     }]);
-    _cleanMonthRes.push([new RegExp(m + "\\s*(\\d{1,2})", "gi"), m + " $1"]);
+    _cleanMonthRes.push([new RegExp(m + "[ \\t]*(\\d{1,2})", "gi"), m + " $1"]);
   });
 })();
 
@@ -17984,11 +18030,14 @@ function cleanOcrText(rawText, opts) {
   s = s.replace(/[ \t]{2,}/g, " ");
   // The dash pass above also splits a GDS previous-day marker ("140P-1" and
   // its "+1"/"¥1" cousins). Put them back — the engine treats those as day
-  // shifts on the arrival time.
-  s = s.replace(/(\d{1,2})\s*([APNM])(\s*[\+¥‡])? - (\d)\b/gi, "$1$2$3-$4");
+  // shifts on the arrival time.  Every repair below is [ \t]-scoped: a rule
+  // whose pattern spans \s can eat a newline and JOIN two lines ("BUSINESSFIRST
+  // OFFERED THIS FLIGHT" + "3 KE 704Z …" became one line, the GDS row lost its
+  // segment number, and the prose fallback invented legs from its columns).
+  s = s.replace(/(\d{1,2})[ \t]*([APNM])([ \t]*[\+¥‡])? - (\d)\b/gi, "$1$2$3-$4");
 
   // Glued airports e.g. DOHtoCAI -> DOH to CAI, JFK-LHR -> JFK - LHR
-  s = s.replace(/\b([A-Za-z]{3})\s*to\s*([A-Za-z]{3})\b/gi, "$1 to $2");
+  s = s.replace(/\b([A-Za-z]{3})[ \t]*to[ \t]*([A-Za-z]{3})\b/gi, "$1 to $2");
   s = s.replace(/\b([A-Za-z]{3})to([A-Za-z]{3})\b/gi, "$1 to $2");
 
   // Underscore and glyph airport repairs – expanded from weekly report failure (ET ORD-ADD-CAI)
@@ -18006,25 +18055,25 @@ function cleanOcrText(rawText, opts) {
   s = s.replace(/\bLAx\b/g, "LAX");
 
   // 3. Day shifts: 12h, 24h, compact, and parenthesized
-  s = s.replace(/(\d{1,2}[:._]\d{2})\s*\+\s*[lIi1tT]\b/gi, "$1+1");
-  s = s.replace(/(\d{1,2}[:._]\d{2})\s*\+\s*[zZ2]\b/gi, "$1+2");
-  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[lIi1tT]\b/gi, "$1+1");
-  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[zZ2]\b/gi, "$1+2");
-  s = s.replace(/\b(AM|PM|[APNM])\s*\+\s*[sS5]\b/gi, "$1+5");
-  s = s.replace(/\(\s*\+\s*[lIi1tT]\s*(?:day)?\s*\)/gi, "(+1)");
-  s = s.replace(/\(\s*\+\s*[zZ2]\s*(?:days?)?\s*\)/gi, "(+2)");
-  s = s.replace(/¥\s*[lIi1tT]/g, "¥1");
-  s = s.replace(/¥\s*[zZ2]/g, "¥2");
+  s = s.replace(/(\d{1,2}[:._]\d{2})[ \t]*\+[ \t]*[lIi1tT]\b/gi, "$1+1");
+  s = s.replace(/(\d{1,2}[:._]\d{2})[ \t]*\+[ \t]*[zZ2]\b/gi, "$1+2");
+  s = s.replace(/\b(AM|PM|[APNM])[ \t]*\+[ \t]*[lIi1tT]\b/gi, "$1+1");
+  s = s.replace(/\b(AM|PM|[APNM])[ \t]*\+[ \t]*[zZ2]\b/gi, "$1+2");
+  s = s.replace(/\b(AM|PM|[APNM])[ \t]*\+[ \t]*[sS5]\b/gi, "$1+5");
+  s = s.replace(/\([ \t]*\+[ \t]*[lIi1tT][ \t]*(?:day)?[ \t]*\)/gi, "(+1)");
+  s = s.replace(/\([ \t]*\+[ \t]*[zZ2][ \t]*(?:days?)?[ \t]*\)/gi, "(+2)");
+  s = s.replace(/¥[ \t]*[lIi1tT]/g, "¥1");
+  s = s.replace(/¥[ \t]*[zZ2]/g, "¥2");
   // GDS overnight markers OCR mangled on the clock: "140P+_" / "910P¥l"
-  s = s.replace(/\b(\d{1,2})\s*([APNM])(\s*[\+¥‡]\s*)([_|lIi1tT])\b/gi, "$1$2$31");
-  s = s.replace(/\b(\d{1,2})\s*([APNM])(\s*[\+¥‡]\s*)([zZ2])\b/gi, "$1$2$32");
-  s = s.replace(/\b(\d{1,2})\s*([APNM])(\s*[\+¥‡]\s*)([sS5])\b/gi, "$1$2$35");
-  s = s.replace(/\b(AM|PM|[APNM])\s*-\s*([1-3lItT])(?![0-9A-Za-z]*[:\.\/])/gi, function(_, ap, shift) {
+  s = s.replace(/\b(\d{1,2})[ \t]*([APNM])([ \t]*[\+¥‡][ \t]*)([_|lIi1tT])\b/gi, "$1$2$31");
+  s = s.replace(/\b(\d{1,2})[ \t]*([APNM])([ \t]*[\+¥‡][ \t]*)([zZ2])\b/gi, "$1$2$32");
+  s = s.replace(/\b(\d{1,2})[ \t]*([APNM])([ \t]*[\+¥‡][ \t]*)([sS5])\b/gi, "$1$2$35");
+  s = s.replace(/\b(AM|PM|[APNM])[ \t]*-[ \t]*([1-3lItT])(?![0-9A-Za-z]*[:\.\/])/gi, function(_, ap, shift) {
     return ap + "-" + (shift === "l" || shift === "I" || shift === "t" ? "1" : shift);
   });
 
   // Airline typos & OCR confusions
-  s = s.replace(/Brltlsh\s+Alrways/gi, "British Airways");
+  s = s.replace(/Brltlsh[ \t]+Alrways/gi, "British Airways");
   s = s.replace(/Brltlsh/gi, "British");
   s = s.replace(/Emirales/gi, "Emirates");
   s = s.replace(/Uniled/gi, "United");
@@ -18036,9 +18085,11 @@ function cleanOcrText(rawText, opts) {
   s = s.replace(/Slngapore/gi, "Singapore");
 
   // Airline + Flight prefix handling: e.g. "BA · Flight 114" -> "BA 114", "Flight AA 123" -> "AA 123"
-  s = s.replace(/\b([A-Z0-9]{2})\s*[-·•.]*\s*Flight\s*([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
-  s = s.replace(/\bFlight\s+([A-Za-z]{2}|[0-9][A-Za-z]|[A-Za-z][0-9])[ \t]+([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
-  s = s.replace(/\bFlight\s+([0-9A-Za-z]{1,5})\b/gi, "$1");
+  // [ \t] only — a \s here swallowed the newline after a line ending in
+  // "FLIGHT" and glued the comment to the GDS row underneath it.
+  s = s.replace(/\b([A-Z0-9]{2})[ \t]*[-·•.]*[ \t]*Flight[ \t]*([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
+  s = s.replace(/\bFlight[ \t]+([A-Za-z]{2}|[0-9][A-Za-z]|[A-Za-z][0-9])[ \t]+([0-9A-Za-z]{1,5})\b/gi, "$1 $2");
+  s = s.replace(/\bFlight[ \t]+([0-9A-Za-z]{1,5})\b/gi, "$1");
 
   // Full month names to 3-letter month (e.g. September -> SEP)
   var monthMap = {
@@ -18051,19 +18102,19 @@ function cleanOcrText(rawText, opts) {
 
   // Day number OCR repairs before/after month (e.g. l Sep -> 1 Sep, ls Sep -> 15 Sep, lo -> 10)
   // ET image test showed OCRAD reading 1 as l, 15 as ls, 10 as lo, 31 as 3l etc
-  s = s.replace(/\b[lI]\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "1 $1");
-  s = s.replace(/\b[lI]s\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "15 $1");
-  s = s.replace(/\b[lI][oO]\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "10 $1");
-  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+[lI]\b/gi, "$1 1");
-  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+[lI]s\b/gi, "$1 15");
-  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+[lI][oO]\b/gi, "$1 10");
+  s = s.replace(/\b[lI][ \t]+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "1 $1");
+  s = s.replace(/\b[lI]s[ \t]+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "15 $1");
+  s = s.replace(/\b[lI][oO][ \t]+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "10 $1");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[ \t]+[lI]\b/gi, "$1 1");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[ \t]+[lI]s\b/gi, "$1 15");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[ \t]+[lI][oO]\b/gi, "$1 10");
   // 31 often read as 3l
-  s = s.replace(/\b3[lI]\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "31 $1");
-  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+3[lI]\b/gi, "$1 31");
+  s = s.replace(/\b3[lI][ \t]+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/gi, "31 $1");
+  s = s.replace(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[ \t]+3[lI]\b/gi, "$1 31");
 
 
   // 4. Durations: e.g. 10 hr4O min, 2h 3Om, 4 hr 30 min (must not match GDS booking class / dates / airports)
-  s = s.replace(/\b([0-9]{1,2})\s*h(?:r|ours?)?[ \t]*([0-9oOsSlIzZ]{1,2})\s*(?:m|min|minutes?)\b/gi, function(_, h, m) {
+  s = s.replace(/\b([0-9]{1,2})[ \t]*h(?:r|ours?)?[ \t]*([0-9oOsSlIzZ]{1,2})[ \t]*(?:m|min|minutes?)\b/gi, function(_, h, m) {
     var cm = m.replace(/[oO]/g, "0").replace(/[sS]/g, "5").replace(/[lIi]/g, "1").replace(/[zZ]/g, "2");
     return h + " hr " + cm + " min";
   });
@@ -18082,13 +18133,13 @@ function cleanOcrText(rawText, opts) {
     [/Fl[il1]ght/gi, "Flight"],
     [/<ABIN/gi, "CABIN"],
     [/E<ONOMY/gi, "ECONOMY"],
-    [/Operated\s+by/gi, "Operated by"],
+    [/Operated[ \t]+by/gi, "Operated by"],
     [/Departs?/gi, "Departs"],
     [/Arr[il1]ves?/gi, "Arrives"],
     [/Term[il1]nal/gi, "Terminal"],
     [/lberia/gi, "Iberia"],
     [/\b([Tt])(\d)([Tt])\b/g, "7$27"],
-    [/Boeing\s+TTT/gi, "Boeing 777"],
+    [/Boeing[ \t]+TTT/gi, "Boeing 777"],
     [/\bA3[sS]0\b/gi, "A350"],
     [/\bA38[oO]\b/gi, "A380"],
     [/\bA32[oO]\b/gi, "A320"],
@@ -18107,7 +18158,7 @@ function cleanOcrText(rawText, opts) {
   // The `(?!\s*\d)` tail keeps a GDS flight-time column (`77W  6.10  2699`) out
   // of the clock repair: a duration is not a time, and rewriting 6.10 as 6:10
   // made the engine re-derive the leg's duration from the clocks instead.
-  s = s.replace(/\b([0-9A-Za-z]{1,2})[:\.](\w{2})(?:\s*([AP]M?|[ap]m?))?\b(?!\s*\d)/g, function(match, h, m, ap) {
+  s = s.replace(/\b([0-9A-Za-z]{1,2})[:\.](\w{2})(?:[ \t]*([AP]M?|[ap]m?))?\b(?!\s*\d)/g, function(match, h, m, ap) {
     var ch = h.replace(/[lIi]/g, "1").replace(/[oO]/g, "0").replace(/[Tt]/g, "7").replace(/[zZ]/g, "2").replace(/[sS]/g, "5");
     var cm = m.replace(/ss/gi, "55")
               .replace(/zs/gi, "25")
@@ -18140,12 +18191,12 @@ function cleanOcrText(rawText, opts) {
 
   // Route-specific airline OCR confusion (e.g. QR read as OR when DOH is present, ET read as E7 etc)
   if (/DOH/i.test(s)) {
-    s = s.replace(/\bOR\s+/gi, "QR ");
+    s = s.replace(/\bOR[ \t]+/gi, "QR ");
   }
   // Ethiopian ET – OCR often reads ET as E7 or E7, and ADD as A0D
   if (/ADD/i.test(s) || /BOLE/i.test(s)) {
-    s = s.replace(/\bE7\s+/gi, "ET ");
-    s = s.replace(/\bE\s*7\s+/gi, "ET ");
+    s = s.replace(/\bE7[ \t]+/gi, "ET ");
+    s = s.replace(/\bE[ \t]*7[ \t]+/gi, "ET ");
   }
 
   // 8. Glued flight numbers + airport: e.g. 114lFK -> 114 JFK, ZO4lFK -> 204 JFK
@@ -18178,6 +18229,9 @@ function cleanOcrText(rawText, opts) {
         // "TO 105" — phantom Transavia flights on every Google-Flights paste
         // whose city starts with L.
         if (_CLEAN_WORD_CODES[code.toLowerCase()]) return match;
+        // Same GDS flight+class guard as the main pass: "KE _704Z" restores the
+        // leading glyph, it never folds the booking-class letter into digits.
+        if (/^\d{1,4}[A-Za-z]$/.test(num)) return match;
         var repaired = num.replace(/[oO]/g, "0").replace(/[sS]/g, "5")
           .replace(/[lIi|]/g, "1").replace(/[zZ]/g, "2").replace(/[gq]/g, "9");
         // A purely numeric token is a complete flight number: `AC 918` is not
@@ -18225,6 +18279,12 @@ function cleanOcrText(rawText, opts) {
       // Same word-code guard as the lead pass: "TO Los" is a route, not
       // Transavia flight 105 (L->1, o->0, s->5).
       if (_CLEAN_WORD_CODES[code.toLowerCase()] && !/\d/.test(num)) return match;
+      // GDS flight number + booking class ("KE 704Z", "AA 913I", "AA 112O") is
+      // ONE token the table scanner splits itself. Folding the trailing class
+      // letter into the digits invented a different flight ("704Z" -> "7042")
+      // and dropped the class on every pasted GDS row — the exact corruption
+      // behind the "KE 7042 / SS 1 / UA 2862" bug report output.
+      if (/^\d{1,4}[A-Za-z]$/.test(num)) return match;
       if (!/[0-9]/.test(num) && !/^[loszbBtT]+$/i.test(num)) return match;
       var cnum = num.replace(/[oO]/g, "0")
                     .replace(/[lIi]/g, "1")
@@ -18245,8 +18305,8 @@ function cleanOcrText(rawText, opts) {
     F0B:"FEB",F3B:"FEB",F08:"FEB",F38:"FEB",M4R:"MAR",M48:"MAR","4PR":"APR","4P8":"APR",M4Y:"MAY",
     J6N:"JUN",J0L:"JUL",J4L:"JUL",J01:"JUL",SE0:"SEP",SE6:"SEP",S3P:"SEP",SEB:"SEP",
     "0C7":"OCT","0CT":"OCT",N0V:"NOV",N08:"NOV",NQV:"NOV",D0C:"DEC",D06:"DEC",D3C:"DEC",D00:"DEC"};
-  s = s.replace(/\b(\d{1,2})\s+([A-Z0-9]{3})\b/g, function(_, d, m) { var f = _monthOcr[m.toUpperCase()]; return f ? d + " " + f : _; });
-  s = s.replace(/\b([A-Z0-9]{3})\s+(\d{1,2})\b/g, function(_, m, d) { var f = _monthOcr[m.toUpperCase()]; return f ? f + " " + d : _; });
+  s = s.replace(/\b(\d{1,2})[ \t]+([A-Z0-9]{3})\b/g, function(_, d, m) { var f = _monthOcr[m.toUpperCase()]; return f ? d + " " + f : _; });
+  s = s.replace(/\b([A-Z0-9]{3})[ \t]+(\d{1,2})\b/g, function(_, m, d) { var f = _monthOcr[m.toUpperCase()]; return f ? f + " " + d : _; });
 
   // 9. Dates: "16 sep", "18nov", etc.
   for (var mi = 0; mi < _cleanMonthRes.length; mi++) {
@@ -19614,9 +19674,10 @@ function renderDirectSync(text, opts){
   var segs = res[0], warns = res[1];
   bookingSourceWarnings = Array.isArray(warns) ? warns.slice() : [];
   bookingSourceDirty = false;
-  if(!segs.length) { lastOut=""; setOut(""); return {segs:segs,warns:warns,out:""}; }
+  if(!segs.length) { lastOut=""; lastDirectFp=""; setOut(""); return {segs:segs,warns:warns,out:""}; }
   var outText = window.SpicyEngine.renderItinerary(segs);
   lastOut = outText;
+  lastDirectFp = fp(text);   // this text's deterministic read is what sits in lastOut
   setOut(outText);
   // The status bar says one thing on success: the conversion is done. The
   // engine's per-segment notes stay internal (bookingSourceWarnings feeds the
@@ -19924,6 +19985,23 @@ function convertAi(fromAuto, reason, specBatch){
     if(rr&&rr[0].length&&rr[0].length >= (t.split("\n").filter(function(l){return / N$/.test(l);}).length)){ t=window.SpicyEngine.renderItinerary(rr[0]); }
     bookingSourceDirty = false;
     var previousDirect = lastOut;
+    // "The deterministic result always wins when both succeed" — and a reply
+    // that is strictly worse than the conversion already on screen is not a
+    // repair at all.  When the deterministic read of THIS text came back
+    // complete, an AI answer full of ???? placeholders (or one carrying fewer
+    // legs) may not replace it; letting it through is how a correct conversion
+    // got dressed up in a wrong format that nothing ever corrected.  A direct
+    // result that only produced placeholders is not a result — the repair
+    // still goes through (the specBatch gate above and this one agree on that).
+    if(previousDirect && text.trim() && lastDirectFp && lastDirectFp === fp(text) &&
+       !itineraryHasUnknownFields(previousDirect) &&
+       (itineraryHasUnknownFields(t) || flightRowsOf(t).length < flightRowsOf(previousDirect).length)){
+      if(specBatch && aiSpeculation.batch === specBatch){ aiSpeculation.done = true; aiSpeculation.painted = false; }
+      bookingSourceWarnings = aiInputWarnings.slice();
+      setStatus("AI REPLY IGNORED — direct result kept");
+      refreshBookingLinkButton(previousDirect);
+      return;
+    }
     lastOut=t; setOut(t);
     // The AI reply is on screen: this is the conversion. (The request itself was
     // logged as `ai_call` when it started, so a reply that is ignored — or one
@@ -24163,7 +24241,7 @@ try {
   }
 })(typeof window !== "undefined" ? window : null);
 </script>
-<script>window.SPICY_PRICE_ENDPOINT="/api/flights/price";</script>
+<script>window.SPICY_PRICE_ENDPOINT="";</script>
 <script>/* seatmap_price.js — the PRICE button on the Seat Map page.
  *
  * One button. One panel. One request. One flat sentence for every failure.
