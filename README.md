@@ -152,8 +152,14 @@ hallucinations, no re-rolling the dice.
   moment the id has moved on it shows one small, still card in the corner:
   `● NEW VERSION LIVE  [REFRESH] ×`. It never reloads on its own (that would throw away a
   half-typed paste), `×` keeps it away until the *next* build, and offline / `file://` / a
-  404 all mean silence. `/version.json` is served with `Cache-Control: no-store` on Vercel
-  and Netlify so a CDN can never answer with yesterday's id.
+  404 all mean silence. Neither half of the stamp can come out of a cache: `/version.json` is
+  served with `Cache-Control: no-store` on Vercel and Netlify so a CDN can never answer with
+  yesterday's id, and the app pages carrying the other half (`window.SPICY_BUILD_ID`) are
+  pinned to `no-cache, max-age=0, must-revalidate` on both hosts — a revalidation costs a 304,
+  a re-download would cost the whole 2.4 MB page. The local preview sends `no-store` on
+  everything for the same reason. `REFRESH` then asks for the same page under a URL no cache
+  holds (`?v=<live build>`), keeping any deep link — the Seat Map's `?leg=N` — and the hash,
+  so the button can never be answered with the very page that raised it.
 - **Bug reports become work by themselves**: every email with the subject
   `SpicyTerminal bug report` (what the `Report a bug` link writes) is picked up by the
   `Bug report intake` GitHub Action, turned into an issue carrying the whole email and an

@@ -38,3 +38,25 @@
   for = "/version.json"
   [headers.values]
     Cache-Control = "no-store, max-age=0, must-revalidate"
+
+# The app pages carry the other half of that stamp (window.SPICY_BUILD_ID), so
+# they are pinned for the same reason: a page answered from a cache keeps
+# running yesterday's build, the notice fires, and REFRESH appears to do
+# nothing. no-cache rather than no-store because the page is 2.4 MB — a
+# revalidation costs a 304, a re-download costs the whole artifact.
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, max-age=0, must-revalidate"
+
+# /seatmap is the rewrite above and therefore its own request path; /*.html
+# does not match it.
+[[headers]]
+  for = "/seatmap"
+  [headers.values]
+    Cache-Control = "no-cache, max-age=0, must-revalidate"
