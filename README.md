@@ -145,6 +145,21 @@ hallucinations, no re-rolling the dice.
   terminal green, on a dark track (the INPUT textarea used to keep whatever bar the browser
   ships). Both bars are always drawn: there is no switch to hide them, and scrolling itself
   is plain native behaviour — wheel, arrow keys, PageUp/PageDown, drag-select and touch.
+- **A tab that stayed open hears about the next deploy**: `build_web.py` stamps one build id
+  into the page and the same id into `public/version.json` (a hash of the finished page, so
+  a README-only merge changes nothing and nags nobody). The page asks for that file once a
+  minute while visible — plus when the tab is focused again or comes back online — and the
+  moment the id has moved on it shows one small, still card in the corner:
+  `● NEW VERSION LIVE  [REFRESH] ×`. It never reloads on its own (that would throw away a
+  half-typed paste), `×` keeps it away until the *next* build, and offline / `file://` / a
+  404 all mean silence. `/version.json` is served with `Cache-Control: no-store` on Vercel
+  and Netlify so a CDN can never answer with yesterday's id.
+- **Bug reports become work by themselves**: every email with the subject
+  `SpicyTerminal bug report` (what the `Report a bug` link writes) is picked up by the
+  `Bug report intake` GitHub Action, turned into an issue carrying the whole email and an
+  agent brief, handed to the repair-agent hook, and answered — *fix under way, allow 3–30
+  minutes, then refresh SpicyTerminal*. Setup and the exact reply text are in
+  [`tools/bug_report_intake/README.md`](tools/bug_report_intake/README.md).
 - Conversion and screenshot OCR run in the browser. `BOOKING LINK` opens an external airline search or prefilled summary for the selected party of 1–9 passengers and shares the itinerary details with that site — flight numbers, routes and dates (American, Delta and Alaska links; Delta and Alaska also carry an estimated price), or routes and dates only (United, British Airways). The selector changes traveler count only; it does not choose assigned seats, and the link never books or purchases automatically.
 - `???` never appears as an aircraft; inferred values are disclosed.
 - Never drops a flight row silently.
@@ -204,7 +219,7 @@ files and archives are never shipped.
 | `update_spicy_data_free.py` | the free-data merge into `spicy_data.js`: OurAirports (Unlicense) + OpenFlights (ODbL) + Passport Index (MIT) + mledoze/countries (ODbL) — `python3 update_spicy_data_free.py` |
 | `index_template.html` | page template |
 | `wordmark_alpha.png` | transparent-background wordmark (header + welcome) |
-| `build_web.py` | assembles the self-contained app pages from the sources above — `python3 build_web.py` |
+| `build_web.py` | assembles the self-contained app pages from the sources above — `python3 build_web.py`; stamps the build id into the page and writes `public/version.json` for the update notice |
 | `preview_server.py` | dependency-free local static preview with a `/seatmap` rewrite — `npm run dev` |
 | `test_engine.js` + `goldens.json` | parity tests vs the reference outputs — `node test_engine.js` (distances are the WGS-84 geodesic miles described above) |
 | `test_route_direction.js` | route-direction + distance regression suite for the JFK/DUB bug report — `node test_route_direction.js` |
@@ -232,6 +247,8 @@ files and archives are never shipped.
 | `test_jro_kilimanjaro.js` | TK AMS–IST–JRO–IST–AMS GDS re-paste regression (2026-09-10 report): Kilimanjaro `JRO` overlay, glued `¥1` marker, `7M8` equipment, and unknown-code numbered table rows surviving instead of being mangled — `node test_jro_kilimanjaro.js` |
 | `test_weekly_report.js` | weekly-report counters: week rollover, what counts as a conversion, blocked pop-up — `node test_weekly_report.js` |
 | `test_live_free.js` | the free live layer with a stubbed network: keyless providers work with nothing configured, a keyed provider without a key makes no request, a user's key is stored locally and kept out of URLs, a cache hit skips the network, 429 locks the bucket with the offline-friendly message, CORS/HTML/truncated-JSON/server-error/offline are handled, FlightSeatMap's free MCP is never called live availability, and identical inputs give identical badges — `node test_live_free.js` |
+| `test_update_notice.js` | the `NEW VERSION LIVE · REFRESH` notice, executed: same build → silence, new build → one still card, REFRESH reloads, × dismisses that build only, a rollback hides it, failures (offline / 404 / bad JSON) stay silent and back off to 10 min, focus/visibility looks are folded to one per 15 s, a hidden tab does not poll, and file:// / an unstamped page keep it off; plus the build stamp, `version.json` and the no-store headers — `node test_update_notice.js` |
+| `tools/bug_report_intake/` (`bug-report-intake.yml` → copy to `.github/workflows/`) | every `SpicyTerminal bug report` email → GitHub issue (whole email + agent brief) → repair-agent hook → reply to the sender (3–30 min, then refresh); Gmail IMAP/SMTP with an app password, standard library only — `python3 tools/bug_report_intake/self_test.py` (80 checks, no network) |
 | `test_month_airports.js` | the airport codes that are also something else (AUG/JAN/MAR/MAY/DEC/JUL/NOV months, HRS hours, JAL/PIA airline names, a clock glued to a code), pinned in both directions — `node test_month_airports.js` |
 
 ## Free live verification ($0, no card, no account)

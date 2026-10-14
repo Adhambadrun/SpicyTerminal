@@ -1,0 +1,74 @@
+# Bug-report intake — "SpicyTerminal bug report" emails become GitHub issues,
+# are handed to the repair agent, and the sender hears back.
+#
+# ACTIVATE: this file lives here because the automation that opened the PR may
+# not write under .github/workflows/. Copy it there once (GitHub web UI → Add
+# file, or `git mv tools/bug_report_intake/bug-report-intake.yml
+# .github/workflows/`) and GitHub starts running it on `main`.
+#
+# Every 5 minutes (GitHub's smallest schedule; runs can lag a few minutes on
+# busy days) tools/bug_report_intake/intake.py reads the author's Gmail inbox
+# over IMAP and, for each NEW email whose subject is exactly
+# "SpicyTerminal bug report":
+#   1. opens an issue carrying the whole email + an "Agent brief";
+#   2. labels the email in Gmail (SpicyTerminal-Handled) so it is read once;
+#   3. POSTs the same payload to AGENT_WEBHOOK_URL (the agent trigger), if set;
+#   4. replies to the sender — fix under way, allow 3–30 minutes, then refresh
+#      SpicyTerminal (held unless a hook accepted the job; see reply mode);
+#   5. keeps the original .eml + screenshots as a run artifact for the agent.
+#
+# Switch it on with two repository secrets (Settings → Secrets → Actions):
+#   GMAIL_USER          the inbox the Report-a-bug button writes to
+#   GMAIL_APP_PASSWORD  a Google App Password (2-Step Verification → App
+#                       passwords), never the account password
+# Optional:
+#   AGENT_WEBHOOK_URL / AGENT_WEBHOOK_TOKEN   secrets — the repair-agent hook
+#   BUG_REPORT_REPLY_MODE                     variable — dispatched (default) |
+#                                             always | never
+#   SPICY_SITE_URL                            variable — the public site, quoted
+#                                             in the reply
+# Without the Gmail secrets the job is a quiet no-op.
+name: Bug report intake
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: bug-report-intake
+  cancel-in-progress: false
+
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the intake (no network)
+        run: python3 tools/bug_report_intake/self_test.py
+
+      - name: Read the mailbox and hand each new report over
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          AGENT_WEBHOOK_URL: ${{ secrets.AGENT_WEBHOOK_URL }}
+          AGENT_WEBHOOK_TOKEN: ${{ secrets.AGENT_WEBHOOK_TOKEN }}
+          BUG_REPORT_REPLY_MODE: ${{ vars.BUG_REPORT_REPLY_MODE }}
+          SPICY_SITE_URL: ${{ vars.SPICY_SITE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/bug_report_intake/intake.py
+
+      - name: Keep the original emails (with screenshots) for the agent
+        if: ${{ always() && hashFiles('intake-out/**') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bug-reports-${{ github.run_id }}
+          path: intake-out
+          retention-days: 30
+          if-no-files-found: ignore

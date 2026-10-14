@@ -3,7 +3,24 @@
   "buildCommand": "npm run build",
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/seatmap", "destination": "/seatmap.html" },
-    { "source": "/healthz", "destination": "/api/healthz" }
+    {
+      "source": "/seatmap",
+      "destination": "/seatmap.html"
+    },
+    {
+      "source": "/healthz",
+      "destination": "/api/healthz"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/version.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0, must-revalidate"
+        }
+      ]
+    }
   ]
 }

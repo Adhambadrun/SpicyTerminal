@@ -30,3 +30,11 @@
   from = "/healthz"
   to = "/.netlify/functions/healthz"
   status = 200
+
+# /version.json is the tiny file an open tab polls to learn that a newer build
+# is live (the "NEW VERSION LIVE · REFRESH" notice). It must never be served
+# from a cache, or a tab would keep hearing yesterday's build id.
+[[headers]]
+  for = "/version.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0, must-revalidate"
