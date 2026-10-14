@@ -190,6 +190,17 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
    wordmark looked worse than a quiet header. */
 @media (max-width:560px){.status{gap:6px 10px}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}}
+/* ---------- UPDATE_NOTICE: a newer build is live ---------- */
+/* One small, still card in the corner: a dot, three words, REFRESH, ×. It sits
+   above the welcome card and the key dialog (z 50/51) but below the screenshot
+   review (61), never covers the panes, and — like everything else here — does
+   not animate in, out, or on hover. */
+.update-notice{position:fixed;right:clamp(10px,2vw,18px);bottom:clamp(10px,2vh,16px);z-index:60;display:flex;align-items:center;gap:10px;max-width:calc(100vw - 20px);padding:7px 7px 7px 13px;background:#0c1218;border:1px solid rgba(83,217,119,.6);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.55);font-size:11px;letter-spacing:.6px;color:#dbe7de}
+.update-notice-dot{color:var(--green);font-size:9px;line-height:1}
+.update-notice-text{font-weight:700;color:var(--green);white-space:nowrap}
+.update-notice-refresh{background:var(--green2);color:#04240f;padding:6px 13px;min-height:28px;font-size:11px;letter-spacing:.6px;border-radius:4px}
+.update-notice-close{background:none;color:#7f95a0;padding:0 6px;min-height:28px;font-family:Arial,sans-serif;font-size:17px;font-weight:400;line-height:1;letter-spacing:0}
+.update-notice-close:hover{color:#dbe7de;filter:none}
 /* Seat Map route — scoped styles only; the existing terminal page is unchanged. */
 .seatmap-page{position:fixed;inset:0;z-index:45;display:block;overflow:auto;background:var(--bg);color:#c9d8ce;font-family:var(--mono);}
 .seatmap-page.hidden{display:none!important}
@@ -619,7 +630,7 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
     </div>
 
     <div class="about-foot">
-      <span><span class="ok" aria-hidden="true">●</span> <span id="aboutFootVer">SpicyTerminal v4.1.0</span> — deterministic engine + AI mistake learner</span>
+      <span><span class="ok" aria-hidden="true">●</span> <span id="aboutFootVer">SpicyTerminal v4.2.0</span> — deterministic engine + AI mistake learner</span>
       <span class="sep">|</span>
       <span>Fewer surprises, not more features.</span>
       <button class="save" id="aboutGo" type="button" style="margin-left:auto;padding:7px 16px;font-size:11px">START CONVERTING →</button>
@@ -908,6 +919,17 @@ body.seatmap-active>header,body.seatmap-active>main,body.seatmap-active>.bar,bod
     </div>
   </div>
 </div>
+
+<!-- UPDATE_NOTICE:BEGIN — shown by app.js when /version.json carries a newer
+     build id than the one stamped into this page. Small, still, dismissable;
+     it never reloads on its own. -->
+<div class="update-notice hidden" id="updateNotice" role="status" aria-live="polite">
+  <span class="update-notice-dot" aria-hidden="true">●</span>
+  <span class="update-notice-text">NEW VERSION LIVE</span>
+  <button class="update-notice-refresh" id="updateNoticeRefresh" type="button" title="Reload the page to get the latest SpicyTerminal">REFRESH</button>
+  <button class="update-notice-close" id="updateNoticeClose" type="button" aria-label="Dismiss until the next update" title="Dismiss">×</button>
+</div>
+<!-- UPDATE_NOTICE:END -->
 
 <!-- OCRAD is kept as source until a screenshot needs it, so app launch stays light. -->
 <script id="ocradSource" type="text/plain">var OCRAD = (function(){
@@ -17139,6 +17161,9 @@ if (typeof module !== "undefined") module.exports = SpicyLinks;
 if (typeof window !== "undefined") window.SpicyLinks = SpicyLinks;
 })();
 </script>
+<!-- The build stamps the finished page's id here (build_web.py); app.js compares
+     it with /version.json to tell an open tab that a newer build is live. -->
+<script>window.SPICY_BUILD_ID="318a8ef8a9ea";</script>
 <!-- No Seat Map gate ships any more: seatmap_gate.js stays in the repository as
      a retired module, and the open-door wiring lives in app.js (SEATMAP_GATE). -->
 <script>/* app.js — SpicyTerminal Web UI — Instant Conversion & AI Self-Learner
@@ -20230,7 +20255,7 @@ function openGmailCompose(subject, body, blockedHint) {
    dialog, and ESC closes it. Opening it must never disturb conversion state — no
    attachment batch is invalidated and no AI request is cancelled, so reading the
    blurb while a screenshot is still parsing is safe. */
-var APP_VERSION = "4.1.0";
+var APP_VERSION = "4.2.0";
 var aboutReturnFocus = null;
 function openAbout() {
   var m = $("aboutModal");
@@ -20361,6 +20386,129 @@ function saveSeatMapRoute(text) {
   } catch (e) { /* storage full or blocked: the seat map falls back to manual entry */ }
 }
 /* SEATMAP_ROUTE:END */
+
+/* UPDATE_NOTICE:BEGIN */
+/*
+ * A merge to main is a new deploy, but a tab that stayed open keeps running
+ * the build it loaded until somebody reloads it. build_web.py stamps one id
+ * into the page (window.SPICY_BUILD_ID) and the same id into /version.json;
+ * this asks for that file now and then and, the moment the id has moved on,
+ * shows ONE small notice — "NEW VERSION LIVE · REFRESH".
+ *
+ * Rules, each from a way update banners usually misbehave:
+ *   - it never reloads on its own (that would throw away a half-typed paste);
+ *   - it is one still card, no motion in or out, and × keeps it away until
+ *     the *next* build — a dismissed notice does not come back for the same id;
+ *   - the first look waits until the page has settled, then once a minute while
+ *     the tab is visible, plus a look when the tab is focused again or comes
+ *     back online (never more than once per 15 s from those events);
+ *   - offline, file://, a blocked fetch, a 404, or a page built without a stamp
+ *     all mean exactly the same thing: say nothing. Failures back off, up to
+ *     ten minutes between looks, and never surface in the status bar.
+ */
+var UPDATE_NOTICE_URL = "/version.json";
+var UPDATE_NOTICE_FIRST_MS = 45000;
+var UPDATE_NOTICE_EVERY_MS = 60000;
+var UPDATE_NOTICE_MIN_GAP_MS = 15000;
+var UPDATE_NOTICE_MAX_BACKOFF_MS = 600000;
+var updateNoticeBuild = currentBuildId();
+var updateNoticeLastCheck = 0;
+var updateNoticeFailures = 0;
+var updateNoticeDismissed = "";   // the build id the user waved away
+var updateNoticeShownFor = "";    // the build id the card is currently about
+var updateNoticeTimer = null;
+
+function currentBuildId() {
+  var id = "";
+  try { id = String(window.SPICY_BUILD_ID == null ? "" : window.SPICY_BUILD_ID).trim(); } catch (e) { id = ""; }
+  // The raw template still carries the unfilled placeholder: no stamp, no checks.
+  if (!id || id.indexOf("__") === 0) return "";
+  return id;
+}
+function updateNoticeEnabled() {
+  if (!updateNoticeBuild) return false;
+  var proto = "";
+  try { proto = String((window.location && window.location.protocol) || ""); } catch (e) { proto = ""; }
+  return proto === "http:" || proto === "https:";
+}
+function showUpdateNotice(build) {
+  var card = $("updateNotice");
+  if (!card || !build || build === updateNoticeDismissed) return false;
+  updateNoticeShownFor = build;
+  card.classList.remove("hidden");
+  return true;
+}
+function hideUpdateNotice() {
+  var card = $("updateNotice");
+  if (card) card.classList.add("hidden");
+}
+function applyVersionDoc(doc) {
+  var live = doc && typeof doc.build === "string" ? doc.build.trim() : "";
+  if (!live) return false;
+  // A rollback to the build this tab already runs is not an update.
+  if (live === updateNoticeBuild) { hideUpdateNotice(); return false; }
+  return showUpdateNotice(live);
+}
+function checkForUpdate(reason) {
+  if (!updateNoticeEnabled() || typeof fetch !== "function") return Promise.resolve(false);
+  var now = Date.now();
+  if (reason !== "timer" && now - updateNoticeLastCheck < UPDATE_NOTICE_MIN_GAP_MS) return Promise.resolve(false);
+  updateNoticeLastCheck = now;
+  var request;
+  try {
+    request = fetch(UPDATE_NOTICE_URL + "?_=" + now, { cache: "no-store", credentials: "same-origin",
+                                                       headers: { "Accept": "application/json" } });
+  } catch (e) { updateNoticeFailures++; return Promise.resolve(false); }
+  return Promise.resolve(request).then(function (res) {
+    if (!res || !res.ok) throw new Error("version.json " + (res ? res.status : "unreachable"));
+    return res.json();
+  }).then(function (doc) {
+    updateNoticeFailures = 0;
+    return applyVersionDoc(doc);
+  }).catch(function () {
+    updateNoticeFailures++;
+    return false;
+  });
+}
+function nextUpdateCheckDelay() {
+  if (!updateNoticeFailures) return UPDATE_NOTICE_EVERY_MS;
+  var grown = UPDATE_NOTICE_EVERY_MS * Math.pow(2, Math.min(updateNoticeFailures, 4));
+  return Math.min(UPDATE_NOTICE_MAX_BACKOFF_MS, grown);
+}
+function scheduleUpdateCheck(ms) {
+  if (updateNoticeTimer) clearTimeout(updateNoticeTimer);
+  updateNoticeTimer = setTimeout(function () {
+    updateNoticeTimer = null;
+    var hidden = false;
+    try { hidden = document.visibilityState === "hidden"; } catch (e) { hidden = false; }
+    // A background tab does not poll; the visibility listener looks when it returns.
+    var look = hidden ? Promise.resolve(false) : checkForUpdate("timer");
+    look.then(function () { scheduleUpdateCheck(nextUpdateCheckDelay()); },
+              function () { scheduleUpdateCheck(nextUpdateCheckDelay()); });
+  }, ms);
+}
+function initUpdateNotice() {
+  if (!updateNoticeEnabled()) return false;
+  var refresh = $("updateNoticeRefresh"), close = $("updateNoticeClose");
+  if (refresh) refresh.addEventListener("click", function () {
+    try { window.location.reload(); } catch (e) {}
+  });
+  if (close) close.addEventListener("click", function () {
+    updateNoticeDismissed = updateNoticeShownFor;
+    hideUpdateNotice();
+  });
+  try {
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") checkForUpdate("visible");
+    });
+    window.addEventListener("focus", function () { checkForUpdate("focus"); });
+    window.addEventListener("online", function () { checkForUpdate("online"); });
+  } catch (e) {}
+  scheduleUpdateCheck(UPDATE_NOTICE_FIRST_MS);
+  return true;
+}
+initUpdateNotice();
+/* UPDATE_NOTICE:END */
 
 /* ---------- UI events ---------- */
 if ($("bookingAdults")) $("bookingAdults").addEventListener("change", function() {

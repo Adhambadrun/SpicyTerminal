@@ -20,10 +20,25 @@ Seat Map by accident.
 
 Run from anywhere:  python3 build_web.py
 """
-import base64, os, pathlib, io, subprocess, tempfile
+import base64, os, pathlib, io, subprocess, tempfile, hashlib, json, datetime
 
 # Always build and deploy the working single-file application.
 SRC = pathlib.Path(__file__).resolve().parent
+
+
+def build_id_for(html):
+    """The id a tab compares against /version.json to learn a newer build is live.
+
+    It is a hash of the finished page, not a timestamp or a commit: two builds
+    of the same sources get the same id (so the committed offline copies do
+    not churn), and any merge that changes what the browser actually runs gets
+    a new one — a README-only merge changes nothing and nags nobody.
+    SPICY_BUILD_ID overrides it when a deploy wants its own stamp.
+    """
+    forced = os.environ.get("SPICY_BUILD_ID", "").strip()
+    if forced:
+        return forced
+    return hashlib.sha1(html.encode("utf-8")).hexdigest()[:12]
 
 def png64(src, resize):
     """Return a resized PNG as base64 without making Pillow mandatory.
@@ -94,6 +109,11 @@ html = (tpl.replace("__LOGO_MARK_B64__", mark)
            .replace("__SEATMAP_PRICE__", seatmap_price_js)
            .replace("__SPICY_PRICE_ENDPOINT__", spicy_price_endpoint))
 
+# The build stamp goes in last, over the finished page, so the page and
+# public/version.json always carry the same id (see build_id_for).
+build_id = build_id_for(html)
+html = html.replace("__SPICY_BUILD_ID__", build_id)
+
 # Keep both historical entry points in sync: index.html is the deploy root;
 # app.html remains a friendly direct URL for existing bookmarks.
 for name in ("index.html", "app.html"):
@@ -110,3 +130,22 @@ for name in ("index.html", "app.html", "seatmap.html"):
     dst = pub / name
     dst.write_text(html, encoding="utf-8")
     print(f"Built {dst}: {len(html):,} bytes ({len(html)/1024/1024:.2f} MB)")
+
+# /version.json — the one small file an open tab polls to learn that a newer
+# build is live (app.js, UPDATE_NOTICE). Only `build` is compared; the rest is
+# for humans reading the file. Served with Cache-Control: no-store (vercel.json
+# / netlify.toml) so a CDN can never answer with yesterday's id.
+try:
+    pkg_version = json.loads((SRC / "package.json").read_text(encoding="utf-8")).get("version", "")
+except (OSError, ValueError):
+    pkg_version = ""
+commit = (os.environ.get("VERCEL_GIT_COMMIT_SHA") or os.environ.get("COMMIT_REF")
+          or os.environ.get("GITHUB_SHA") or "")
+version_doc = {
+    "build": build_id,
+    "version": pkg_version,
+    "commit": commit[:40],
+    "builtAt": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+}
+(pub / "version.json").write_text(json.dumps(version_doc, indent=2) + "\n", encoding="utf-8")
+print(f"Built {pub / 'version.json'}: build {build_id}")

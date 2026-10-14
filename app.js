@@ -3087,7 +3087,7 @@ function openGmailCompose(subject, body, blockedHint) {
    dialog, and ESC closes it. Opening it must never disturb conversion state — no
    attachment batch is invalidated and no AI request is cancelled, so reading the
    blurb while a screenshot is still parsing is safe. */
-var APP_VERSION = "4.1.0";
+var APP_VERSION = "4.2.0";
 var aboutReturnFocus = null;
 function openAbout() {
   var m = $("aboutModal");
@@ -3218,6 +3218,129 @@ function saveSeatMapRoute(text) {
   } catch (e) { /* storage full or blocked: the seat map falls back to manual entry */ }
 }
 /* SEATMAP_ROUTE:END */
+
+/* UPDATE_NOTICE:BEGIN */
+/*
+ * A merge to main is a new deploy, but a tab that stayed open keeps running
+ * the build it loaded until somebody reloads it. build_web.py stamps one id
+ * into the page (window.SPICY_BUILD_ID) and the same id into /version.json;
+ * this asks for that file now and then and, the moment the id has moved on,
+ * shows ONE small notice — "NEW VERSION LIVE · REFRESH".
+ *
+ * Rules, each from a way update banners usually misbehave:
+ *   - it never reloads on its own (that would throw away a half-typed paste);
+ *   - it is one still card, no motion in or out, and × keeps it away until
+ *     the *next* build — a dismissed notice does not come back for the same id;
+ *   - the first look waits until the page has settled, then once a minute while
+ *     the tab is visible, plus a look when the tab is focused again or comes
+ *     back online (never more than once per 15 s from those events);
+ *   - offline, file://, a blocked fetch, a 404, or a page built without a stamp
+ *     all mean exactly the same thing: say nothing. Failures back off, up to
+ *     ten minutes between looks, and never surface in the status bar.
+ */
+var UPDATE_NOTICE_URL = "/version.json";
+var UPDATE_NOTICE_FIRST_MS = 45000;
+var UPDATE_NOTICE_EVERY_MS = 60000;
+var UPDATE_NOTICE_MIN_GAP_MS = 15000;
+var UPDATE_NOTICE_MAX_BACKOFF_MS = 600000;
+var updateNoticeBuild = currentBuildId();
+var updateNoticeLastCheck = 0;
+var updateNoticeFailures = 0;
+var updateNoticeDismissed = "";   // the build id the user waved away
+var updateNoticeShownFor = "";    // the build id the card is currently about
+var updateNoticeTimer = null;
+
+function currentBuildId() {
+  var id = "";
+  try { id = String(window.SPICY_BUILD_ID == null ? "" : window.SPICY_BUILD_ID).trim(); } catch (e) { id = ""; }
+  // The raw template still carries the unfilled placeholder: no stamp, no checks.
+  if (!id || id.indexOf("__") === 0) return "";
+  return id;
+}
+function updateNoticeEnabled() {
+  if (!updateNoticeBuild) return false;
+  var proto = "";
+  try { proto = String((window.location && window.location.protocol) || ""); } catch (e) { proto = ""; }
+  return proto === "http:" || proto === "https:";
+}
+function showUpdateNotice(build) {
+  var card = $("updateNotice");
+  if (!card || !build || build === updateNoticeDismissed) return false;
+  updateNoticeShownFor = build;
+  card.classList.remove("hidden");
+  return true;
+}
+function hideUpdateNotice() {
+  var card = $("updateNotice");
+  if (card) card.classList.add("hidden");
+}
+function applyVersionDoc(doc) {
+  var live = doc && typeof doc.build === "string" ? doc.build.trim() : "";
+  if (!live) return false;
+  // A rollback to the build this tab already runs is not an update.
+  if (live === updateNoticeBuild) { hideUpdateNotice(); return false; }
+  return showUpdateNotice(live);
+}
+function checkForUpdate(reason) {
+  if (!updateNoticeEnabled() || typeof fetch !== "function") return Promise.resolve(false);
+  var now = Date.now();
+  if (reason !== "timer" && now - updateNoticeLastCheck < UPDATE_NOTICE_MIN_GAP_MS) return Promise.resolve(false);
+  updateNoticeLastCheck = now;
+  var request;
+  try {
+    request = fetch(UPDATE_NOTICE_URL + "?_=" + now, { cache: "no-store", credentials: "same-origin",
+                                                       headers: { "Accept": "application/json" } });
+  } catch (e) { updateNoticeFailures++; return Promise.resolve(false); }
+  return Promise.resolve(request).then(function (res) {
+    if (!res || !res.ok) throw new Error("version.json " + (res ? res.status : "unreachable"));
+    return res.json();
+  }).then(function (doc) {
+    updateNoticeFailures = 0;
+    return applyVersionDoc(doc);
+  }).catch(function () {
+    updateNoticeFailures++;
+    return false;
+  });
+}
+function nextUpdateCheckDelay() {
+  if (!updateNoticeFailures) return UPDATE_NOTICE_EVERY_MS;
+  var grown = UPDATE_NOTICE_EVERY_MS * Math.pow(2, Math.min(updateNoticeFailures, 4));
+  return Math.min(UPDATE_NOTICE_MAX_BACKOFF_MS, grown);
+}
+function scheduleUpdateCheck(ms) {
+  if (updateNoticeTimer) clearTimeout(updateNoticeTimer);
+  updateNoticeTimer = setTimeout(function () {
+    updateNoticeTimer = null;
+    var hidden = false;
+    try { hidden = document.visibilityState === "hidden"; } catch (e) { hidden = false; }
+    // A background tab does not poll; the visibility listener looks when it returns.
+    var look = hidden ? Promise.resolve(false) : checkForUpdate("timer");
+    look.then(function () { scheduleUpdateCheck(nextUpdateCheckDelay()); },
+              function () { scheduleUpdateCheck(nextUpdateCheckDelay()); });
+  }, ms);
+}
+function initUpdateNotice() {
+  if (!updateNoticeEnabled()) return false;
+  var refresh = $("updateNoticeRefresh"), close = $("updateNoticeClose");
+  if (refresh) refresh.addEventListener("click", function () {
+    try { window.location.reload(); } catch (e) {}
+  });
+  if (close) close.addEventListener("click", function () {
+    updateNoticeDismissed = updateNoticeShownFor;
+    hideUpdateNotice();
+  });
+  try {
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") checkForUpdate("visible");
+    });
+    window.addEventListener("focus", function () { checkForUpdate("focus"); });
+    window.addEventListener("online", function () { checkForUpdate("online"); });
+  } catch (e) {}
+  scheduleUpdateCheck(UPDATE_NOTICE_FIRST_MS);
+  return true;
+}
+initUpdateNotice();
+/* UPDATE_NOTICE:END */
 
 /* ---------- UI events ---------- */
 if ($("bookingAdults")) $("bookingAdults").addEventListener("change", function() {

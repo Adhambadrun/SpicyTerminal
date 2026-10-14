@@ -190,6 +190,17 @@ padding:30px 34px 26px;text-align:center;width:320px;box-shadow:0 18px 60px rgba
    wordmark and About — the dialog repeats the byline anyway, and a squeezed
    wordmark looked worse than a quiet header. */
 @media (max-width:560px){.status{gap:6px 10px}.about-card{padding:20px 16px 16px;border-radius:12px}.about-head{flex-wrap:wrap;padding-right:30px}.about-head img{height:28px}}
+/* ---------- UPDATE_NOTICE: a newer build is live ---------- */
+/* One small, still card in the corner: a dot, three words, REFRESH, ×. It sits
+   above the welcome card and the key dialog (z 50/51) but below the screenshot
+   review (61), never covers the panes, and — like everything else here — does
+   not animate in, out, or on hover. */
+.update-notice{position:fixed;right:clamp(10px,2vw,18px);bottom:clamp(10px,2vh,16px);z-index:60;display:flex;align-items:center;gap:10px;max-width:calc(100vw - 20px);padding:7px 7px 7px 13px;background:#0c1218;border:1px solid rgba(83,217,119,.6);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.55);font-size:11px;letter-spacing:.6px;color:#dbe7de}
+.update-notice-dot{color:var(--green);font-size:9px;line-height:1}
+.update-notice-text{font-weight:700;color:var(--green);white-space:nowrap}
+.update-notice-refresh{background:var(--green2);color:#04240f;padding:6px 13px;min-height:28px;font-size:11px;letter-spacing:.6px;border-radius:4px}
+.update-notice-close{background:none;color:#7f95a0;padding:0 6px;min-height:28px;font-family:Arial,sans-serif;font-size:17px;font-weight:400;line-height:1;letter-spacing:0}
+.update-notice-close:hover{color:#dbe7de;filter:none}
 __SEATMAP_CSS__</style>
 </head>
 <body>
@@ -323,7 +334,7 @@ __SEATMAP_CSS__</style>
     </div>
 
     <div class="about-foot">
-      <span><span class="ok" aria-hidden="true">●</span> <span id="aboutFootVer">SpicyTerminal v4.1.0</span> — deterministic engine + AI mistake learner</span>
+      <span><span class="ok" aria-hidden="true">●</span> <span id="aboutFootVer">SpicyTerminal v4.2.0</span> — deterministic engine + AI mistake learner</span>
       <span class="sep">|</span>
       <span>Fewer surprises, not more features.</span>
       <button class="save" id="aboutGo" type="button" style="margin-left:auto;padding:7px 16px;font-size:11px">START CONVERTING →</button>
@@ -613,11 +624,25 @@ __SEATMAP_CSS__</style>
   </div>
 </div>
 
+<!-- UPDATE_NOTICE:BEGIN — shown by app.js when /version.json carries a newer
+     build id than the one stamped into this page. Small, still, dismissable;
+     it never reloads on its own. -->
+<div class="update-notice hidden" id="updateNotice" role="status" aria-live="polite">
+  <span class="update-notice-dot" aria-hidden="true">●</span>
+  <span class="update-notice-text">NEW VERSION LIVE</span>
+  <button class="update-notice-refresh" id="updateNoticeRefresh" type="button" title="Reload the page to get the latest SpicyTerminal">REFRESH</button>
+  <button class="update-notice-close" id="updateNoticeClose" type="button" aria-label="Dismiss until the next update" title="Dismiss">×</button>
+</div>
+<!-- UPDATE_NOTICE:END -->
+
 <!-- OCRAD is kept as source until a screenshot needs it, so app launch stays light. -->
 <script id="ocradSource" type="text/plain">__OCRAD_JS__</script>
 <script>__SPICY_DATA__</script>
 <script>__SPICY_ENGINE__</script>
 <script>__SPICY_LINKS__</script>
+<!-- The build stamps the finished page's id here (build_web.py); app.js compares
+     it with /version.json to tell an open tab that a newer build is live. -->
+<script>window.SPICY_BUILD_ID="__SPICY_BUILD_ID__";</script>
 <!-- No Seat Map gate ships any more: seatmap_gate.js stays in the repository as
      a retired module, and the open-door wiring lives in app.js (SEATMAP_GATE). -->
 <script>__APP_JS__</script>
