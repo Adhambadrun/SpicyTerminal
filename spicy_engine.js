@@ -762,6 +762,38 @@ function _inRoutePosition(text, at){
   var before=text.slice(Math.max(0,at-10),at);
   return /(?:^|[\s(>\[])(?:to|into|via|from|-{1,2}>|→|–)\s*$/i.test(before);
 }
+/* "SS1" standing right after the route column of a GDS row is the sell-status
+   column ("JAXORD*SS1", "NRTICN SS1", "MIABOG SS1  1018A"), not a Corsair
+   flight 1.  When the table scanner rejects such a row the prose scanner
+   inherits it, and the status token anchored a phantom leg ("SS 1", "TK 2")
+   that stole the row's clocks and airports — the "direct found 8, AI found 6"
+   mistake-log entries were four of these phantoms compared as if they were
+   flights.  A glued carrier+1-2-digit token sitting exactly where the status
+   column stands is never a flight, so it never anchors one. */
+function _isSellStatusColumn(text, start, end){
+  if(!/^[A-Z]{2}\d{1,2}$/.test(text.slice(start,end).toUpperCase())) return false;
+  var ls=text.lastIndexOf("\n",start)+1;
+  var before=text.slice(ls,start);
+  return /[A-Z]{6}\*?\s*$/.test(before) || /[A-Z]{3}\s+[A-Z]{3}\s*$/.test(before);
+}
+/* GDS remark / OSI lines ride along with pasted itineraries: "ADV PAX FLT
+   ARRIVES TERMINAL-1", "TFC SUBJ GOVT APPROVAL", "BUSINESSFIRST OFFERED THIS
+   FLIGHT", "CITY TERMINAL CHECK-IN SERVICE AVAILABLE IN SEOUL".  They carry no
+   flight data, but the prose scanner read their words as one — "PAX" is also
+   Port-de-Paix, so a phantom leg sprouted airports in Haiti and the city name
+   "SEOUL" published a route.  Blank the remark content (keeping every newline
+   and character offset, so nothing downstream mis-aligns) before the prose
+   scanner sees the text.  The GDS *table* scanner reads the untouched copy —
+   "BUSINESSFIRST OFFERED THIS FLIGHT" is a legitimate cabin hint there.
+   OSI/SSR/RMK are also airport codes (Osijek, Sara, Renmark), so a keyword
+   that opens a route ("OSI to XBE on September 25") is a route header, not a
+   remark — only the non-route shape is blanked. */
+var REMARK_LINE_RE = /^\s*(?:(?:ADV|TFC|OSI|SSR|RMK|CONX)\b(?!\s*(?:to\b|into\b|via\b|->|→|–|-))|CITY TERMINAL\b|BUSINESSFIRST OFFERED\b)/i;
+function _blankRemarkLines(text){
+  return text.split("\n").map(function(line){
+    return REMARK_LINE_RE.test(line) ? line.replace(/[^\n]/g," ") : line;
+  }).join("\n");
+}
 
 function findAnchors(text){
   var text_l=text.toLowerCase(), cands=[], occupied=[], m;
@@ -792,6 +824,7 @@ function findAnchors(text){
   while((m=CODE_NUM_RE.exec(text))){
     var code2=m[1],num=m[2];
     if(!AIRLINES[code2]||overlaps(m.index,m.index+m[0].length)) continue;
+    if(_isSellStatusColumn(text,m.index,m.index+m[0].length)) continue;
     var afterU=text.slice(m.index+m[0].length);
     var tu=TIME_UNIT_AFTER.exec(afterU);
     if(tu&&tu.index===0&&!_unitStartsRoute(afterU,tu[0])) continue;
@@ -1336,6 +1369,7 @@ function pickTimes(wTimes,pTimes){
 }
 
 function parseProse(text){
+  text=_blankRemarkLines(text);
   var headers=findSideHeaders(text);
   var anchors=findAnchors(text);
   if(!anchors.length) return [[],true];
