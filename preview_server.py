@@ -22,11 +22,27 @@ PRICE_BACKEND = os.environ.get("PRICE_BACKEND", "http://127.0.0.1:8787")
 
 
 class PreviewHandler(SimpleHTTPRequestHandler):
-    """Static file handler that mirrors the deployment's Seat Map rewrite
-    AND proxies the fare-service routes to the backend."""
+    """Static file handler that mirrors the deployment's Seat Map rewrite,
+    proxies the fare-service routes to the backend, and keeps every response
+    out of the browser cache so a stale local page can never be mistaken for
+    the deployed one."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
+
+    def end_headers(self):
+        """Every response leaves here carrying Cache-Control: no-store.
+
+        The deployed hosts pin the app pages to revalidate (vercel.json,
+        netlify.toml) and /version.json to no-store. A local preview that lets
+        the browser keep yesterday's 2.4 MB page cannot be used to try the
+        update notice at all — REFRESH would look broken here while working in
+        production, which is the worst kind of bug to chase. One header on the
+        way out covers the static pages, the rewrites and the proxied fare
+        routes alike.
+        """
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
 
     def translate_path(self, path):
         route = urlsplit(path).path.rstrip("/") or "/"
@@ -51,8 +67,7 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
+        self.end_headers()   # adds Cache-Control: no-store, as it does for all
         try:
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionResetError):

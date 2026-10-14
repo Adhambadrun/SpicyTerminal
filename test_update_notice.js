@@ -10,12 +10,18 @@
  *   - app.js polls /version.json (first look after 45 s, then once a minute
  *     while visible, plus a look on focus / visibility / online, at most once
  *     per 15 s from those) and shows the notice when the id has moved on.
- *   - It never reloads on its own; REFRESH does. × keeps the notice away for
- *     that build only — a later build shows it again.
+ *   - It never reloads on its own; REFRESH navigates to the same page under a
+ *     URL no cache holds (?v=<live build>), keeping any deep link and the hash.
+ *     A plain reload could be answered with the cached old page, whose stamp
+ *     has not moved, and the notice would come straight back. × keeps the
+ *     notice away for that build only — a later build shows it again.
  *   - Offline, file://, a 404, bad JSON or an unstamped page: nothing is shown,
  *     nothing reaches the status bar, and failed looks back off (≤ 10 min).
  *   - The notice is still: no animation or transition, like the rest of the UI.
- *   - /version.json is served with Cache-Control: no-store on both hosts.
+ *   - /version.json is served with Cache-Control: no-store on both hosts, and
+ *     the app pages that carry the other half of the stamp are pinned to
+ *     revalidate on both hosts (no-store in the local preview) — otherwise a
+ *     cached page makes REFRESH look broken.
  *
  * Behaviour runs the REAL app.js UPDATE_NOTICE block in a vm sandbox with a
  * DOM exactly as small as the notice needs — same approach as the About test.
@@ -94,14 +100,44 @@ assert(vHeader && vHeader.headers.some(h => /cache-control/i.test(h.key) && /no-
 const NETLIFY = fs.readFileSync(path.join(REPO, "netlify.toml"), "utf8");
 assert(/for = "\/version\.json"[\s\S]*?Cache-Control = "no-store/.test(NETLIFY), "Netlify serves /version.json with no-store");
 
+/* The pages carry the other half of the stamp (window.SPICY_BUILD_ID). A cache
+ * that can answer with yesterday's page makes the notice fire and REFRESH look
+ * broken, so the app pages are pinned to revalidate on both hosts as well.
+ * no-cache rather than no-store: the page is 2.4 MB and a 304 is enough. */
+for (const page of ["/", "/index.html", "/app.html", "/seatmap", "/seatmap.html"]) {
+  const h = (VERCEL.headers || []).find(x => x.source === page);
+  assert(h && h.headers.some(x => /cache-control/i.test(x.key) && /no-cache/.test(x.value) && /must-revalidate/.test(x.value)),
+         "Vercel revalidates " + page + " on every load");
+}
+assert(/for = "\/"[\s\S]{0,120}?Cache-Control = "no-cache, max-age=0, must-revalidate"/.test(NETLIFY), "Netlify revalidates /");
+assert(/for = "\/\*\.html"[\s\S]{0,120}?Cache-Control = "no-cache, max-age=0, must-revalidate"/.test(NETLIFY), "Netlify revalidates every .html page");
+assert(/for = "\/seatmap"[\s\S]{0,120}?Cache-Control = "no-cache, max-age=0, must-revalidate"/.test(NETLIFY), "Netlify revalidates the /seatmap rewrite");
+assert(!/for = "\/\*\.html"[\s\S]{0,120}?no-store/.test(NETLIFY), "the pages revalidate; only /version.json is no-store");
+
+const PREVIEW = fs.readFileSync(path.join(REPO, "preview_server.py"), "utf8");
+assert(/def end_headers\(self\):[\s\S]{0,700}?Cache-Control", "no-store"/.test(PREVIEW),
+       "the local preview sends no-store on every response, so a stale page cannot hide a working REFRESH");
+assert((PREVIEW.match(/send_header\("Cache-Control"/g) || []).length === 1,
+       "exactly one Cache-Control is sent — the proxied fare routes inherit it instead of repeating it");
+
 /* ---------- 4. real behaviour, real app.js code ---------- */
 section("4. behaviour (real app.js UPDATE_NOTICE block in a vm sandbox)");
 const SRC = APP.slice(APP.indexOf("/* UPDATE_NOTICE:BEGIN */"), APP.indexOf("/* UPDATE_NOTICE:END */") + "/* UPDATE_NOTICE:END */".length);
 assert(SRC.length > 1500 && /function checkForUpdate\(/.test(SRC) && /initUpdateNotice\(\);/.test(SRC), "UPDATE_NOTICE block extracted from app.js and self-starting");
 assert(!/setStatus\(/.test(SRC), "the notice never writes to the status bar");
 assert(!/__SPICY_BUILD_ID__/.test(SRC), "app.js never spells the placeholder (the build would fill it in)");
-assert((SRC.match(/location\.reload\(\)/g) || []).length === 1 && /refresh\.addEventListener\("click"[\s\S]{0,80}location\.reload\(\)/.test(SRC),
-       "the only reload in the block is behind the REFRESH button");
+assert((SRC.match(/location\.reload\(\)/g) || []).length === 1,
+       "the block keeps exactly one plain reload — the fallback, not the plan");
+assert(/refresh\.addEventListener\("click", function \(\) \{ refreshToLiveBuild\(\); \}\)/.test(SRC),
+       "REFRESH goes through refreshToLiveBuild(), never a bare reload");
+assert(/function livePageUrl\(/.test(SRC) && /UPDATE_NOTICE_STAMP_PARAM/.test(SRC),
+       "livePageUrl() builds the address from one named stamp parameter");
+assert(SRC.indexOf("window.location.replace(url)") > -1 &&
+       SRC.indexOf("window.location.replace(url)") < SRC.indexOf("window.location.reload()"),
+       "the cache-busted navigation is tried first; the reload is only the fallback");
+assert(!/location\.assign\(/.test(SRC), "nothing pushes the stale page onto the Back button");
+assert(/part\.split\("="\)\[0\] !== UPDATE_NOTICE_STAMP_PARAM/.test(SRC),
+       "only a previous stamp of ours is dropped — every other parameter is kept");
 
 function makeEl(id) {
   const el = { id, _cls: new Set(["hidden"]), _l: {},
@@ -113,7 +149,7 @@ function makeEl(id) {
 
 function boot(opts) {
   opts = opts || {};
-  const els = {}, timers = [], fetches = [], docListeners = {}, winListeners = {};
+  const els = {}, timers = [], fetches = [], docListeners = {}, winListeners = {}, navigations = [];
   let reloads = 0, now = 1000000;
   const doc = {
     visibilityState: "visible",
@@ -122,7 +158,14 @@ function boot(opts) {
   };
   const win = {
     SPICY_BUILD_ID: "stamp" in opts ? opts.stamp : "aaaaaaaaaaaa",
-    location: { protocol: opts.protocol || "https:", reload() { reloads++; } },
+    location: {
+      protocol: opts.protocol || "https:",
+      pathname: opts.pathname || "/index.html",
+      search: opts.search || "",
+      hash: opts.hash || "",
+      reload() { reloads++; },
+      replace(url) { navigations.push(url); }
+    },
     addEventListener: (t, fn) => { (winListeners[t] = winListeners[t] || []).push(fn); }
   };
   const responses = [];
@@ -146,6 +189,7 @@ function boot(opts) {
   return {
     els, timers, fetches, ret, sandbox,
     reloads: () => reloads,
+    navigations: () => navigations,
     tick: () => now,
     advance: ms => { now += ms; },
     respond: r => responses.push(r),
@@ -169,14 +213,32 @@ function boot(opts) {
   assert(!w.visible(), "same build id → the notice stays hidden");
   assert(w.timers.length === 1 && w.timers[0].ms === 60000, "then it looks again once a minute");
 
-  /* 4b. new build → notice; REFRESH reloads */
+  /* 4b. new build → notice; REFRESH asks for a URL no cache holds */
   w.respond(w.ok("bbbbbbbbbbbb"));
   w.runTimer();
   await new Promise(r => setImmediate(r));
   assert(w.visible(), "a different build id shows the notice");
-  assert(w.reloads() === 0, "nothing reloaded on its own");
+  assert(w.reloads() === 0 && w.navigations().length === 0, "nothing reloaded or navigated on its own");
   w.els.updateNoticeRefresh.fire("click");
-  assert(w.reloads() === 1, "REFRESH reloads the page");
+  assert(w.navigations().length === 1, "REFRESH navigates once");
+  assert(w.navigations()[0] === "/index.html?v=bbbbbbbbbbbb",
+         "to the same page under a URL stamped with the live build (" + w.navigations()[0] + ")");
+  assert(w.reloads() === 0, "and it is not a plain reload, which a cache could answer with the old page");
+
+  /* 4b2. REFRESH keeps the address the page was opened with */
+  w = boot({ pathname: "/seatmap", search: "?leg=1", hash: "#deck" });
+  w.respond(w.ok("bbbbbbbbbbbb")); w.runTimer(); await new Promise(r => setImmediate(r));
+  assert(w.visible(), "the notice works the same on the Seat Map deep link");
+  w.els.updateNoticeRefresh.fire("click");
+  assert(w.navigations()[0] === "/seatmap?leg=1&v=bbbbbbbbbbbb#deck",
+         "?leg=N and the hash survive, the stamp is appended (" + w.navigations()[0] + ")");
+
+  /* a second REFRESH replaces the stamp instead of stacking another one */
+  w = boot({ search: "?leg=1&v=aaaaaaaaaaaa" });
+  w.respond(w.ok("cccccccccccc")); w.runTimer(); await new Promise(r => setImmediate(r));
+  w.els.updateNoticeRefresh.fire("click");
+  assert(w.navigations()[0] === "/index.html?leg=1&v=cccccccccccc",
+         "an old stamp is dropped, never duplicated (" + w.navigations()[0] + ")");
 
   /* 4c. × dismisses for that build only */
   w = boot();

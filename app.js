@@ -3243,6 +3243,7 @@ var UPDATE_NOTICE_FIRST_MS = 45000;
 var UPDATE_NOTICE_EVERY_MS = 60000;
 var UPDATE_NOTICE_MIN_GAP_MS = 15000;
 var UPDATE_NOTICE_MAX_BACKOFF_MS = 600000;
+var UPDATE_NOTICE_STAMP_PARAM = "v";   // REFRESH's cache-buster, see livePageUrl()
 var updateNoticeBuild = currentBuildId();
 var updateNoticeLastCheck = 0;
 var updateNoticeFailures = 0;
@@ -3319,12 +3320,45 @@ function scheduleUpdateCheck(ms) {
               function () { scheduleUpdateCheck(nextUpdateCheckDelay()); });
   }, ms);
 }
+/*
+ * REFRESH has to defeat a cache, not ask the browser politely. A plain reload
+ * can be answered from a stored copy of this very page — and that copy carries
+ * the old stamp, so the notice would come straight back and the button would
+ * look broken, with no way out short of a hard reload the card never mentions.
+ * Asking for the page under a URL it has never been asked for before cannot be
+ * answered from any cache, browser or CDN, so the new build always lands.
+ *
+ * Everything the address already carries is kept: the Seat Map deep-links with
+ * ?leg=N (seatmap.js), any other parameter belongs to whoever set it, and the
+ * hash belongs to the reader. Only a previous stamp of ours is dropped, so
+ * pressing REFRESH twice does not pile up ?v=…&v=…
+ */
+function livePageUrl() {
+  var loc = window.location;
+  var search = "";
+  try { search = String(loc.search || ""); } catch (e) { search = ""; }
+  var kept = search.replace(/^\?/, "").split("&").filter(function (part) {
+    return part && part.split("=")[0] !== UPDATE_NOTICE_STAMP_PARAM;
+  });
+  kept.push(UPDATE_NOTICE_STAMP_PARAM + "=" + encodeURIComponent(updateNoticeShownFor || Date.now()));
+  var hash = "";
+  try { hash = String(loc.hash || ""); } catch (e) { hash = ""; }
+  return loc.pathname + "?" + kept.join("&") + hash;
+}
+function refreshToLiveBuild() {
+  var url = "";
+  try { url = livePageUrl(); } catch (e) { url = ""; }
+  try {
+    // replace, not assign: the stale page is not worth a Back-button stop.
+    if (url) { window.location.replace(url); return true; }
+  } catch (e) { /* a refused navigation falls through to a plain reload */ }
+  try { window.location.reload(); } catch (e) {}
+  return false;
+}
 function initUpdateNotice() {
   if (!updateNoticeEnabled()) return false;
   var refresh = $("updateNoticeRefresh"), close = $("updateNoticeClose");
-  if (refresh) refresh.addEventListener("click", function () {
-    try { window.location.reload(); } catch (e) {}
-  });
+  if (refresh) refresh.addEventListener("click", function () { refreshToLiveBuild(); });
   if (close) close.addEventListener("click", function () {
     updateNoticeDismissed = updateNoticeShownFor;
     hideUpdateNotice();
